@@ -7,6 +7,7 @@ import time
 from playwright.sync_api import sync_playwright
 import asyncio
 from lxml import etree
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 url = "https://www.science.org/toc/science/current"
 
@@ -119,11 +120,6 @@ def page_extractor(html_content):
         abstract = div.xpath('.//div[@class="highwire-abstract"]/p/text()')
         if not authors: continue
         
-        abstract_dict = {}
-        if link:
-            full_link = 'https://www.science.org' + link[0]
-            abstract_dict = get_abstract(full_link)
-        
         norm_authors = [normalize_text(a) for a in authors if normalize_text(a)] if authors else []
         list_page_abs = normalize_text(abstract[0]) if abstract else None
 
@@ -131,13 +127,32 @@ def page_extractor(html_content):
             'title': title,
             'link': 'https://www.science.org' + link[0] if link else None,
             'authors': norm_authors,
-            'editor_summary': abstract_dict.get('editor_summary'),
-            'structured_abstract': abstract_dict.get('structured_abstract'),
-            'abstract': abstract_dict.get('abstract') or list_page_abs,
-            'graphical_abstract': abstract_dict.get('graphical_abstract')
+            'editor_summary': None,
+            'structured_abstract': None,
+            'abstract': list_page_abs,
+            'graphical_abstract': None
         }
         papers.append(paper_info)
-    papers = json.dumps(papers, ensure_ascii=False, indent=2)
-    print(json.dumps(papers, ensure_ascii=False, indent=2))
-    return papers
+    
+    # 并发抓取每篇的完整摘要
+    futures = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        for idx, p in enumerate(papers):
+            if p.get('link'):
+                futures[executor.submit(get_abstract, p['link'])] = idx
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                abstract_dict = future.result()
+            except Exception:
+                abstract_dict = {}
+            if abstract_dict:
+                papers[idx]['editor_summary'] = abstract_dict.get('editor_summary') or papers[idx]['editor_summary']
+                papers[idx]['structured_abstract'] = abstract_dict.get('structured_abstract') or papers[idx]['structured_abstract']
+                papers[idx]['abstract'] = abstract_dict.get('abstract') or papers[idx]['abstract']
+                papers[idx]['graphical_abstract'] = abstract_dict.get('graphical_abstract') or papers[idx]['graphical_abstract']
+
+    json_str = json.dumps(papers, ensure_ascii=False, indent=2)
+    print(json_str)
+    return json_str
 page_extractor(fetch_page(url))
