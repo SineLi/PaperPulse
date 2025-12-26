@@ -9,7 +9,7 @@ import asyncio
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-url = "https://www.science.org/toc/science/current"
+url = "https://www.science.org/journal/science/research?pageSize=50"
 
 def normalize_text(s):
     if s is None:
@@ -37,7 +37,7 @@ def fetch_page(url):
                 if i == 2:
                     raise e
                 time.sleep(2)
-        page.wait_for_selector("xpath=//*[@id=\"pb-page-content\"]/div/div[1]/main/section[2]/div/div[1]/div[2]/div[2]/div/section[6]", timeout=10000)
+        page.wait_for_selector("//*[@id=\"pb-page-content\"]/div/div[1]/main/section/div/div[1]/div/div/div[1]", timeout=10000)
         content = page.content()
         browser.close()
         return content
@@ -61,14 +61,16 @@ def get_abstract(link):
             page = context.new_page()
             for i in range(3):
                 try:
-                    page.goto(abs_link)
+                    # Increase timeout to 60s and wait for DOM content only to avoid timeouts on heavy assets
+                    page.goto(abs_link, timeout=60000, wait_until="domcontentloaded")
                     page.wait_for_timeout(2000)
                     break
                 except Exception as e:
                     print(f"Attempt {i+1} failed: {e}")
                     if i == 2:
+                        browser.close()
                         raise e
-                    time.sleep(2)
+                    time.sleep(5)
             content = page.content()
             browser.close()
             
@@ -105,23 +107,19 @@ def get_abstract(link):
     except Exception as e:
         raise e
 
-def page_extractor(html_content):
+def page_extractor(html_content,max_workers=25):
     tree = etree.HTML(html_content)
     article_divs = tree.xpath(
-        '//*[@id="pb-page-content"]/div/div[1]/main/section[2]/div/div[1]/div[2]/div[2]/div/section[6]/div[position() >= 3]'
+        '//*[@id="pb-page-content"]/div/div[1]/main/section/div/div[1]/div/div/div[1]/div'
     )
-    
     papers = []
     for div in article_divs:
-        title_parts = div.xpath('.//h3/a//text()')
+        title_parts = div.xpath('.//h2/a//text()')
         title = normalize_text(''.join(title_parts)) if title_parts else None
-        link = div.xpath('.//h3/a/@href')
-        authors = div.xpath('./div/div[1]/div[2]/ul/li[2]/ul/li/span/text()')
-        abstract = div.xpath('.//div[@class="highwire-abstract"]/p/text()')
-        if not authors: continue
+        link = div.xpath('.//h2/a/@href')
+        authors = div.xpath('.//li/span//text()')
         
         norm_authors = [normalize_text(a) for a in authors if normalize_text(a)] if authors else []
-        list_page_abs = normalize_text(abstract[0]) if abstract else None
 
         paper_info = {
             'title': title,
@@ -129,14 +127,14 @@ def page_extractor(html_content):
             'authors': norm_authors,
             'editor_summary': None,
             'structured_abstract': None,
-            'abstract': list_page_abs,
+            'abstract': None,
             'graphical_abstract': None
         }
         papers.append(paper_info)
     
     # 并发抓取每篇的完整摘要
     futures = {}
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for idx, p in enumerate(papers):
             if p.get('link'):
                 futures[executor.submit(get_abstract, p['link'])] = idx
