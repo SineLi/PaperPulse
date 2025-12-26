@@ -11,11 +11,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 url = "https://www.science.org/journal/science/research?pageSize=50"
 
-def normalize_text(s):
-    if s is None:
-        return None
-    return re.sub(r"\s+", " ", html.unescape(s)).strip()
-
 def fetch_page(url):
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -82,7 +77,7 @@ def get_abstract(link):
             for key, section_id in section_ids.items():
                 section = tree.xpath(f'//*[@id="abstracts"]//section[@id="{section_id}"]')
                 if section:
-                    section_text = normalize_text(''.join(section[0].xpath('.//text()[not(ancestor::h2)]')))
+                    section_text = ''.join(section[0].xpath('.//text()[not(ancestor::h2)]')).strip()
                     if section_text:
                         abstract_dict[key] = section_text
             
@@ -115,12 +110,11 @@ def page_extractor(html_content,max_workers=25):
     papers = []
     for div in article_divs:
         title_parts = div.xpath('.//h2/a//text()')
-        title = normalize_text(''.join(title_parts)) if title_parts else None
+        title = ''.join(title_parts).strip() if title_parts else None
         link = div.xpath('.//h2/a/@href')
         authors = div.xpath('.//li/span//text()')
         
-        norm_authors = [normalize_text(a) for a in authors if normalize_text(a)] if authors else []
-
+        norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
         paper_info = {
             'title': title,
             'link': 'https://www.science.org' + link[0] if link else None,
@@ -151,6 +145,5 @@ def page_extractor(html_content,max_workers=25):
                 papers[idx]['graphical_abstract'] = abstract_dict.get('graphical_abstract') or papers[idx]['graphical_abstract']
 
     json_str = json.dumps(papers, ensure_ascii=False, indent=2)
-    print(json_str)
     return json_str
 page_extractor(fetch_page(url))
