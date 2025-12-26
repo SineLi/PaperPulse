@@ -1,11 +1,7 @@
-import requests
 import json
-from bs4 import BeautifulSoup
-import re
 import html
 import time
 from playwright.sync_api import sync_playwright
-import asyncio
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
