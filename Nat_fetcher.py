@@ -98,8 +98,6 @@ def page_extractor(html_content,max_workers=25):
         title = ''.join(title_parts).strip() if title_parts else None
         link = div.xpath('.//h3/a/@href')
         authors = div.xpath('.//li/span//text()')
-        
-        print(title,link)
 
         norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
         paper_info = {
@@ -132,6 +130,5 @@ def page_extractor(html_content,max_workers=25):
                 papers[idx]['status'] = info_dect.get('status') or papers[idx]['status']
 
     json_str = json.dumps(papers, ensure_ascii=False, indent=2)
-    print(json_str)
     return json_str
 page_extractor(fetch_page(url))
