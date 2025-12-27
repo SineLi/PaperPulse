@@ -10,7 +10,7 @@ url = "https://www.cell.com/cell/newarticles"
 def fetch_page(url):
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=False,
+            headless=True,
             args=['--disable-blink-features=AutomationControlled']
         )
         context = browser.new_context(
@@ -96,7 +96,7 @@ def page_extractor(html_content,max_workers=5):
         link =  div.xpath('.//h3/a/@href')
         # 排除 nav 中的作者文本
         authors = div.xpath('.//li//ul/li//text()[not(ancestor::nav)]')
-        editor_summary = div.xpath('.//div/ul/li/div/div[2]/div/div[2]/div[2]/div[2]//text()')
+        editor_summary = div.xpath('.//div/ul/li/div/div[2]/div/div[2]/div[2]/div[last()]//text()')
 
         norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
         paper_info = {
@@ -125,7 +125,7 @@ def page_extractor(html_content,max_workers=5):
             if info_dect:
                 papers[idx]['abstract'] = info_dect.get('abstract') or papers[idx]['abstract']
                 papers[idx]['graphical_abstract'] = info_dect.get('graphical_abstract') or papers[idx]['graphical_abstract']
-    time.sleep(30)  # To avoid overwhelming the server
+            time.sleep(10)  # To avoid overwhelming the server
 
     json_str = json.dumps(papers, ensure_ascii=False, indent=2)
     print(json_str)
