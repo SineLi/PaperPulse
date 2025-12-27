@@ -125,7 +125,7 @@ def page_extractor(html_content,max_workers=5):
             if info_dect:
                 papers[idx]['abstract'] = info_dect.get('abstract') or papers[idx]['abstract']
                 papers[idx]['graphical_abstract'] = info_dect.get('graphical_abstract') or papers[idx]['graphical_abstract']
-
+    time.sleep(30)  # To avoid overwhelming the server
 
     json_str = json.dumps(papers, ensure_ascii=False, indent=2)
     print(json_str)
