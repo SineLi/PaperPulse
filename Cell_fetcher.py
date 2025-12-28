@@ -115,20 +115,19 @@ def page_extractor(html_content,max_workers=5):
         editor_summary = div.xpath('.//div/ul/li/div/div[2]/div/div[2]/div[2]/div[last()]//text()')
 
         norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
-        paper_info = Article()
-        paper_info = {
-            'title': title,
-            'link': 'https://www.cell.com' + link[0] if link else None,
-            'doi': None,
-            'date': None,
-            'journal': None,
-            'authors': norm_authors,
-            'editor_summary': ''.join(editor_summary).strip() if editor_summary else None,
-            'structured_abstract': None,
-            'abstract': None,
-            'graphical_abstract': None,
-            'status': 'online'
-        }
+        paper_info = Article(
+            title=title,
+            link='https://www.cell.com' + link[0] if link else None,
+            doi=None,
+            date=None,
+            journal=None,
+            authors=norm_authors,
+            editor_summary=''.join(editor_summary).strip() if editor_summary else None,
+            structured_abstract=None,
+            abstract=None,
+            graphical_abstract=None,
+            status='online'
+        )
         papers.append(paper_info)
 
     futures = {}
