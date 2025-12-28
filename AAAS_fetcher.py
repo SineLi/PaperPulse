@@ -4,6 +4,8 @@ import time
 from playwright.sync_api import sync_playwright
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dateutil import parser
+from configs import Article
 
 url = "https://www.science.org/journal/science/research?pageSize=50"
 
@@ -38,7 +40,7 @@ def get_abstract(link):
     if not link:
         return {}
     
-    abs_link = link.replace('/doi/', '/doi/full/')
+    # abs_link = link.replace('/doi/', '/doi/full/')
     
     try:
         with sync_playwright() as p:
@@ -53,7 +55,7 @@ def get_abstract(link):
             for i in range(3):
                 try:
                     # Increase timeout to 60s and wait for DOM content only to avoid timeouts on heavy assets
-                    page.goto(abs_link, timeout=60000, wait_until="domcontentloaded")
+                    page.goto(link, timeout=60000, wait_until="domcontentloaded")
                     page.wait_for_timeout(2000)
                     break
                 except Exception as e:
@@ -77,7 +79,7 @@ def get_abstract(link):
                     if section_text:
                         abstract_dict[key] = section_text
             
-            figures = tree.xpath('//*[@id="abstracts"]//figure')
+            figures = tree.xpath('//figure[1]')
 
             if figures:
                 try:
@@ -109,17 +111,27 @@ def page_extractor(html_content,max_workers=25):
         title = ''.join(title_parts).strip() if title_parts else None
         link = div.xpath('.//h2/a/@href')
         authors = div.xpath('.//li/span//text()')
-        
+        date = parser.parse(div.xpath('.//time/text()')[0]).strftime('%Y-%m-%d') if div.xpath('.//time/text()') else None
+        doi = None
+        if link:
+            parts = link[0].split('/')
+            if len(parts) > 0:
+                doi = parts[-2] + '/' + parts[-1]
+
         norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
-        paper_info = {
-            'title': title,
-            'link': 'https://www.science.org' + link[0] if link else None,
-            'authors': norm_authors,
-            'editor_summary': None,
-            'structured_abstract': None,
-            'abstract': None,
-            'graphical_abstract': None
-        }
+        paper_info = Article(
+            title=title,
+            link='https://www.science.org' + link[0] if link else None,
+            doi=doi,
+            date=date,
+            journal=None,
+            authors=norm_authors,
+            editor_summary=None,
+            structured_abstract=None,
+            abstract=None,
+            graphical_abstract=None,
+            status='online'
+        )
         papers.append(paper_info)
     
     # 并发抓取每篇的完整摘要
