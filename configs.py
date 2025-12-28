@@ -1,8 +1,8 @@
 from typing import TypedDict, Optional
 
 class Article(TypedDict):
-    title: Optional[str]
-    link: Optional[str]
+    title: str
+    link: str
     doi: Optional[str]
     date: Optional[str]
     journal: Optional[str]

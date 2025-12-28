@@ -4,6 +4,8 @@ import time
 from playwright.sync_api import sync_playwright
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dateutil import parser
+from configs import Article
 
 url = "https://www.cell.com/cell/newarticles"
 
@@ -64,7 +66,7 @@ def get_full_info(link):
 
             tree = etree.HTML(content)
 
-            info_dict = {'abstract': None, 'graphical_abstract': None, }
+            info_dict = {'abstract': None, 'graphical_abstract': None, 'doi': None, 'date': None}
 
             abstract_parts = tree.xpath('//*[@id="author-abstract"]/div//text()')
             if abstract_parts:
@@ -74,7 +76,21 @@ def get_full_info(link):
             graphical_abstract_parts = tree.xpath('//*[@id="graphical-abstract"]//a/@href')
             if graphical_abstract_parts:
                 info_dict['graphical_abstract'] = 'https://www.cell.com' + graphical_abstract_parts[0]
+
+            doi_parts = tree.xpath('//span[@class="doi"]/a/text()')
+            if doi_parts:
+                doi_text = ''.join(doi_parts).strip()
+                info_dict['doi'] = doi_text if doi_text else None
             
+            date_parts = tree.xpath('//span[@class="meta-panel__onlineDate"]/text()')
+            if date_parts:
+                date_text = ''.join(date_parts).strip()
+                try:
+                    parsed_date = parser.parse(date_text)
+                    info_dict['date'] = parsed_date.strftime('%Y-%m-%d')
+                except Exception:
+                    info_dict['date'] = None
+
             return info_dict
         
     except Exception as e:
@@ -94,14 +110,18 @@ def page_extractor(html_content,max_workers=5):
         title_parts = div.xpath('.//h3/a//text()')
         title = ''.join(title_parts).strip() if title_parts else None
         link =  div.xpath('.//h3/a/@href')
-        # 排除 nav 中的作者文本
+
         authors = div.xpath('.//li//ul/li//text()[not(ancestor::nav)]')
         editor_summary = div.xpath('.//div/ul/li/div/div[2]/div/div[2]/div[2]/div[last()]//text()')
 
         norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
+        paper_info = Article()
         paper_info = {
             'title': title,
             'link': 'https://www.cell.com' + link[0] if link else None,
+            'doi': None,
+            'date': None,
+            'journal': None,
             'authors': norm_authors,
             'editor_summary': ''.join(editor_summary).strip() if editor_summary else None,
             'structured_abstract': None,
@@ -125,6 +145,8 @@ def page_extractor(html_content,max_workers=5):
             if info_dect:
                 papers[idx]['abstract'] = info_dect.get('abstract') or papers[idx]['abstract']
                 papers[idx]['graphical_abstract'] = info_dect.get('graphical_abstract') or papers[idx]['graphical_abstract']
+                papers[idx]['doi'] = info_dect.get('doi') or papers[idx]['doi']
+                papers[idx]['date'] = info_dect.get('date') or papers[idx]['date']
             time.sleep(10)  # To avoid overwhelming the server
 
     json_str = json.dumps(papers, ensure_ascii=False, indent=2)
