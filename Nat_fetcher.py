@@ -4,6 +4,8 @@ import time
 from playwright.sync_api import sync_playwright
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dateutil import parser
+from configs import Article
 
 url = "https://www.nature.com/nature/research-articles"
 
@@ -98,18 +100,29 @@ def page_extractor(html_content,max_workers=25):
         title = ''.join(title_parts).strip() if title_parts else None
         link = div.xpath('.//h3/a/@href')
         authors = div.xpath('.//li/span//text()')
+        date = parser.parse(div.xpath('.//time/@datetime')[0]).strftime('%Y-%m-%d') if div.xpath('.//time/@datetime') else None
+
+        link_url = 'https://www.nature.com' + link[0] if link else None
+        doi = None
+        if link_url:
+            parts = link_url.split('/')
+            if len(parts) > 0:
+                doi = f"10.1038/{parts[-1]}"
 
         norm_authors = [a.strip() for a in authors if a.strip()] if authors else []
-        paper_info = {
-            'title': title,
-            'link': 'https://www.nature.com' + link[0] if link else None,
-            'authors': norm_authors,
-            'editor_summary': None,
-            'structured_abstract': None,
-            'abstract': None,
-            'graphical_abstract': None,
-            'status': 'online'
-        }
+        paper_info = Article(
+            title=title,
+            link=link_url,
+            doi=doi,
+            date=date,
+            journal=None,
+            authors=norm_authors,
+            editor_summary=None,
+            structured_abstract=None,
+            abstract=None,
+            graphical_abstract=None,
+            status='online'
+        )
         papers.append(paper_info)
 
     futures = {}
