@@ -62,6 +62,19 @@ def init_database(db_path: str = "academic_ai.db"):
         )
     ''')
 
+    # 4. 用户关注期刊关联表 (user_journal_subscriptions)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_journal_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            journal_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, journal_id), -- 防止重复关注
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (journal_id) REFERENCES journals(id) ON DELETE CASCADE
+        )
+    ''')
+
     # 创建关键索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_doi ON articles(doi)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)')
