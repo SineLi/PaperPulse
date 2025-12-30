@@ -6,6 +6,7 @@ from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil import parser
 from configs import Article
+from database import article_filter, insert_articles
 
 url = "https://www.science.org/journal/science/research?pageSize=50"
 
@@ -133,11 +134,11 @@ def page_extractor(html_content,max_workers=25):
             status='online'
         )
         papers.append(paper_info)
-    
+    paper_to_fetch = article_filter(papers)
     # 并发抓取每篇的完整摘要
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for idx, p in enumerate(papers):
+        for idx, p in enumerate(paper_to_fetch):
             if p.get('link'):
                 futures[executor.submit(get_abstract, p['link'])] = idx
         for future in as_completed(futures):
@@ -147,11 +148,18 @@ def page_extractor(html_content,max_workers=25):
             except Exception:
                 abstract_dict = {}
             if abstract_dict:
-                papers[idx]['editor_summary'] = abstract_dict.get('editor_summary') or papers[idx]['editor_summary']
-                papers[idx]['structured_abstract'] = abstract_dict.get('structured_abstract') or papers[idx]['structured_abstract']
-                papers[idx]['abstract'] = abstract_dict.get('abstract') or papers[idx]['abstract']
-                papers[idx]['graphical_abstract'] = abstract_dict.get('graphical_abstract') or papers[idx]['graphical_abstract']
+                paper_to_fetch[idx]['editor_summary'] = abstract_dict.get('editor_summary') or paper_to_fetch[idx]['editor_summary']
+                paper_to_fetch[idx]['structured_abstract'] = abstract_dict.get('structured_abstract') or paper_to_fetch[idx]['structured_abstract']
+                paper_to_fetch[idx]['abstract'] = abstract_dict.get('abstract') or paper_to_fetch[idx]['abstract']
+                paper_to_fetch[idx]['graphical_abstract'] = abstract_dict.get('graphical_abstract') or paper_to_fetch[idx]['graphical_abstract']
 
-    json_str = json.dumps(papers, ensure_ascii=False, indent=2)
+    json_str = json.dumps(paper_to_fetch, ensure_ascii=False, indent=2)
     return json_str
-page_extractor(fetch_page(url))
+
+def fetch_articles(url):
+    html_content = fetch_page(url)
+    articles_json = page_extractor(html_content)
+
+    return articles_json
+
+insert_articles(fetch_articles(url))
