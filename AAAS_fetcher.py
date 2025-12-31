@@ -6,7 +6,7 @@ from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil import parser
 from configs import Article
-from database import article_filter, insert_articles
+from database import article_filter
 
 url = "https://www.science.org/journal/science/research?pageSize=50"
 
@@ -76,7 +76,7 @@ def get_abstract(link):
             for key, section_id in section_ids.items():
                 section = tree.xpath(f'//*[@id="abstracts"]//section[@id="{section_id}"]')
                 if section:
-                    section_text = ''.join(section[0].xpath('.//text()[not(ancestor::h2)]')).strip()
+                    section_text = ''.join(section[0].xpath('.//text()[not(ancestor::h2) and not(ancestor::h3)]')).strip()
                     if section_text:
                         abstract_dict[key] = section_text
             
@@ -101,7 +101,7 @@ def get_abstract(link):
     except Exception as e:
         raise e
 
-def page_extractor(html_content,max_workers=25):
+def page_extractor(html_content,journal,max_workers=25):
     tree = etree.HTML(html_content)
     article_divs = tree.xpath(
         '//*[@id="pb-page-content"]/div/div[1]/main/section/div/div[1]/div/div/div[1]/div'
@@ -125,7 +125,7 @@ def page_extractor(html_content,max_workers=25):
             link='https://www.science.org' + link[0] if link else None,
             doi=doi,
             date=date,
-            journal=None,
+            journal=journal,
             authors=norm_authors,
             editor_summary=None,
             structured_abstract=None,
@@ -156,10 +156,8 @@ def page_extractor(html_content,max_workers=25):
     json_str = json.dumps(paper_to_fetch, ensure_ascii=False, indent=2)
     return json_str
 
-def fetch_articles(url):
+def AAAS_fetch(url,journal):
     html_content = fetch_page(url)
-    articles_json = page_extractor(html_content)
+    articles_json = page_extractor(html_content, journal)
 
     return articles_json
-
-insert_articles(fetch_articles(url))
