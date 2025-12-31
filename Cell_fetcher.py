@@ -6,6 +6,7 @@ from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil import parser
 from configs import Article
+from database import article_filter
 
 url = "https://www.cell.com/cell/newarticles"
 
@@ -99,7 +100,7 @@ def get_full_info(link):
     
 
 
-def page_extractor(html_content,max_workers=5):
+def page_extractor(html_content,journal,max_workers=5):
     tree = etree.HTML(html_content)
     article_divs = tree.xpath(
         '//*[@id="frmSearch"]/div[1]/div/div[2]/div[2]/section'
@@ -120,7 +121,7 @@ def page_extractor(html_content,max_workers=5):
             link='https://www.cell.com' + link[0] if link else None,
             doi=None,
             date=None,
-            journal=None,
+            journal=journal,
             authors=norm_authors,
             editor_summary=''.join(editor_summary).strip() if editor_summary else None,
             structured_abstract=None,
@@ -129,10 +130,10 @@ def page_extractor(html_content,max_workers=5):
             status='online'
         )
         papers.append(paper_info)
-
+    paper_to_fetch = article_filter(papers)
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for idx, p in enumerate(papers):
+        for idx, p in enumerate(paper_to_fetch):
             if p.get('link'):
                 futures[executor.submit(get_full_info, p['link'])] = idx
         for future in as_completed(futures):
@@ -142,14 +143,17 @@ def page_extractor(html_content,max_workers=5):
             except Exception:
                 info_dect = {}
             if info_dect:
-                papers[idx]['abstract'] = info_dect.get('abstract') or papers[idx]['abstract']
-                papers[idx]['graphical_abstract'] = info_dect.get('graphical_abstract') or papers[idx]['graphical_abstract']
-                papers[idx]['doi'] = info_dect.get('doi') or papers[idx]['doi']
-                papers[idx]['date'] = info_dect.get('date') or papers[idx]['date']
+                paper_to_fetch[idx]['abstract'] = info_dect.get('abstract') or paper_to_fetch[idx]['abstract']
+                paper_to_fetch[idx]['graphical_abstract'] = info_dect.get('graphical_abstract') or paper_to_fetch[idx]['graphical_abstract']
+                paper_to_fetch[idx]['doi'] = info_dect.get('doi') or paper_to_fetch[idx]['doi']
+                paper_to_fetch[idx]['date'] = info_dect.get('date') or paper_to_fetch[idx]['date']
             time.sleep(10)  # To avoid overwhelming the server
 
-    json_str = json.dumps(papers, ensure_ascii=False, indent=2)
-    print(json_str)
+    json_str = json.dumps(paper_to_fetch, ensure_ascii=False, indent=2)
     return json_str
 
-page_extractor(fetch_page(url))
+def Cell_fetch(url,journal):
+    html_content = fetch_page(url)
+    articles_json = page_extractor(html_content,journal)
+
+    return articles_json

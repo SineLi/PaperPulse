@@ -205,3 +205,17 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Directory to store API responses
+api_responses
+result.txt
+scimagojr 2024.csv
+import_journals.py
+getInfo.ipynb
+develop.md
+output.txt
+publisher_manual_annotation.csv
+publisher_replacement_table.csv
+resolver.html
+scimagojr_2024_publisher_group_final.csv
+scimagojr_2024_with_groups_and_review_flag.csv
