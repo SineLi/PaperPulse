@@ -1,7 +1,9 @@
 import sqlite3
 from contextlib import contextmanager
+import os
+from pathlib import Path
 
-DB_PATH = "./advNewsFeed.db"
+DB_PATH = str(Path(__file__).resolve().parents[1] / "db/advNewsFeed.db")
 
 def init_database(db_path: str = DB_PATH):
     """初始化数据库并创建三张表"""
@@ -101,8 +103,12 @@ def init_database(db_path: str = DB_PATH):
 
 @contextmanager
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.Error as e:
+        print(f"Error connecting to database: {e}")
+        raise
     try:
         yield conn
     except Exception:

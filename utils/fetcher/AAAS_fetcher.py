@@ -9,6 +9,8 @@ from services.article_services import Article, ArticleService
 
 url = "https://www.science.org/journal/science/research?pageSize=50"
 
+service = ArticleService()
+
 def fetch_page(url):
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -133,7 +135,7 @@ def page_extractor(html_content,journal,max_workers=25):
             status='online'
         )
         papers.append(paper_info)
-    paper_to_fetch = ArticleService().article_filter(papers)
+    paper_to_fetch = service.article_filter(papers)
     # 并发抓取每篇的完整摘要
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -160,3 +162,10 @@ def AAAS_fetch(url,journal):
     articles_json = page_extractor(html_content, journal)
 
     return articles_json
+
+if __name__ == '__main__':
+    try:
+        articles_json = AAAS_fetch(url, "Science")
+        service.insert_articles(articles_json)
+    except Exception as e:
+        print(f"Error running AAAS_fetcher main: {e}")

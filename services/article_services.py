@@ -58,7 +58,6 @@ class ArticleService:
                 except sqlite3.OperationalError as e:
                     print(f"Error querying dois: {e}")
                 
-                conn.close()
 
         # 3. 过滤文章
         new_articles = []
@@ -123,5 +122,5 @@ class ArticleService:
             except sqlite3.Error as e:
                 print(f"Error inserting articles: {e}")
             finally:
-                conn.close()
+                pass
             
