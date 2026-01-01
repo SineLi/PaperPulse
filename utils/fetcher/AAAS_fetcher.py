@@ -5,8 +5,7 @@ from playwright.sync_api import sync_playwright
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil import parser
-from configs import Article
-from database import article_filter
+from services.article_services import Article, ArticleService
 
 url = "https://www.science.org/journal/science/research?pageSize=50"
 
@@ -134,7 +133,7 @@ def page_extractor(html_content,journal,max_workers=25):
             status='online'
         )
         papers.append(paper_info)
-    paper_to_fetch = article_filter(papers)
+    paper_to_fetch = ArticleService().article_filter(papers)
     # 并发抓取每篇的完整摘要
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

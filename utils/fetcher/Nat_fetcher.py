@@ -5,8 +5,7 @@ from playwright.sync_api import sync_playwright
 from lxml import etree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil import parser
-from configs import Article
-from database import article_filter
+from services.article_services import Article, ArticleService
 
 url = "https://www.nature.com/nature/research-articles"
 
@@ -125,7 +124,7 @@ def page_extractor(html_content,journal ,max_workers=25):
             status='online'
         )
         papers.append(paper_info)
-    paper_to_fetch = article_filter(papers)
+    paper_to_fetch = ArticleService().article_filter(papers)
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for idx, p in enumerate(paper_to_fetch):
@@ -142,7 +141,7 @@ def page_extractor(html_content,journal ,max_workers=25):
                 paper_to_fetch[idx]['graphical_abstract'] = info_dect.get('graphical_abstract') or paper_to_fetch[idx]['graphical_abstract']
                 paper_to_fetch[idx]['authors'] = info_dect.get('authors') or paper_to_fetch[idx]['authors']
                 paper_to_fetch[idx]['status'] = info_dect.get('status') or paper_to_fetch[idx]['status']
-    json_str = json.dumps(papers, ensure_ascii=False, indent=2)
+    json_str = json.dumps(paper_to_fetch, ensure_ascii=False, indent=2)
     return json_str
 
 def Nat_fetch(url,journal):
