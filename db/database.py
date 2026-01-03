@@ -77,25 +77,24 @@ def init_database(db_path: str = DB_PATH):
         )
     ''')
 
-    # 5. 用户文章阅读状态表 (user_article_reads)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_article_reads (
-            user_id INTEGER NOT NULL,
-            article_id INTEGER NOT NULL,
-            read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, article_id),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
-        )
-    ''')
+    # # 5. 用户文章阅读状态表 (user_article_reads)
+    # cursor.execute('''
+    #     CREATE TABLE IF NOT EXISTS user_article_reads (
+    #         user_id INTEGER NOT NULL,
+    #         article_id INTEGER NOT NULL,
+    #         read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    #         PRIMARY KEY (user_id, article_id),
+    #         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    #         FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+    #     )
+    # ''')
 
     # 创建关键索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_doi ON articles(doi)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(date)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_journals_name ON journals(name)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_uar_user ON user_article_reads(user_id)')
+    # cursor.execute('CREATE INDEX IF NOT EXISTS idx_uar_user ON user_article_reads(user_id)')
 
     # 提交并关闭
     conn.commit()
