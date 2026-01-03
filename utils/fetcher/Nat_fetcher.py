@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dateutil import parser
 from services.article_services import Article, ArticleService
 
+service = ArticleService()
 url = "https://www.nature.com/nature/research-articles"
 
 def fetch_page(url):
@@ -124,7 +125,7 @@ def page_extractor(html_content,journal ,max_workers=25):
             status='online'
         )
         papers.append(paper_info)
-    paper_to_fetch = ArticleService().article_filter(papers)
+    paper_to_fetch = service.article_filter(papers)
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for idx, p in enumerate(paper_to_fetch):
@@ -149,3 +150,10 @@ def Nat_fetch(url,journal):
     articles_json = page_extractor(html_content,journal)
 
     return articles_json
+
+if __name__ == '__main__':
+    try:
+        articles_json = Nat_fetch(url, "Nature")
+        service.insert_articles(articles_json)
+    except Exception as e:
+        print(f"Error running AAAS_fetcher main: {e}")

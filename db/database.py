@@ -50,7 +50,7 @@ def init_database(db_path: str = DB_PATH):
             link TEXT UNIQUE NOT NULL,      -- 原文链接 (DOI URL 或期刊页面)
             doi TEXT UNIQUE,                -- DOI (e.g., "10.1038/s41586-023-06204-5")
             date TEXT,                      -- 发表日期 (ISO 8601: "2023-12-24")
-            journal_name TEXT,              -- 期刊名称 (冗余字段，关联 journals.name)
+            journal_id TEXT,              -- 期刊id
             authors TEXT,                   -- JSON 格式: ["Zhang, Y.", "Li, X."]
             editor_summary TEXT,            -- 编辑摘要
             structured_abstract TEXT,        -- 结构化摘要 (JSON 或 XML)
@@ -60,7 +60,7 @@ def init_database(db_path: str = DB_PATH):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             processed_at TIMESTAMP,         -- LLM 处理完成时间
             -- 外键约束 (SQLite 默认不强制，但建议逻辑关联)
-            FOREIGN KEY (journal_name) REFERENCES journals(name)
+            FOREIGN KEY (journal_id) REFERENCES journals(id)
         )
     ''')
 

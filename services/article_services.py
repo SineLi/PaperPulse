@@ -88,18 +88,32 @@ class ArticleService:
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            
+            journal_names = list({article.get('journal') for article in articles if article.get('journal')})
+            journal_map = {}
+            if journal_names:
+                placeholders = ','.join(['?'] * len(journal_names))
+                try:
+                    cursor.execute(f"SELECT name, id FROM journals WHERE name IN ({placeholders})", journal_names)
+                    journal_map = {row[0]: row[1] for row in cursor.fetchall()}
+                except sqlite3.Error as e:
+                    print(f"Error querying journal IDs: {e}")
+
             # 准备插入的数据
             data_to_insert = []
             for article in articles:
                 # 序列化 authors 列表为 JSON 字符串
                 authors_json = json.dumps(article.get('authors', []), ensure_ascii=False)
                 
+                journal_name = article.get('journal')
+                journal_id = journal_map.get(journal_name)
+
                 data_to_insert.append((
                     article.get('title'),
                     article.get('link'),
                     article.get('doi'),
                     article.get('date'),
-                    article.get('journal'),
+                    journal_id,
                     authors_json,
                     article.get('editor_summary'),
                     article.get('structured_abstract'),
@@ -113,7 +127,7 @@ class ArticleService:
                 # 使用 INSERT OR IGNORE 忽略重复项，避免因 DOI/Link 重复报错
                 cursor.executemany('''
                     INSERT OR IGNORE INTO articles (
-                        title, link, doi, date, journal_name, authors, 
+                        title, link, doi, date, journal_id, authors, 
                         editor_summary, structured_abstract, abstract, graphical_abstract, status
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', data_to_insert)
