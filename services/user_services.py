@@ -1,5 +1,5 @@
 import sqlite3
-from database import get_db_connection
+from db.database import get_db_connection
 from utils.auth import hash_password, verify_password
 
 class UserService:
