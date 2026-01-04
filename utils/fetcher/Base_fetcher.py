@@ -13,10 +13,11 @@ from dateutil import parser
 from services.article_services import ArticleService, Article
 
 class BaseFetcher(ABC):
-    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0):
+    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0, max_pages: int = 5):
         self.journal_name = journal_name
         self.journal_id = journal_id
         self.max_workers = max_workers
+        self.max_pages = max_pages
         self.sleep_time = sleep_time
         self.service = ArticleService()
         self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'

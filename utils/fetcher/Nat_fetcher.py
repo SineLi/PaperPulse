@@ -5,46 +5,56 @@ from utils.fetcher.Base_fetcher import BaseFetcher
 DEFAULT_LINK = "https://www.nature.com/nature/research-articles"
 
 class NatureFetcher(BaseFetcher):
-    def __init__(self, url=DEFAULT_LINK, name="Nature", workers=8):
-
-        super().__init__(journal_name=name, max_workers=workers)
-        
+    def __init__(self, url=DEFAULT_LINK, name="Nature", workers=8, pages=3): # 默认抓 3 页
+        super().__init__(journal_name=name, max_workers=workers, max_pages=pages)
         self.list_url = url
 
     def fetch_list(self):
-        content = self._get_playwright_content(self.list_url, selector="//*[@id=\"new-article-list\"]/div/ul")
-        if not content: return []
-
-        tree = lhtml.fromstring(content)
-        article_divs = tree.xpath('//*[@id="new-article-list"]/div/ul/li/div/div')
+        all_papers = []
         
-        papers = []
-        for div in article_divs:
-            title_parts = div.xpath('.//h3/a//text()')
-            title = "".join([t.strip() for t in title_parts if t.strip()])
+        for page in range(1, self.max_pages + 1):
+            # 构造带页码的 URL
+            page_url = f"{self.list_url}?page={page}"
+            print(f"Fetching {self.journal_name} list page {page}...")
             
-            link_parts = div.xpath('.//h3/a/@href')
-            link = "https://www.nature.com" + link_parts[0] if link_parts else None
-            
-            # DOI extraction from link if possible, or from page
-            doi = None
-            if link:
-                parts = link.split('/')
-                if len(parts) > 0:
-                    doi = f"10.1038/{parts[-1]}"
-            
-            date_parts = div.xpath('.//time/@datetime')
-            date = date_parts[0] if date_parts else None
+            content = self._get_playwright_content(page_url, selector="//*[@id=\"new-article-list\"]/div/ul")
+            if not content:
+                continue
 
-            if title and link:
-                papers.append({
-                    'title': title,
-                    'link': link,
-                    'doi': doi,
-                    'date': date,
-                    'journal': self.journal_name
-                })
-        return papers
+            tree = lhtml.fromstring(content)
+            article_divs = tree.xpath('//*[@id="new-article-list"]/div/ul/li/div/div')
+            
+            page_papers = []
+            for div in article_divs:
+                title_parts = div.xpath('.//h3/a//text()')
+                title = "".join([t.strip() for t in title_parts if t.strip()])
+                
+                link_parts = div.xpath('.//h3/a/@href')
+                link = "https://www.nature.com" + link_parts[0] if link_parts else None
+                
+                # DOI extraction from link if possible, or from page
+                doi = None
+                if link:
+                    parts = link.split('/')
+                    if len(parts) > 0:
+                        doi = f"10.1038/{parts[-1]}"
+                
+                date_parts = div.xpath('.//time/@datetime')
+                date = date_parts[0] if date_parts else None
+
+                if title and link:
+                    page_papers.append({
+                        'title': title,
+                        'link': link,
+                        'doi': doi,
+                        'date': date,
+                        'journal': self.journal_name
+                    })
+            
+            all_papers.extend(page_papers)
+            print(f"Page {page}: found {len(page_papers)} articles.")
+            
+        return all_papers
 
     def fetch_details(self, article):
         link = article.get('link')
