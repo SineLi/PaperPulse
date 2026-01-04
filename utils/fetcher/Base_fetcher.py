@@ -13,10 +13,11 @@ from dateutil import parser
 from services.article_services import ArticleService, Article
 
 class BaseFetcher(ABC):
-    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5):
+    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0):
         self.journal_name = journal_name
         self.journal_id = journal_id
         self.max_workers = max_workers
+        self.sleep_time = sleep_time
         self.service = ArticleService()
         self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -83,8 +84,20 @@ class BaseFetcher(ABC):
                         papers_to_fetch[idx].update(details)
                 except Exception as e:
                     print(f"Error fetching details for {papers_to_fetch[idx].get('link')}: {e}")
+                if self.sleep_time > 0:
+                    time.sleep(self.sleep_time)
 
-        # 4. 插入数据库
+        # 4. 统一日期格式
+        for paper in papers_to_fetch:
+            raw_date = paper.get('date')
+            if raw_date:
+                try:
+                    paper['date'] = parser.parse(str(raw_date)).strftime('%Y-%m-%d')
+                except Exception:
+                    # 如果解析失败，保持原样或设为 None
+                    pass
+
+        # 5. 插入数据库
         try:
             articles_json = json.dumps(papers_to_fetch, ensure_ascii=False, indent=2)
             self.service.insert_articles(articles_json)
