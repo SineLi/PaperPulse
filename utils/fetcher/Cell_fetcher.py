@@ -59,7 +59,7 @@ class CellFetcher(BaseFetcher):
         # Graphical Abstract
         ga_parts = tree.xpath('//*[@id="graphical-abstract"]//a/@href')
         if ga_parts:
-            info['graphical_abstract'] = 'https:' + ga_parts[0] if ga_parts[0].startswith('//') else ga_parts[0]
+            info['graphical_abstract'] = "https://www.cell.com" + ga_parts[0]
 
         # DOI
         doi_parts = tree.xpath('//span[@class="doi"]/a/text()')
