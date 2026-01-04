@@ -146,5 +146,8 @@ def RSC_fetch(url, journal):
     return json_str
 
 if __name__ == "__main__":
-
-    print(RSC_fetch(feed_url, "Chemical Society Reviews"))
+    try:
+        articles_json = RSC_fetch(feed_url, "Chemical Society Reviews")
+        service.insert_articles(articles_json)
+    except Exception as e:
+        print(f"Error running RSC_fetcher main: {e}")
