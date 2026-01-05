@@ -8,9 +8,19 @@ from typing import List, Dict, Optional
 import feedparser
 from lxml import etree, html as lhtml
 from playwright.sync_api import sync_playwright
-from dateutil import parser
+from dateutil import parser, tz
 
 from services.article_services import ArticleService, Article
+
+# 定义常见的时区缩写映射
+TZ_INFOS = {
+    "PST": tz.gettz("America/Los_Angeles"),
+    "PDT": tz.gettz("America/Los_Angeles"),
+    "EST": tz.gettz("America/New_York"),
+    "EDT": tz.gettz("America/New_York"),
+    "CST": tz.gettz("America/Chicago"),
+    "CDT": tz.gettz("America/Chicago"),
+}
 
 class BaseFetcher(ABC):
     def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0, max_pages: int = 0):
@@ -93,10 +103,11 @@ class BaseFetcher(ABC):
             raw_date = paper.get('date')
             if raw_date:
                 try:
-                    paper['date'] = parser.parse(str(raw_date)).strftime('%Y-%m-%d')
-                except Exception:
-                    # 如果解析失败，保持原样或设为 None
-                    pass
+                    # 传入 tzinfos 参数来识别 PST 等缩写
+                    dt = parser.parse(str(raw_date), tzinfos=TZ_INFOS)
+                    paper['date'] = dt.strftime('%Y-%m-%d')
+                except Exception as e:
+                    print(f"Date parse error: {raw_date} -> {e}")
 
         # 5. 插入数据库
         try:
@@ -121,23 +132,26 @@ class RSSFetcher(BaseFetcher):
 
         papers = []
         for entry in feed.entries:
-            # 这里可以实现一些通用的 RSS 字段提取逻辑
-            # 子类可以通过重写或在 fetch_details 中进一步完善
-            paper = {
-                'title': entry.get('title', 'No Title'),
-                'link': entry.get('link', ''),
-                'date': self._parse_date(entry),
-                'journal': self.journal_name,
-                'authors': self._extract_authors(entry),
-                'status': 'online'
-            }
-            papers.append(paper)
+            # 调用钩子方法解析单条 entry
+            paper = self._parse_entry(entry)
+            if paper:
+                papers.append(paper)
         return papers
+
+    def _parse_entry(self, entry) -> Dict:
+        return {
+            'title': entry.get('title', 'No Title'),
+            'link': entry.get('link', ''),
+            'date': self._parse_date(entry),
+            'journal': self.journal_name,
+            'authors': self._extract_authors(entry),
+            'status': 'online'
+        }
 
     def _parse_date(self, entry):
         pub_date = entry.get('published', entry.get('updated'))
         if pub_date:
-            try: return parser.parse(pub_date).strftime('%Y-%m-%d')
+            try: return parser.parse(pub_date, tzinfos=TZ_INFOS).strftime('%Y-%m-%d')
             except: pass
         return None
 
@@ -147,4 +161,15 @@ class RSSFetcher(BaseFetcher):
         elif 'author' in entry:
             return [entry.author]
         return []
+    
+    def _extract_doi(self, entry):
+        if 'links' in entry:
+            for link in entry.links:
+                if 'doi.org' in link.get('href', ''):
+                    doi = link['href'].split('doi.org/')[-1]
+                    return doi
+        if 'id' in entry and 'doi.org' in entry.id:
+            doi = entry.id.split('doi.org/')[-1]
+            return doi
+        return None
 
