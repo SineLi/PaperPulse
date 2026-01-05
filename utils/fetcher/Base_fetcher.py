@@ -121,18 +121,21 @@ class RSSFetcher(BaseFetcher):
 
         papers = []
         for entry in feed.entries:
-            # 这里可以实现一些通用的 RSS 字段提取逻辑
-            # 子类可以通过重写或在 fetch_details 中进一步完善
-            paper = {
-                'title': entry.get('title', 'No Title'),
-                'link': entry.get('link', ''),
-                'date': self._parse_date(entry),
-                'journal': self.journal_name,
-                'authors': self._extract_authors(entry),
-                'status': 'online'
-            }
-            papers.append(paper)
+            # 调用钩子方法解析单条 entry
+            paper = self._parse_entry(entry)
+            if paper:
+                papers.append(paper)
         return papers
+
+    def _parse_entry(self, entry) -> Dict:
+        return {
+            'title': entry.get('title', 'No Title'),
+            'link': entry.get('link', ''),
+            'date': self._parse_date(entry),
+            'journal': self.journal_name,
+            'authors': self._extract_authors(entry),
+            'status': 'online'
+        }
 
     def _parse_date(self, entry):
         pub_date = entry.get('published', entry.get('updated'))
