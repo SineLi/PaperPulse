@@ -3,7 +3,7 @@ from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 
 DEFAULT_FEED_URL = "https://pubs.acs.org/action/showFeed?type=axatoc&feed=rss&jc=jacsat"
-class RSCFetcher(RSSFetcher):
+class ACSFetcher(RSSFetcher):
     def __init__(self):
         super().__init__(
             journal_name="Journal of the American Chemical Society", 
@@ -45,5 +45,5 @@ class RSCFetcher(RSSFetcher):
         return info
 
 if __name__ == "__main__":
-    RSCFetcher().run()
+    ACSFetcher().run()
 
