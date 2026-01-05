@@ -150,4 +150,15 @@ class RSSFetcher(BaseFetcher):
         elif 'author' in entry:
             return [entry.author]
         return []
+    
+    def _extract_doi(self, entry):
+        if 'links' in entry:
+            for link in entry.links:
+                if 'doi.org' in link.get('href', ''):
+                    doi = link['href'].split('doi.org/')[-1]
+                    return doi
+        if 'id' in entry and 'doi.org' in entry.id:
+            doi = entry.id.split('doi.org/')[-1]
+            return doi
+        return None
 
