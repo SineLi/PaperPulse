@@ -102,6 +102,8 @@ class ArticleService:
             # 准备插入的数据
             data_to_insert = []
             for article in articles:
+                if not article.get('title') or not article.get('link') or not article.get('abstract'):
+                    continue
                 # 序列化 authors 列表为 JSON 字符串
                 authors_json = json.dumps(article.get('authors', []), ensure_ascii=False)
                 
