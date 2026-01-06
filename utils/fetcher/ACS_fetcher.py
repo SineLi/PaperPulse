@@ -40,7 +40,7 @@ class ACSFetcher(RSSFetcher):
         # graphical abstract
         ga_parts = tree.xpath('//figure[starts-with(@id, "_i")]//img/@src')
         if ga_parts:
-            info['graphical_abstract'] = "https://pubs.rsc.org" + ga_parts[0]
+            info['graphical_abstract'] = "https://pubs.acs.org" + ga_parts[0]
 
         return info
 
