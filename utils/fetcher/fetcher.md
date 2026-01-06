@@ -8,7 +8,7 @@
 | AAAS | Already Supported | HTML Fetcher |
 | RSC | Newly Added | RSS Fetcher |
 | ACS | Newly Added | RSS Fetcher |
-| Elsevier | Planned | RSS Fetcher |
+| Elsevier | Planned | RSS/API Fetcher |
 | MDPI | Planned | RSS Fetcher |
 | Wiley | Planned | RSS Fetcher |
 | Taylor & Francis | Planned | - |
