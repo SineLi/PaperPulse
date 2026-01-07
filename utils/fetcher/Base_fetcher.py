@@ -125,7 +125,7 @@ class RSSFetcher(BaseFetcher):
 
     def fetch_list(self) -> List[Dict]:
         print(f"Fetching RSS: {self.feed_url}")
-        feed = feedparser.parse(self.feed_url)
+        feed = feedparser.parse(self.feed_url,agent='FreshRSS/1.24.3 (Linux; https://freshrss.org)')
         if feed.bozo:
             print(f"RSS Parse Error: {feed.bozo_exception}")
             return []

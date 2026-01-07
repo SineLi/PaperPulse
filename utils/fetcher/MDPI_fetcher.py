@@ -8,13 +8,18 @@ class MDPIFetcher(RSSFetcher):
         super().__init__(
             journal_name="Foods", 
             feed_url=DEFAULT_FEED_URL,
-            max_workers=8,
+            max_workers=1,
             max_pages=0
         )
 
     def _parse_entry(self, entry):
+        # 优先获取 dc_title (通常是纯标题)，如果缺失则清理标准 title
+        title = entry.get('dc_title', entry.get('title', 'No Title'))
+        if title.startswith(self.journal_name) and ':' in title:
+            title = title.split(':', 1)[-1].strip()
+
         return {
-            'title': entry.get('dc_title', entry.get('title', 'No Title')),
+            'title': title,
             'link': entry.get('link', ''),
             'date': self._parse_date(entry),
             'journal': self.journal_name,
