@@ -111,9 +111,13 @@ class BaseFetcher(ABC):
 
         # 5. 插入数据库
         try:
-            articles_json = json.dumps(papers_to_fetch, ensure_ascii=False, indent=2)
+            articles_json = json.dumps(papers_to_fetch, ensure_ascii=True, indent=2)
             self.service.insert_articles(articles_json)
             print(f"Successfully processed {self.journal_name}.")
+            try: 
+                json.loads(articles_json) 
+            except Exception as e:
+                print(f"Error in JSON serialization for {self.journal_name}: {e}")
         except Exception as e:
             print(f"Error inserting articles for {self.journal_name}: {e}")
 
