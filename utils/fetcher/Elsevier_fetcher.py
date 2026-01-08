@@ -68,25 +68,26 @@ class ElsevierFetcher(RSSFetcher):
         tree = etree.fromstring(response.content)
         info = {}
         # DOI
-        doi_parts = tree.xpath('//prism:doi/text()', namespaces=ns)
-        if doi_parts:
-            info['doi'] = doi_parts[0].replace("https://doi.org/","").strip()
+        doi_nodes = tree.xpath('//prism:doi', namespaces=ns)
+        if doi_nodes:
+            info['doi'] = doi_nodes[0].xpath("string()").replace("https://doi.org/","").strip()
 
         # Authors
-        authors_parts = tree.xpath('//dc:creator/text()', namespaces=ns)
-        authors = [a.strip() for a in authors_parts if a.strip()]
+        author_nodes = tree.xpath('//dc:creator', namespaces=ns)
+        authors = [node.xpath("string()").strip() for node in author_nodes]
+        authors = [a for a in authors if a]
         if authors:
             info['authors'] = authors
 
         # date
-        date_parts = tree.xpath('//prism:coverDate/text()', namespaces=ns)
-        if date_parts:
-            info['date'] = date_parts[0].strip()
+        date_nodes = tree.xpath('//prism:coverDate', namespaces=ns)
+        if date_nodes:
+            info['date'] = date_nodes[0].xpath("string()").strip()
 
         # Abstract
-        abstract_parts = tree.xpath('//dc:description/text()', namespaces=ns)
-        if abstract_parts:
-            info['abstract'] = html.unescape(' '.join([p.strip() for p in abstract_parts if p.strip()]))
+        abstract_nodes = tree.xpath('//dc:description', namespaces=ns)
+        if abstract_nodes:
+            info['abstract'] = html.unescape(abstract_nodes[0].xpath("string()").strip())
 
         # graphical abstract
         info['graphical_abstract'] = self._get_ga_url(pii)

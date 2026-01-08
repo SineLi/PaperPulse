@@ -10,7 +10,7 @@
 | ACS | Newly Added | RSS Fetcher |
 | Elsevier | Newly Added | RSS/API Fetcher |
 | MDPI | Newly Added | RSS Fetcher |
-| Wiley | Planned | RSS Fetcher |
+| Wiley | Newly Added | RSS Fetcher |
 | Taylor & Francis | Planned | - |
 | IEEE | Planned | - |
 | SAGE | Planned | - |

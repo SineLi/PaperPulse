@@ -33,9 +33,9 @@ class ACSFetcher(RSSFetcher):
         info = {}
 
         # Abstract
-        abstract_parts = tree.xpath('//div[@id="abstractBox"]/p//text()')
-        if abstract_parts:
-            info['abstract'] = html.unescape(' '.join([p.strip() for p in abstract_parts if p.strip()]))
+        abstract_nodes = tree.xpath('//div[@id="abstractBox"]/p')
+        if abstract_nodes:
+            info['abstract'] = " ".join([node.text_content().strip() for node in abstract_nodes])
 
         # graphical abstract
         ga_parts = tree.xpath('//figure[starts-with(@id, "_i")]//img/@src')
