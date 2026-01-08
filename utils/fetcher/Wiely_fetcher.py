@@ -25,9 +25,15 @@ class WileyFetcher(RSSFetcher):
             try:
                 # 使用 lxml 解析 HTML 字符串
                 tree = lhtml.fromstring(content_html)
-                abstract = tree.xpath('//p[2]/text()')[0].replace('\n', ' ').strip()
+                
+                # 获取元素节点，然后使用 text_content() 提取包含 sub/sup 等子标签的完整文本
+                p_nodes = tree.xpath('//p[2]')
+                abstract = p_nodes[0].text_content().replace('\n', ' ').strip() if p_nodes else ""
+                
                 graphical_abstract = tree.xpath('//img/@src')[0]
-                editor_summary = tree.xpath('//p[1]/text()')[0].strip()
+
+                p_nodes = tree.xpath('//p[1]')
+                editor_summary = p_nodes[0].text_content().replace('\n', ' ').strip() if p_nodes else ""
             except Exception as e:
                 print(f"Error parsing HTML content: {e}")
 
