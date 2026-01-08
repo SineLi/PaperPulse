@@ -21,16 +21,16 @@ TZ_INFOS = {
     "CST": tz.gettz("America/Chicago"),
     "CDT": tz.gettz("America/Chicago"),
 }
-
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 class BaseFetcher(ABC):
-    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0, max_pages: int = 0):
+    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0, max_pages: int = 0, user_agent: str = UA):
         self.journal_name = journal_name
         self.journal_id = journal_id
         self.max_workers = max_workers
         self.max_pages = max_pages
         self.sleep_time = sleep_time
         self.service = ArticleService()
-        self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        self.user_agent = user_agent
 
     @abstractmethod
     def fetch_list(self) -> List[Dict]:
@@ -125,7 +125,7 @@ class RSSFetcher(BaseFetcher):
 
     def fetch_list(self) -> List[Dict]:
         print(f"Fetching RSS: {self.feed_url}")
-        feed = feedparser.parse(self.feed_url)
+        feed = feedparser.parse(self.feed_url,agent='FreshRSS/1.24.3 (Linux; https://freshrss.org)')
         if feed.bozo:
             print(f"RSS Parse Error: {feed.bozo_exception}")
             return []
