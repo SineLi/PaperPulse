@@ -22,9 +22,9 @@ class RSCFetcher(RSSFetcher):
         info = {}
 
         # Abstract
-        abstract_parts = tree.xpath('//*[@class="capsule__text"]/p//text()')
-        if abstract_parts:
-            info['abstract'] = html.unescape(' '.join([p.strip() for p in abstract_parts if p.strip()]))
+        abstract_nodes = tree.xpath('//*[@class="capsule__text"]/p')
+        if abstract_nodes:
+            info['abstract'] = html.unescape(' '.join([node.text_content().strip() for node in abstract_nodes]))
 
         # DOI
         doi_parts = tree.xpath('//meta[@name="citation_doi"]/@content')

@@ -20,17 +20,17 @@ class CellFetcher(BaseFetcher):
         
         papers = []
         for div in article_divs:
-            title_parts = div.xpath('.//h3/a//text()')
-            title = "".join([t.strip() for t in title_parts if t.strip()])
+            title_nodes = div.xpath('.//h3/a')
+            title = title_nodes[0].text_content().strip() if title_nodes else ""
             
             link_parts = div.xpath('.//h3/a/@href')
             link = 'https://www.cell.com' + link_parts[0] if link_parts else None
 
-            authors_parts = div.xpath('.//li//ul/li//text()[not(ancestor::nav)]')
-            authors = [a.strip() for a in authors_parts if a.strip()]
+            authors_nodes = div.xpath('.//li//ul/li[not(ancestor::nav)]')
+            authors = [node.text_content().strip() for node in authors_nodes if node.text_content().strip()]
 
-            editors_summary_parts = div.xpath('.//div/ul/li/div/div[2]/div/div[2]/div[2]/div[last()]//text()')
-            editors_summary = " ".join([e.strip() for e in editors_summary_parts if e.strip()])
+            editors_summary_nodes = div.xpath('.//div/ul/li/div/div[2]/div/div[2]/div[2]/div[last()]')
+            editors_summary = editors_summary_nodes[0].text_content().strip() if editors_summary_nodes else ""
 
             if title and link:
                 papers.append({
@@ -52,9 +52,9 @@ class CellFetcher(BaseFetcher):
         info = {}
 
         # Abstract
-        abstract_parts = tree.xpath('//*[@id="author-abstract"]/div//text()')
-        if abstract_parts:
-            info['abstract'] = html.unescape(' '.join([p.strip() for p in abstract_parts if p.strip()]))
+        abstract_nodes = tree.xpath('//*[@id="author-abstract"]/div')
+        if abstract_nodes:
+            info['abstract'] = html.unescape(' '.join([node.text_content().strip() for node in abstract_nodes]))
 
         # Graphical Abstract
         ga_parts = tree.xpath('//*[@id="graphical-abstract"]//a/@href')
@@ -62,15 +62,15 @@ class CellFetcher(BaseFetcher):
             info['graphical_abstract'] = "https://www.cell.com" + ga_parts[0]
 
         # DOI
-        doi_parts = tree.xpath('//span[@class="doi"]/a/text()')
-        if doi_parts:
-            doi_text = ''.join(doi_parts).strip()
+        doi_nodes = tree.xpath('//span[@class="doi"]/a')
+        if doi_nodes:
+            doi_text = doi_nodes[0].text_content().strip()
             info['doi'] = doi_text if doi_text else None
 
         # Date
-        date_parts = tree.xpath('//span[@class="meta-panel__onlineDate"]/text()')
-        if date_parts:
-            info['date'] = ''.join(date_parts).strip()
+        date_nodes = tree.xpath('//span[@class="meta-panel__onlineDate"]')
+        if date_nodes:
+            info['date'] = date_nodes[0].text_content().strip()
 
         return info
 

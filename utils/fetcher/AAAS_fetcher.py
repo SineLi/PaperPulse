@@ -20,17 +20,18 @@ class ScienceFetcher(BaseFetcher):
         
         papers = []
         for div in article_divs:
-            title_parts = div.xpath('.//h2/a//text()')
-            title = "".join([t.strip() for t in title_parts if t.strip()])
+            title_nodes = div.xpath('.//h2/a')
+            title = title_nodes[0].text_content().strip() if title_nodes else ""
             
             link_parts = div.xpath('.//h2/a/@href')
             link = 'https://www.science.org' + link_parts[0] if link_parts else None
             
-            date_parts = div.xpath('.//time/text()')
-            date = date_parts[0] if date_parts else None
+            date_nodes = div.xpath('.//time')
+            date = date_nodes[0].text_content().strip() if date_nodes else None
 
-            authors_parts = div.xpath('.//li/span//text()')
-            authors = [a.strip() for a in authors_parts if a.strip()]
+            authors_nodes = div.xpath('.//li/span')
+            authors = [node.text_content().strip() for node in authors_nodes]
+            authors = [a for a in authors if a]
 
             doi = None
             if link:
