@@ -26,8 +26,8 @@ class NatureFetcher(BaseFetcher):
             
             page_papers = []
             for div in article_divs:
-                title_parts = div.xpath('.//h3/a//text()')
-                title = "".join([t.strip() for t in title_parts if t.strip()])
+                title_nodes = div.xpath('.//h3/a')
+                title = title_nodes[0].text_content().replace('\xa0', ' ').replace('\\', '\\\\').strip() if title_nodes else ""
                 
                 link_parts = div.xpath('.//h3/a/@href')
                 link = "https://www.nature.com" + link_parts[0] if link_parts else None
@@ -65,9 +65,9 @@ class NatureFetcher(BaseFetcher):
         info = {}
 
         # Abstract
-        abstract_parts = tree.xpath('//*[@id="Abs1-content"]//text()')
-        if abstract_parts:
-            info['abstract'] = html.unescape(' '.join([p.strip() for p in abstract_parts if p.strip()]))
+        abstract_nodes = tree.xpath('//*[@id="Abs1-content"]')
+        if abstract_nodes:
+            info['abstract'] = html.unescape(abstract_nodes[0].text_content()).replace('\xa0', ' ').replace('\\', '\\\\').strip()
 
         # Graphical Abstract
         ga_parts = tree.xpath('//*[@id="figure-1"]//img/@src')
@@ -75,9 +75,9 @@ class NatureFetcher(BaseFetcher):
             info['graphical_abstract'] = 'https:' + ga_parts[0] if ga_parts[0].startswith('//') else ga_parts[0]
 
         # Authors
-        author_parts = tree.xpath('//*[@class="c-article-header"]/header/ul[2]/li/a//text()')
-        if author_parts:
-            info['authors'] = [a.strip() for a in author_parts if a.strip()]
+        author_nodes = tree.xpath('//*[@class="c-article-header"]/header/ul[2]/li/a')
+        if author_nodes:
+            info['authors'] = [node.text_content().replace('\xa0', ' ').replace('\\', '\\\\').strip() for node in author_nodes if node.text_content().replace('\xa0', ' ').replace('\\', '\\\\').strip()]
 
         # Status
         status_parts = tree.xpath('//*[@id="content"]/main/article/div[1]/header/p[2]')
