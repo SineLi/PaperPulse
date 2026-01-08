@@ -157,7 +157,7 @@ class RSSFetcher(BaseFetcher):
 
     def _extract_authors(self, entry):
         if 'authors' in entry:
-            return [a.get('name', '') for a in entry.authors]
+            return [a.get('name', '').replace('\n', '') for a in entry.authors]
         elif 'author' in entry:
             return [entry.author]
         return []
