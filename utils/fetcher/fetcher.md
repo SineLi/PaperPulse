@@ -11,6 +11,7 @@
 | Elsevier | Newly Added | RSS/API Fetcher |
 | MDPI | Newly Added | RSS Fetcher |
 | Wiley | Newly Added | RSS Fetcher |
-| Taylor & Francis | Planned | - |
+| Taylor & Francis | Newly Added | RSS Fetcher |
+| Frontiers | Planned | - |
 | IEEE | Planned | - |
 | SAGE | Planned | - |
