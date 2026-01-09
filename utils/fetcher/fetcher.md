@@ -12,6 +12,6 @@
 | MDPI | Newly Added | RSS Fetcher |
 | Wiley | Newly Added | RSS Fetcher |
 | Taylor & Francis | Newly Added | RSS Fetcher |
-| Frontiers | Planned | - |
+| Frontiers | Newly Added | RSS Fetcher |
 | IEEE | Planned | - |
 | SAGE | Planned | - |
