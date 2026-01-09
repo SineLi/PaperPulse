@@ -1,4 +1,6 @@
 import html
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 
@@ -26,6 +28,13 @@ class FrontiersFetcher(RSSFetcher):
     def fetch_details(self, article):
 
         return None
+    
+    def _extract_doi(self, entry):
+        if 'links' in entry:
+            for link in entry.links:
+                link_split = link.get('href', '').split('/')
+                return link_split[-2] + '/' + link_split[-1]
+        return ''
 
 
 if __name__ == "__main__":
