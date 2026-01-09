@@ -19,6 +19,7 @@ class FrontiersFetcher(RSSFetcher):
             'title': entry.get('title', 'No Title'),
             'link': entry.get('link', ''),
             'abstract': entry.get('description', ''),
+            'authors': self._extract_authors(entry),
             'date': self._parse_date(entry),
             'journal': self.journal_name,
             'doi': self._extract_doi(entry),
@@ -26,8 +27,20 @@ class FrontiersFetcher(RSSFetcher):
         }
 
     def fetch_details(self, article):
+        link = article.get('link')
+        
+        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        if not content: return {}
 
-        return None
+        tree = lhtml.fromstring(content)
+        info = {}
+
+        # graphical abstract
+        ga_parts = tree.xpath('//*[@class="ArticleFigure"]//*[@class="FrontiersImage"]//img/@src') or tree.xpath('//*[@class="FigureDesc"]//img/@src')
+        if ga_parts:
+            info['graphical_abstract'] = ga_parts[0]
+
+        return info
     
     def _extract_doi(self, entry):
         if 'links' in entry:
