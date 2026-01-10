@@ -56,6 +56,7 @@ def init_database(db_path: str = DB_PATH):
             structured_abstract TEXT,        -- 结构化摘要 (JSON 或 XML)
             abstract TEXT,                  -- 普通摘要
             graphical_abstract TEXT,         -- 图形摘要 (URL 或 Base64 编码)
+            llm_summary TEXT,               -- LLM 生成的摘要
             status TEXT NOT NULL DEFAULT 'pending', -- 状态: pending/processed/failed/skipped
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             processed_at TIMESTAMP,         -- LLM 处理完成时间
