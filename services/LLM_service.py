@@ -38,7 +38,7 @@ PROMPT = textwrap.dedent("""\
     `CRISPR基因编辑` `深度学习` `纳米材料` `气候模型`  
     → **禁止添加**摘要未提及的子标签
 
-## 输出格式（严格遵循JSON格式）
+## 输出格式（严格遵循JSON格式,内容通过**中文**回答）
 {
     "title":"<标题>",
     "summary":"<精炼摘要>",
@@ -103,8 +103,11 @@ class LLMService:
         jsonl_content = "\n".join(jsons).encode("utf-8")
         file_io = io.BytesIO(jsonl_content)
 
+        return file_io
+
+    def generate_summary(self, batch_file):
         file_id = self.app.files.create(
-            file=("batch_input.jsonl", file_io),
+            file=("batch_input.jsonl", batch_file),
             purpose="batch"
         ).id
 
@@ -129,11 +132,8 @@ class LLMService:
                 result_id = batch.error_file_id
                 raise Exception("Batch processing failed")
 
-    def generate_summary(self, texts):
-        pass
-
-
 if __name__ == "__main__":
     service = LLMService()
     abstracts, ids = service.get_abstracts()
-    service.build_batch(abstracts, ids)
+    batch_file = service.build_batch(abstracts, ids)
+    service.generate_summary(batch_file)
