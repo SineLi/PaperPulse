@@ -63,14 +63,18 @@ class LLMService:
             api_key=LM_API_KEY,
             base_url=BASE_URL
         )
+        self.ids = [] # 初始化内部向量
 
     def get_abstracts(self):
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, abstract, editor_summary, structured_abstract FROM articles WHERE llm_summary IS NULL")
+                "SELECT id, abstract, editor_summary, structured_abstract FROM articles WHERE llm_summary IS NULL AND llm_status IS NULL")
             rows = cursor.fetchall()
-            ids = [row['id'] for row in rows]
+            
+            # 将 ids 存入 class 内部
+            self.ids = [row['id'] for row in rows]
+            
             abstracts = [
                 " ".join(filter(None, [
                     f"abstract: {row['abstract']}" if row['abstract'] else None,
@@ -78,13 +82,26 @@ class LLMService:
                     f"structured_abstract: {row['structured_abstract']}" if row['structured_abstract'] else None
                 ])) for row in rows
             ]
-            return abstracts, ids
+            return abstracts
+        
+    def mark_article(self, article_ids, status):
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                "UPDATE articles SET llm_status = ? WHERE id = ?",
+                [(status, aid) for aid in article_ids]
+            )
+            conn.commit()
 
-    def build_batch(self, abstracts, ids):
+    def build_batch(self, abstracts):
+        # 如果只想处理前10个，同步切片内部的 ids
+        self.ids = self.ids[0:10]
+        abstracts = abstracts[0:10]
+        
         jsons = []
-        for i, abstract in enumerate(abstracts[0:10]):
+        for i, abstract in enumerate(abstracts):
             entry = {
-                "custom_id": f"{ids[i]}",
+                "custom_id": f"{self.ids[i]}", # 使用内部 ids
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
@@ -100,11 +117,8 @@ class LLMService:
             }
             jsons.append(json.dumps(entry, ensure_ascii=False))
 
-        # 将列表转换为换行符分隔的字符串，并转换为字节流
         jsonl_content = "\n".join(jsons).encode("utf-8")
-        file_io = io.BytesIO(jsonl_content)
-
-        return file_io
+        return io.BytesIO(jsonl_content)
 
     def generate_summary(self, batch_file):
         file_id = self.app.files.create(
@@ -117,6 +131,9 @@ class LLMService:
             endpoint="/v1/chat/completions",
             completion_window="24h"
         ).id
+
+        # 直接使用内部记录的 ids 进行标记
+        self.mark_article([str(id) for id in self.ids], f"{batch_id}")
 
         result_id = None
         while True:
@@ -166,15 +183,16 @@ class LLMService:
             cursor = conn.cursor()
             for i, summary in enumerate(summaries):
                 cursor.execute(
-                    "UPDATE articles SET llm_summary = ?, processed_at = CURRENT_TIMESTAMP, status = 'processed' WHERE id = ?",
-                    (summary, ids[i])
+                    "UPDATE articles SET llm_summary = ?, processed_at = CURRENT_TIMESTAMP , llm_status = ? WHERE id = ?",
+                    (summary, "processed", ids[i])
                 )
             conn.commit()
             print(f"Updated {len(summaries)} summaries in the database.")
 
 if __name__ == "__main__":
     service = LLMService()
-    abstracts, ids = service.get_abstracts()
-    batch_file = service.build_batch(abstracts, ids)
-    results = service.generate_summary(batch_file)
-    service.process_results(results)
+    abstracts = service.get_abstracts()
+    if abstracts:
+        batch_file = service.build_batch(abstracts)
+        results = service.generate_summary(batch_file)
+        service.process_results(results)

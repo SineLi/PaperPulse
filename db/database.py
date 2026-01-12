@@ -57,7 +57,8 @@ def init_database(db_path: str = DB_PATH):
             abstract TEXT,                  -- 普通摘要
             graphical_abstract TEXT,         -- 图形摘要 (URL 或 Base64 编码)
             llm_summary TEXT,               -- LLM 生成的摘要
-            status TEXT NOT NULL DEFAULT 'pending', -- 状态: pending/processed/failed/skipped
+            llm_status TEXT,                -- LLM 处理状态: 
+            status TEXT,                    -- 文献状态
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             processed_at TIMESTAMP,         -- LLM 处理完成时间
             -- 外键约束 (SQLite 默认不强制，但建议逻辑关联)
