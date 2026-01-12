@@ -82,7 +82,7 @@ class LLMService:
 
     def build_batch(self, abstracts, ids):
         jsons = []
-        for i, abstract in enumerate(abstracts[0:1]):
+        for i, abstract in enumerate(abstracts[0:10]):
             entry = {
                 "custom_id": f"{ids[i]}",
                 "method": "POST",
@@ -141,15 +141,25 @@ class LLMService:
     def process_results(self, res_jsonl):
         summaries = []
         result_ids = []
-        with jsonlines.Reader(io.StringIO(res_jsonl)) as reader:
+        with jsonlines.Reader(io.StringIO(res_jsonl.strip())) as reader:
             for data in reader:
                 custom_id = data.get("custom_id")
-                content = data.get("response", {}).get("body", {}).get("choices", [{}])[0].get("message", {}).get("content")
-                if content and custom_id:
-                    summaries.append(content)
-                    result_ids.append(custom_id)
-        self.update_summaries(summaries, result_ids)
+                content_raw = data.get("response", {}).get("body", {}).get("choices", [{}])[0].get("message", {}).get("content")
+                
+                if content_raw and custom_id:
+                    try:
+                        # 解析内层 JSON 字符串为 Python 字典
+                        parsed_content = json.loads(content_raw, strict=False)
+                        clean_content = json.dumps(parsed_content, ensure_ascii=False)
+                        
+                        summaries.append(clean_content)
+                        result_ids.append(custom_id)
+                    except json.JSONDecodeError as e:
+                        print(f"解析摘要 JSON 内容失败 (ID: {custom_id}): {e}")
+                        summaries.append(content_raw)
+                        result_ids.append(custom_id)
 
+        self.update_summaries(summaries, result_ids)
 
     def update_summaries(self, summaries, ids):
         with get_db_connection() as conn:
@@ -160,16 +170,11 @@ class LLMService:
                     (summary, ids[i])
                 )
             conn.commit()
+            print(f"Updated {len(summaries)} summaries in the database.")
 
 if __name__ == "__main__":
     service = LLMService()
-    # abstracts, ids = service.get_abstracts()
-    # batch_file = service.build_batch(abstracts, ids)
-    # service.generate_summary(batch_file)
-    result = service.process_results(
-        """
-{"id":"e3fa01b1-fe73-4ab9-9bce-915fcf966797","custom_id":"2435","response":{"status_code":200,"request_id":"e3fa01b1-fe73-4ab9-9bce-915fcf966797","body":{"created":1768117193,"usage":{"completion_tokens":642,"prompt_tokens":1004,"total_tokens":1646},"model":"qwen-plus","id":"chatcmpl-e3fa01b1-fe73-4ab9-9bce-915fcf966797","choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant","content":"{\n    \"title\": \"脂质转移蛋白-脂质复合物的系统性表征及其功能影响\",\n    \"summary\": \"脂质转移蛋白（LTPs）维持细胞器膜的特异性脂质组成。在人类中，许多LTPs与疾病相关，但大多数LTPs的转运底物及辅助脂质尚不清楚。通过结合生化、脂质组学和计算方法，系统性地表征了LTP-脂质复合物，并测量了LTP功能获得对细胞脂质组的影响。在分析的约一百种LTPs中，确定了其中近一半所结合的脂质，验证了已知配体并发现了多个新配体，涵盖大多数LTP家族。LTP功能增强影响了其已知和新发现脂质配体在细胞中的丰度，表明这两类配体具有相当的功能重要性。通过结构生物信息学分析，揭示了脂质选择性的机制，识别出基于头部基团或酰基链的偏好。研究展示了LTP动员其配体的一些基本原理：它们通常与多个脂质类别相互作用，表现出广泛但具有选择性的偏好，不仅针对特定头部基团，还倾向于酰基链较短且含有一或两个不饱和键的脂质种类，提示只有部分脂质物种能被有效动员。该数据集可作为不同细胞类型和状态（如病理状态）下进一步分析的资源。\",\n    \"highlights\": \"解决了**医学**中脂质转移蛋白功能与疾病关联机制不明确的问题，为理解病理状态下脂质代谢紊乱提供基础数据支持\",\n    \"innovations\": [\n        \"结合生化、脂质组学和计算方法系统性表征LTP-脂质 complexes：我们结合了生化、脂质组学和计算方法来系统性地表征LTP-脂质复合物\",\n        \"确定了约一半被分析LTPs的结合脂质并发现新配体：我们识别了约一百种LTPs中近一半的结合脂质，确认已知配体的同时发现了新配体\",\n        \"揭示LTP功能获得对细胞脂质组中已知与新配体丰度的影响：增益功能影响了已知和新鉴定脂质配体的细胞丰度，表明二者具有相当的功能相关性\",\n        \"通过结构生物信息学解析脂质选择性机制：使用结构生物信息学方法，鉴定了基于头部基团或酰基链的脂质选择性偏好\",\n        \"提出LTP动员脂质的基本原则：展示了LTP如何动员配体的基本原理，包括对短链及单双不饱和脂质的偏好\"\n    ],\n    \"maintag\": \"医学\",\n    \"subtags\": [\n        \"脂质转移蛋白 LTPs\",\n        \"脂质组学 lipidomics\",\n        \"结构生物信息学 structural bioinformatics\",\n        \"酰基链 acyl chain\",\n        \"脂质选择性 lipid selectivity\"\n    ]\n}"}}],"object":"chat.completion"}},"error":null}
-{"id":"b6706adc-d954-4dd6-84b7-c3f9a75e01e0","custom_id":"2434","response":{"status_code":200,"request_id":"b6706adc-d954-4dd6-84b7-c3f9a75e01e0","body":{"created":1768117190,"usage":{"completion_tokens":483,"prompt_tokens":971,"total_tokens":1454},"model":"qwen-plus","id":"chatcmpl-b6706adc-d954-4dd6-84b7-c3f9a75e01e0","choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant","content":"{\n    \"title\": \"电化学驱动的Matteson同系化反应新方法\",\n    \"summary\": \"Matteson同系化反应自1980年发展以来，通过向C−B键插入实现碳链延长，传统方法需经三步：碳负离子形成、对有机硼化合物的亲核加成以及热或路易斯酸促进的硼酸酯重排，通常需严格条件如低温及对空气和水分敏感试剂的操作。本研究报道了一种将上述三步整合为一锅法电化学过程的Matteson型同系化反应。该概念验证方法结合了电还原脱氟与硼酸酯重排，无需使用有机锂试剂、低温条件或专用设备。首次采用易得的三氟甲基芳烃作为卡宾前体，拓展了Matteson反应的应用范围。通过鉴定关键中间体、DFT计算和电化学分析等系统机理研究，证实了硼酸酯形成与重排在这一“e-Matteson”同系化反应中的作用。\",\n    \"highlights\": \"解决了**化学**中传统Matteson反应操作复杂、条件苛刻的问题，为有机合成提供了一种无需强碱、低温或敏感试剂的简化流程\",\n    \"innovations\": [\n        \"• 开发了一锅法电化学流程：将传统Matteson反应的三步整合为单一电化学过程（原文：integrates these three transformations into a one-pot electrochemical process）\",\n        \"• 首次使用三氟甲基芳烃作为卡宾前体：采用易得的三氟甲基芳烃替代传统碳负离子源（原文：trifluoromethylarenes are employed as carbenoid precursors for the first time）\",\n        \"• 实现无有机锂试剂与非低温条件下的反应：通过电还原脱氟避免使用有机锂试剂和低温（原文：eliminating the need for organolithium reagents, cryogenic conditions, or specialist setups）\"\n    ],\n    \"maintag\": \"化学\",\n    \"subtags\": [\n        \"Matteson同系化反应\",\n        \"电化学合成\",\n        \"硼酸酯重排\",\n        \"脱氟反应\",\n        \"DFT计算\"\n    ]\n}"}}],"object":"chat.completion"}},"error":null}
-"""
-    )
-    print(result)
+    abstracts, ids = service.get_abstracts()
+    batch_file = service.build_batch(abstracts, ids)
+    results = service.generate_summary(batch_file)
+    service.process_results(results)
