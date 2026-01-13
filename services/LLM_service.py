@@ -1,4 +1,4 @@
-from db.database import get_db_connection
+from db.article_db import ArticleRepository
 import time
 import json
 import jsonlines
@@ -10,6 +10,9 @@ from API_KEYs import LM_API_KEY
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 PROMPT = textwrap.dedent("""\
 你是一名专业学术助理，请**严格基于以下摘要原文**生成**中文**解释。**禁止任何外部知识、推断或数据补充**。
+                         
+**0. 标题**  
+用中文拟定标题，**必须包含摘要中出现的核心技术/发现**
 
 **1. 内容精炼**  
 - 详细复述并解释摘要中的 **事实性陈述**（问题/方法/结果）  
@@ -39,7 +42,7 @@ PROMPT = textwrap.dedent("""\
     `CRISPR基因编辑` `深度学习` `纳米材料` `气候模型`  
     → **禁止添加**摘要未提及的子标签
 
-## 输出格式（严格遵循JSON格式,内容通过**中文**回答）
+## 输出格式（严格遵循JSON格式,所有总结内容通过**中文**回答）
 {
     "title":"<标题>",
     "summary":"<精炼摘要>",
@@ -63,45 +66,54 @@ class LLMService:
             api_key=LM_API_KEY,
             base_url=BASE_URL
         )
-        self.ids = [] # 初始化内部向量
+        self.repo = ArticleRepository() # 注入依赖
 
-    def get_abstracts(self):
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, abstract, editor_summary, structured_abstract FROM articles WHERE llm_summary IS NULL AND llm_status IS NULL")
-            rows = cursor.fetchall()
-            
-            # 将 ids 存入 class 内部
-            self.ids = [row['id'] for row in rows]
-            
-            abstracts = [
-                " ".join(filter(None, [
-                    f"abstract: {row['abstract']}" if row['abstract'] else None,
-                    f"editor_summary: {row['editor_summary']}" if row['editor_summary'] else None,
-                    f"structured_abstract: {row['structured_abstract']}" if row['structured_abstract'] else None
-                ])) for row in rows
-            ]
-            return abstracts
-        
-    def mark_article(self, article_ids, status):
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executemany(
-                "UPDATE articles SET llm_status = ? WHERE id = ?",
-                [(status, aid) for aid in article_ids]
-            )
-            conn.commit()
+    def run_submission_cycle(self, limit=None):
+        """执行一次完整的提交周期"""
+        # 1. 获取数据
+        rows, ids = self.repo.get_pending_articles(limit=limit)
+        if not ids:
+            print("No pending articles.")
+            return
 
-    def build_batch(self, abstracts):
-        # 如果只想处理前10个，同步切片内部的 ids
-        self.ids = self.ids[0:10]
-        abstracts = abstracts[0:10]
+        # 2. 构建数据 (这里可以保留 filter/join 逻辑)
+        abstracts = self._format_abstracts(rows) 
+        batch_file = self._build_batch_file(abstracts, ids)
+
+        # 3. 提交任务
+        batch_id = self._submit_to_api(batch_file)
         
+        # 4. 更新状态
+        self.repo.mark_articles_as_submitted(ids, batch_id)
+        print(f"Submitted batch {batch_id}")
+
+    def run_update_cycle(self):
+        """执行一次完整的检查更新周期"""
+        active_batches = self.repo.get_active_batch_ids()
+        for batch_id in active_batches:
+            results = self._fetch_results_from_api(batch_id)
+            if results:
+                # 解析并更新
+                updates = self._parse_results(results) # 返回 [(summary, 'processed', id), ...]
+                self.repo.update_article_summaries(updates)
+                print(f"Batch {batch_id} processed.")
+
+    def _format_abstracts(self, rows):
+        """格式化摘要数据为 API 所需的结构"""
+        return [
+            " ".join(filter(None, [
+                f"abstract: {row['abstract']}" if row['abstract'] else None,
+                f"editor_summary: {row['editor_summary']}" if row['editor_summary'] else None,
+                f"structured_abstract: {row['structured_abstract']}" if row['structured_abstract'] else None
+            ])) for row in rows
+        ]
+
+    def _build_batch_file(self, abstracts, ids):
+        """构建批处理文件内容"""
         jsons = []
         for i, abstract in enumerate(abstracts):
             entry = {
-                "custom_id": f"{self.ids[i]}", # 使用内部 ids
+                "custom_id": f"{ids[i]}", # 使用内部 ids
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
@@ -120,7 +132,7 @@ class LLMService:
         jsonl_content = "\n".join(jsons).encode("utf-8")
         return io.BytesIO(jsonl_content)
 
-    def submit_batch(self, batch_file):
+    def _submit_to_api(self, batch_file):
         """提交批处理任务并记录 ID"""
         file_info = self.app.files.create(file=("batch_input.jsonl", batch_file), purpose="batch")
         batch_job = self.app.batches.create(
@@ -129,21 +141,20 @@ class LLMService:
             completion_window="24h"
         )
         
-        # 将 batch_id 记录到数据库，方便后续查询进度
-        self.mark_article([str(id) for id in self.ids], batch_job.id)
-        print(f"Batch task submitted. ID: {batch_job.id}")
         return batch_job.id
     
-    def fetch_results(self, batch_id):
-        """轮询结果：处理中返回 None，成功返回文本，失败抛出异常"""
+    def _fetch_results_from_api(self, batch_id):
+        """从 API 获取批处理结果"""
         batch = self.app.batches.retrieve(batch_id)
         if batch.status == "completed":
             return self.app.files.content(batch.output_file_id).text
         elif batch.status in ["failed", "expired", "cancelled"]:
+            self.repo.clear_article_llm_status(batch_id)
             raise Exception(f"Batch {batch_id} ended with status: {batch.status}")
         return None # 仍在处理中
 
-    def process_results(self, res_jsonl):
+    def _parse_results(self, res_jsonl):
+        """解析 API 返回的结果"""
         summaries = []
         result_ids = []
         with jsonlines.Reader(io.StringIO(res_jsonl.strip())) as reader:
@@ -164,74 +175,14 @@ class LLMService:
                         summaries.append(content_raw)
                         result_ids.append(custom_id)
 
-        self.update_summaries(summaries, result_ids)
-
-    def update_summaries(self, summaries, ids):
-        """使用 executemany 批量更新数据库"""
-        if not summaries: return
-        
-        # 准备批量更新的数据
-        update_data = [
-            (summaries[i], "processed", ids[i]) 
-            for i in range(len(ids))
-        ]
-        
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executemany(
-                """
-                UPDATE articles 
-                SET llm_summary = ?, 
-                    processed_at = CURRENT_TIMESTAMP, 
-                    llm_status = ? 
-                WHERE id = ?
-                """,
-                update_data
-            )
-            conn.commit()
-            print(f"Successfully finalized {len(summaries)} articles in database.")
-
-    def get_active_batches(self):
-        """从数据库中提取所有正在云端处理中（未完成）的 batch_id"""
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            # 查询 llm_status 中存储了 batch_id（非空且不是 'processed'）的文章
-            cursor.execute(
-                """
-                SELECT DISTINCT llm_status 
-                FROM articles 
-                WHERE llm_summary IS NULL 
-                  AND llm_status IS NOT NULL 
-                  AND llm_status != 'processed'
-                """
-            )
-            return [row['llm_status'] for row in cursor.fetchall()]
-
-    def run_check_and_update(self):
-        """自动化流程：检查所有激活的任务，完成的就入库"""
-        active_ids = self.get_active_batches()
-        for b_id in active_ids:
-            try:
-                results = self.fetch_results(b_id)
-                if results:
-                    self.process_results(results)
-                    print(f"Batch {b_id} has been fully processed.")
-                else:
-                    print(f"Batch {b_id} is still in progress...")
-            except Exception as e:
-                print(f"Error checking batch {b_id}: {e}")
+        # 返回 [(summary, 'processed', id), ...]
+        return [(summaries[i], "processed", result_ids[i]) for i in range(len(result_ids))]
 
 if __name__ == "__main__":
     service = LLMService()
-    
-    # 场景 1：如果你想同步结果（比如上次程序崩了，想把剩下的收回来）
-    print("Checking for existing active tasks...")
-    service.run_check_and_update()
-    
-    # 场景 2：提交新任务
     print("Looking for new articles to process...")
-    abstracts = service.get_abstracts()
-    if abstracts:
-        batch_file = service.build_batch(abstracts)
-        service.submit_batch(batch_file)
-        # 这里你可以选择直接开始 while 循环等待，也可以直接结束程序等下次运行
+    service.run_submission_cycle(limit=100)
+    while True:
+        print("Checking for existing active tasks...")
+        service.run_update_cycle()
+        time.sleep(60)
