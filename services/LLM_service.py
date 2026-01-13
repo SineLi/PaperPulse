@@ -191,30 +191,47 @@ class LLMService:
             conn.commit()
             print(f"Successfully finalized {len(summaries)} articles in database.")
 
+    def get_active_batches(self):
+        """从数据库中提取所有正在云端处理中（未完成）的 batch_id"""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # 查询 llm_status 中存储了 batch_id（非空且不是 'processed'）的文章
+            cursor.execute(
+                """
+                SELECT DISTINCT llm_status 
+                FROM articles 
+                WHERE llm_summary IS NULL 
+                  AND llm_status IS NOT NULL 
+                  AND llm_status != 'processed'
+                """
+            )
+            return [row['llm_status'] for row in cursor.fetchall()]
+
+    def run_check_and_update(self):
+        """自动化流程：检查所有激活的任务，完成的就入库"""
+        active_ids = self.get_active_batches()
+        for b_id in active_ids:
+            try:
+                results = self.fetch_results(b_id)
+                if results:
+                    self.process_results(results)
+                    print(f"Batch {b_id} has been fully processed.")
+                else:
+                    print(f"Batch {b_id} is still in progress...")
+            except Exception as e:
+                print(f"Error checking batch {b_id}: {e}")
+
 if __name__ == "__main__":
     service = LLMService()
     
-    # 1. 获取并提交
+    # 场景 1：如果你想同步结果（比如上次程序崩了，想把剩下的收回来）
+    print("Checking for existing active tasks...")
+    service.run_check_and_update()
+    
+    # 场景 2：提交新任务
+    print("Looking for new articles to process...")
     abstracts = service.get_abstracts()
-    if not abstracts:
-        print("No pending articles found.")
-    else:
+    if abstracts:
         batch_file = service.build_batch(abstracts)
-        batch_id = service.submit_batch(batch_file)
-        
-        # 2. 等待并拉取 (在实际生产中，这一步可以作为一个独立的脚本定时运行)
-        print("Waiting for results...")
-        results = None
-        while results is None:
-            time.sleep(60)
-            try:
-                results = service.fetch_results(batch_id)
-                if results is None:
-                    print(f"[{time.strftime('%H:%M:%S')}] Still processing...")
-            except Exception as e:
-                print(f"Error: {e}")
-                break
-        
-        # 3. 解析并入库
-        if results:
-            service.process_results(results)
+        service.submit_batch(batch_file)
+        # 这里你可以选择直接开始 while 循环等待，也可以直接结束程序等下次运行
