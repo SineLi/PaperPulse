@@ -120,40 +120,28 @@ class LLMService:
         jsonl_content = "\n".join(jsons).encode("utf-8")
         return io.BytesIO(jsonl_content)
 
-    def generate_summary(self, batch_file):
-        file_id = self.app.files.create(
-            file=("batch_input.jsonl", batch_file),
-            purpose="batch"
-        ).id
-
-        batch_id = self.app.batches.create(
-            input_file_id=file_id,
+    def submit_batch(self, batch_file):
+        """提交批处理任务并记录 ID"""
+        file_info = self.app.files.create(file=("batch_input.jsonl", batch_file), purpose="batch")
+        batch_job = self.app.batches.create(
+            input_file_id=file_info.id,
             endpoint="/v1/chat/completions",
             completion_window="24h"
-        ).id
-
-        # 直接使用内部记录的 ids 进行标记
-        self.mark_article([str(id) for id in self.ids], f"{batch_id}")
-
-        result_id = None
-        while True:
-            time.sleep(60)
-            batch = self.app.batches.retrieve(batch_id)
-            if batch.status == "completed":
-                result_id = batch.output_file_id
-                print(result_id)
-                break
-            elif batch.status == "in_progress":
-                print("Batch is still processing...")
-                continue
-            elif batch.status == "failed":
-                result_id = batch.error_file_id
-                raise Exception("Batch processing failed")
-
-        res_jsonl = self.app.files.content(result_id).text
-
-        return res_jsonl
+        )
+        
+        # 将 batch_id 记录到数据库，方便后续查询进度
+        self.mark_article([str(id) for id in self.ids], batch_job.id)
+        print(f"Batch task submitted. ID: {batch_job.id}")
+        return batch_job.id
     
+    def fetch_results(self, batch_id):
+        """轮询结果：处理中返回 None，成功返回文本，失败抛出异常"""
+        batch = self.app.batches.retrieve(batch_id)
+        if batch.status == "completed":
+            return self.app.files.content(batch.output_file_id).text
+        elif batch.status in ["failed", "expired", "cancelled"]:
+            raise Exception(f"Batch {batch_id} ended with status: {batch.status}")
+        return None # 仍在处理中
 
     def process_results(self, res_jsonl):
         summaries = []
@@ -179,20 +167,54 @@ class LLMService:
         self.update_summaries(summaries, result_ids)
 
     def update_summaries(self, summaries, ids):
+        """使用 executemany 批量更新数据库"""
+        if not summaries: return
+        
+        # 准备批量更新的数据
+        update_data = [
+            (summaries[i], "processed", ids[i]) 
+            for i in range(len(ids))
+        ]
+        
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            for i, summary in enumerate(summaries):
-                cursor.execute(
-                    "UPDATE articles SET llm_summary = ?, processed_at = CURRENT_TIMESTAMP , llm_status = ? WHERE id = ?",
-                    (summary, "processed", ids[i])
-                )
+            cursor.executemany(
+                """
+                UPDATE articles 
+                SET llm_summary = ?, 
+                    processed_at = CURRENT_TIMESTAMP, 
+                    llm_status = ? 
+                WHERE id = ?
+                """,
+                update_data
+            )
             conn.commit()
-            print(f"Updated {len(summaries)} summaries in the database.")
+            print(f"Successfully finalized {len(summaries)} articles in database.")
 
 if __name__ == "__main__":
     service = LLMService()
+    
+    # 1. 获取并提交
     abstracts = service.get_abstracts()
-    if abstracts:
+    if not abstracts:
+        print("No pending articles found.")
+    else:
         batch_file = service.build_batch(abstracts)
-        results = service.generate_summary(batch_file)
-        service.process_results(results)
+        batch_id = service.submit_batch(batch_file)
+        
+        # 2. 等待并拉取 (在实际生产中，这一步可以作为一个独立的脚本定时运行)
+        print("Waiting for results...")
+        results = None
+        while results is None:
+            time.sleep(60)
+            try:
+                results = service.fetch_results(batch_id)
+                if results is None:
+                    print(f"[{time.strftime('%H:%M:%S')}] Still processing...")
+            except Exception as e:
+                print(f"Error: {e}")
+                break
+        
+        # 3. 解析并入库
+        if results:
+            service.process_results(results)
