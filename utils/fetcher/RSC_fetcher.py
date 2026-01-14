@@ -4,10 +4,10 @@ from utils.fetcher.Base_fetcher import RSSFetcher
 
 DEFAULT_FEED_URL = "http://feeds.rsc.org/rss/cs"
 class RSCFetcher(RSSFetcher):
-    def __init__(self):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Chemical Society Reviews"):
         super().__init__(
-            journal_name="Chemical Society Reviews", 
-            feed_url=DEFAULT_FEED_URL,
+            journal_name=name, 
+            feed_url=url,
             max_workers=8,
             max_pages=0
         )

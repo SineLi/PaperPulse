@@ -19,10 +19,10 @@ ns = {
 
 
 class ElsevierFetcher(RSSFetcher):
-    def __init__(self):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Food Chemistry"):
         super().__init__(
-            journal_name="Food Chemistry", 
-            feed_url=DEFAULT_FEED_URL,
+            journal_name=name, 
+            feed_url=url,
             max_workers=4,
             max_pages=0,
             sleep_time=1,

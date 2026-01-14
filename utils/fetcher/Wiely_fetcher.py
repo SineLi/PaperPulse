@@ -4,10 +4,10 @@ from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 
 DEFAULT_FEED_URL = "https://onlinelibrary.wiley.com/feed/15214095/most-recent"
 class WileyFetcher(RSSFetcher):
-    def __init__(self):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Advanced Materials"):
         super().__init__(
-            journal_name="Advanced Materials", 
-            feed_url=DEFAULT_FEED_URL,
+            journal_name=name, 
+            feed_url=url,
             max_workers=1,
             max_pages=0
         )
