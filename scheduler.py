@@ -45,11 +45,13 @@ def cycle_job():
         logger.error(f"LLM submission cycle failed: {e}", exc_info=True)
         
 def start_scheduler():
+    cycle_job()  # 先运行一次
+
     scheduler = BlockingScheduler()
     
     scheduler.add_job(
         cycle_job,
-        trigger=CronTrigger(minute=0),  # 每 15 分钟运行一次
+        trigger=CronTrigger(minute=0),
         id='run_all_cycle',
         name='Fetch articles and process LLM summaries every hour',
         replace_existing=True
