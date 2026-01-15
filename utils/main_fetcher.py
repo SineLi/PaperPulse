@@ -67,7 +67,7 @@ def run_enabled_fetchers():
 
         try:
             # 实例化抓取器 (已将所有 fetcher 更新为支持 url 和 name 参数)
-            fetcher = fetcher_class(url=j_url, name=j_name)
+            fetcher = fetcher_class(url=j_url, name=j_name, max_workers=5, journal_id=j_id)
             
             logger.info(f"Running {fetcher.__class__.__name__} for {j_name}...")
             fetcher.run()

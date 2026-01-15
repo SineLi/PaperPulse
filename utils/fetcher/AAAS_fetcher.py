@@ -2,10 +2,10 @@ import html
 from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import BaseFetcher
 
-DEFAULT_LINK = "https://www.science.org/journal/science/research?pageSize=50"
+DEFAULT_LINK = "https://www.science.org/journal/science/research"
 
 class ScienceFetcher(BaseFetcher):
-    def __init__(self, url=DEFAULT_LINK, name="Science", workers=8):
+    def __init__(self, url=DEFAULT_LINK + "?pageSize=50", name="Science", workers=8):
 
         super().__init__(journal_name=name, max_workers=workers)
         
