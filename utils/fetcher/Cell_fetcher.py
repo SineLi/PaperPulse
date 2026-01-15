@@ -5,9 +5,9 @@ from utils.fetcher.Base_fetcher import BaseFetcher
 DEFAULT_LINK = "https://www.cell.com/cell/newarticles"
 
 class CellFetcher(BaseFetcher):
-    def __init__(self, url=DEFAULT_LINK, name="Cell", workers=8, sleep_time=5):
+    def __init__(self, url=DEFAULT_LINK, name="Cell", journal_id=None, **kwargs):
 
-        super().__init__(journal_name=name, max_workers=workers, sleep_time=sleep_time)
+        super().__init__(journal_name=name, journal_id=journal_id, **kwargs)
         
         self.list_url = url
 

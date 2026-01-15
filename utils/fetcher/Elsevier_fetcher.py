@@ -19,13 +19,12 @@ ns = {
 
 
 class ElsevierFetcher(RSSFetcher):
-    def __init__(self, url=DEFAULT_FEED_URL, name="Food Chemistry"):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Food Chemistry", journal_id=None, **kwargs):
         super().__init__(
             journal_name=name, 
             feed_url=url,
-            max_workers=4,
-            max_pages=0,
-            sleep_time=1,
+            journal_id=journal_id,
+            **kwargs
         )
 
     def _parse_entry(self, entry) -> Dict:

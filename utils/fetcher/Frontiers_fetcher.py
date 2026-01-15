@@ -6,12 +6,12 @@ from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 
 DEFAULT_FEED_URL = "https://www.frontiersin.org/journals/immunology/rss"
 class FrontiersFetcher(RSSFetcher):
-    def __init__(self, url=DEFAULT_FEED_URL, name="Frontiers in Immunology"):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Frontiers in Immunology", journal_id=None, **kwargs):
         super().__init__(
             journal_name=name, 
             feed_url=url,
-            max_workers=8,
-            max_pages=0
+            journal_id=journal_id,
+            **kwargs
         )
 
     def _parse_entry(self, entry) -> Dict:
