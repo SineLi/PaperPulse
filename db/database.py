@@ -1,7 +1,10 @@
 import sqlite3
+import logging
 from contextlib import contextmanager
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = str(Path(__file__).resolve().parents[1] / "db/advNewsFeed.db")
 
@@ -79,24 +82,12 @@ def init_database(db_path: str = DB_PATH):
         )
     ''')
 
-    # # 5. 用户文章阅读状态表 (user_article_reads)
-    # cursor.execute('''
-    #     CREATE TABLE IF NOT EXISTS user_article_reads (
-    #         user_id INTEGER NOT NULL,
-    #         article_id INTEGER NOT NULL,
-    #         read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    #         PRIMARY KEY (user_id, article_id),
-    #         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    #         FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
-    #     )
-    # ''')
-
     # 创建关键索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_doi ON articles(doi)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(date)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_journals_name ON journals(name)')
-    # cursor.execute('CREATE INDEX IF NOT EXISTS idx_uar_user ON user_article_reads(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_ujs_journal ON user_journal_subscriptions(journal_id)')
 
     # 提交并关闭
     conn.commit()
@@ -107,8 +98,10 @@ def get_db_connection():
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
+        # 开启 WAL 模式以支持并发读写
+        conn.execute("PRAGMA journal_mode=WAL;")
     except sqlite3.Error as e:
-        print(f"Error connecting to database: {e}")
+        logger.error(f"Error connecting to database: {e}")
         raise
     try:
         yield conn

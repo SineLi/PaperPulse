@@ -1,7 +1,10 @@
 import sqlite3
+import logging
 from db.database import get_db_connection
 from typing import Optional, List, Union, TypedDict
 import json
+
+logger = logging.getLogger(__name__)
 
 class Article(TypedDict):
     title: str
@@ -40,7 +43,7 @@ class ArticleService:
                     cursor.execute(f"SELECT title FROM articles WHERE title IN ({placeholders})", titles)
                     existing_titles = {row[0] for row in cursor.fetchall()}
                 except sqlite3.OperationalError as e:
-                    print(f"Error querying titles: {e}")
+                    logger.error(f"Error querying titles: {e}")
 
             if links:
                 placeholders = ','.join(['?'] * len(links))
@@ -48,7 +51,7 @@ class ArticleService:
                     cursor.execute(f"SELECT link FROM articles WHERE link IN ({placeholders})", links)
                     existing_links = {row[0] for row in cursor.fetchall()}
                 except sqlite3.OperationalError as e:
-                    print(f"Error querying links: {e}")
+                    logger.error(f"Error querying links: {e}")
 
             if dois:
                 placeholders = ','.join(['?'] * len(dois))
@@ -56,7 +59,7 @@ class ArticleService:
                     cursor.execute(f"SELECT doi FROM articles WHERE doi IN ({placeholders})", dois)
                     existing_dois = {row[0] for row in cursor.fetchall()}
                 except sqlite3.OperationalError as e:
-                    print(f"Error querying dois: {e}")
+                    logger.error(f"Error querying dois: {e}")
                 
 
         # 3. 过滤文章
@@ -83,7 +86,7 @@ class ArticleService:
             try:
                 articles = json.loads(articles)
             except json.JSONDecodeError as e:
-                print(f"Error decoding JSON in insert_articles: {e}")
+                logger.error(f"Error decoding JSON in insert_articles: {e}")
                 return
 
         with get_db_connection() as conn:
@@ -97,7 +100,7 @@ class ArticleService:
                     cursor.execute(f"SELECT name, id FROM journals WHERE name IN ({placeholders})", journal_names)
                     journal_map = {row[0]: row[1] for row in cursor.fetchall()}
                 except sqlite3.Error as e:
-                    print(f"Error querying journal IDs: {e}")
+                    logger.error(f"Error querying journal IDs: {e}")
 
             # 准备插入的数据
             data_to_insert = []
@@ -134,9 +137,9 @@ class ArticleService:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', data_to_insert)
                 conn.commit()
-                print(f"Successfully inserted {cursor.rowcount} articles.")
+                logger.info(f"Successfully inserted {cursor.rowcount} articles.")
             except sqlite3.Error as e:
-                print(f"Error inserting articles: {e}")
+                logger.error(f"Error inserting articles: {e}")
             finally:
                 pass
             

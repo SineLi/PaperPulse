@@ -38,9 +38,16 @@ class UserService:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 1. 插入订阅记录
                 cursor.execute(
                     "INSERT INTO user_journal_subscriptions (user_id, journal_id) VALUES (?, ?)",
                     (user_id, journal_id)
+                )
+                
+                # 2. 激活该期刊的爬虫开关
+                cursor.execute(
+                    "UPDATE journals SET crawler_enabled = 1 WHERE id = ?",
+                    (journal_id,)
                 )
                 return True
             except sqlite3.IntegrityError:
@@ -49,11 +56,29 @@ class UserService:
     def unfollow_journal(self, user_id: int, journal_id: int) -> bool:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            
+            # 1. 删除订阅记录
             cursor.execute(
                 "DELETE FROM user_journal_subscriptions WHERE user_id = ? AND journal_id = ?",
                 (user_id, journal_id)
             )
-            return cursor.rowcount > 0
+            
+            if cursor.rowcount > 0:
+                # 2. 检查是否还有其他用户订阅该期刊
+                cursor.execute(
+                    "SELECT COUNT(*) FROM user_journal_subscriptions WHERE journal_id = ?",
+                    (journal_id,)
+                )
+                count = cursor.fetchone()[0]
+                
+                # 3. 如果没人订阅了，关闭爬虫开关
+                if count == 0:
+                    cursor.execute(
+                        "UPDATE journals SET crawler_enabled = 0 WHERE id = ?",
+                        (journal_id,)
+                    )
+                return True
+            return False
         
     def get_articles_feed(self, user_id: int, limit: int = 200, offset: int = 0) -> list:
         with get_db_connection() as conn:

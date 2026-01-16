@@ -1,7 +1,10 @@
 import html
+import logging
 from lxml import etree
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 import requests
+
+logger = logging.getLogger(__name__)
 
 from API_KEYs import Elsevier_KEY
 
@@ -19,13 +22,12 @@ ns = {
 
 
 class ElsevierFetcher(RSSFetcher):
-    def __init__(self):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Food Chemistry", journal_id=None, **kwargs):
         super().__init__(
-            journal_name="Food Chemistry", 
-            feed_url=DEFAULT_FEED_URL,
-            max_workers=4,
-            max_pages=0,
-            sleep_time=1,
+            journal_name=name, 
+            feed_url=url,
+            journal_id=journal_id,
+            **kwargs
         )
 
     def _parse_entry(self, entry) -> Dict:
@@ -48,7 +50,7 @@ class ElsevierFetcher(RSSFetcher):
                         else:
                             continue
         except Exception as e:
-            print(f"Error fetching graphical abstract for PII {pii}: {e}")
+            logger.error(f"Error fetching graphical abstract for PII {pii}: {e}")
 
     def fetch_details(self, article):
         link = article.get('link')
@@ -62,7 +64,7 @@ class ElsevierFetcher(RSSFetcher):
 
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code != 200:
-            print(f"Failed to fetch details for {link}: {response.status_code}")
+            logger.error(f"Failed to fetch details for {link}: {response.status_code}")
             return {}
 
         tree = etree.fromstring(response.content)
