@@ -227,3 +227,5 @@ test.html
 
 docs/
 requirements.txt
+
+.VSCodeCounter/
