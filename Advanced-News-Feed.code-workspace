@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "📦 Project Root (Git)",
+			"path": "."
+		},
+		{
+			"name": "⚙️ Backend",
+			"path": "backend"
+		}
+	],
+	"settings": {}
+}
