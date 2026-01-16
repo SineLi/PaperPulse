@@ -80,9 +80,9 @@ if __name__ == "__main__":
 
     def run_all_fetchers(self):
         for fetcher in self.fetchers:
-            print(f"Running fetcher: {fetcher.__class__.__name__}")
+            logger.info(f"Running fetcher: {fetcher.__class__.__name__}")
             new_articles = fetcher.fetch_new_articles()
-            print(f"Fetched {len(new_articles)} new articles from {fetcher.__class__.__name__}")
+            logger.info(f"Fetched {len(new_articles)} new articles from {fetcher.__class__.__name__}")
             for article in new_articles:
                 self.article_repo.insert_article(article)
-        print("All fetchers completed.")
+        logger.info("All fetchers completed.")

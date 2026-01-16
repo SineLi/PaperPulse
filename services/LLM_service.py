@@ -1,3 +1,4 @@
+import logging
 from db.article_db import ArticleRepository
 import time
 import json
@@ -6,6 +7,8 @@ import io
 from openai import OpenAI
 import textwrap
 from API_KEYs import LM_API_KEY
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 PROMPT = textwrap.dedent("""\
@@ -73,7 +76,7 @@ class LLMService:
         # 1. 获取数据
         rows, ids = self.repo.get_pending_articles(limit=limit)
         if not ids:
-            print("No pending articles.")
+            logger.info("No pending articles found.")
             return
 
         # 2. 构建数据 (这里可以保留 filter/join 逻辑)
@@ -85,7 +88,7 @@ class LLMService:
         
         # 4. 更新状态
         self.repo.mark_articles_as_submitted(ids, batch_id)
-        print(f"Submitted batch {batch_id}")
+        logger.info(f"Submitted batch {batch_id}")
 
     def run_update_cycle(self):
         """执行一次完整的检查更新周期"""
@@ -96,7 +99,7 @@ class LLMService:
                 # 解析并更新
                 updates = self._parse_results(results) # 返回 [(summary, 'processed', id), ...]
                 self.repo.update_article_summaries(updates)
-                print(f"Batch {batch_id} processed.")
+                logger.info(f"Batch {batch_id} processed.")
 
     def _format_abstracts(self, rows):
         """格式化摘要数据为 API 所需的结构"""
@@ -128,7 +131,7 @@ class LLMService:
                 }
             }
             jsons.append(json.dumps(entry, ensure_ascii=False))
-
+        logger.info(f"Built batch file with {len(jsons)} entries.")
         jsonl_content = "\n".join(jsons).encode("utf-8")
         return io.BytesIO(jsonl_content)
 
@@ -171,7 +174,7 @@ class LLMService:
                         summaries.append(clean_content)
                         result_ids.append(custom_id)
                     except json.JSONDecodeError as e:
-                        print(f"解析摘要 JSON 内容失败 (ID: {custom_id}): {e}")
+                        logger.error(f"解析摘要 JSON 内容失败 (ID: {custom_id}): {e}")
                         summaries.append(content_raw)
                         result_ids.append(custom_id)
 
@@ -180,9 +183,9 @@ class LLMService:
 
 if __name__ == "__main__":
     service = LLMService()
-    print("Looking for new articles to process...")
+    logger.info("Looking for new articles to process...")
     service.run_submission_cycle(limit=100)
     while True:
-        print("Checking for existing active tasks...")
+        logger.info("Checking for existing active tasks...")
         service.run_update_cycle()
         time.sleep(60)

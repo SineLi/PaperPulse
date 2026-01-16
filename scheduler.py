@@ -4,25 +4,32 @@ from datetime import datetime
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
+import os
+
+# Configure logging
+# 自定义 Handler 实现每条日志必刷新
+class RealTimeFileHandler(logging.FileHandler):
+    def emit(self, record):
+        super().emit(record)
+        self.flush() # 强制刷新到磁盘
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - [%(levelname)s] - [%(name)s] - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        RealTimeFileHandler("scheduler.log", encoding='utf-8')
+    ],
+    force=True # 强制覆盖之前的配置
+)
+logger = logging.getLogger(__name__)
+
 
 try:
     from utils.main_fetcher import run_enabled_fetchers
     from services.LLM_service import LLMService
 except ImportError as e:
-    print(f"Failed to import modules: {e}")
-    print("Please ensure you are running this script from the project root directory or have set the correct PYTHONPATH.")
+    logger.error(f"Failed to import modules: {e}")
     sys.exit(1)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - [%(levelname)s] - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('scheduler.log', encoding='utf-8')
-    ]
-)
-logger = logging.getLogger(__name__)
 
 def cycle_job():
     service = LLMService()

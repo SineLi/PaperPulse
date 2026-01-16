@@ -1,6 +1,9 @@
 import html
+import logging
 from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_FEED_URL = "https://onlinelibrary.wiley.com/feed/15214095/most-recent"
 class WileyFetcher(RSSFetcher):
@@ -35,7 +38,7 @@ class WileyFetcher(RSSFetcher):
                 p_nodes = tree.xpath('//p[1]')
                 editor_summary = p_nodes[0].text_content().replace('\n', ' ').strip() if p_nodes else ""
             except Exception as e:
-                print(f"Error parsing HTML content: {e}")
+                logger.error(f"Error parsing HTML content: {e}")
 
         return {
             'title': entry.get('title', 'No Title'),

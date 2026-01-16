@@ -1,7 +1,10 @@
 import sqlite3
+import logging
 from contextlib import contextmanager
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = str(Path(__file__).resolve().parents[1] / "db/advNewsFeed.db")
 
@@ -98,7 +101,7 @@ def get_db_connection():
         # 开启 WAL 模式以支持并发读写
         conn.execute("PRAGMA journal_mode=WAL;")
     except sqlite3.Error as e:
-        print(f"Error connecting to database: {e}")
+        logger.error(f"Error connecting to database: {e}")
         raise
     try:
         yield conn

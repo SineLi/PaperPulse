@@ -1,6 +1,7 @@
 import json
 import time
 import html
+import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional
@@ -11,6 +12,8 @@ from playwright.sync_api import sync_playwright
 from dateutil import parser, tz
 
 from services.article_services import ArticleService, Article
+
+logger = logging.getLogger(__name__)
 
 # 定义常见的时区缩写映射
 TZ_INFOS = {
@@ -60,7 +63,7 @@ class BaseFetcher(ABC):
                     content = page.content()
                     break
                 except Exception as e:
-                    print(f"Attempt {i+1} failed for {url}: {e}")
+                    logger.error(f"Attempt {i+1} failed for {url}: {e}")
                     if i == 2: break
                     time.sleep(2)
             
@@ -69,17 +72,17 @@ class BaseFetcher(ABC):
 
     def run(self):
         # 执行完整的抓取流程
-        print(f"Starting fetcher for {self.journal_name}...")
+        logger.info(f"Starting fetcher for {self.journal_name}...")
         
         # 1. 获取初步列表
         papers = self.fetch_list()
         if not papers:
-            print("No articles found.")
+            logger.warning(f"No articles found for {self.journal_name}.")
             return
 
         # 2. 过滤已存在的文章
         papers_to_fetch = self.service.article_filter(papers)
-        print(f"Found {len(papers)} articles, {len(papers_to_fetch)} are new.")
+        logger.info(f"Found {len(papers)} articles, {len(papers_to_fetch)} are new.")
 
         if not papers_to_fetch:
             return
@@ -94,7 +97,7 @@ class BaseFetcher(ABC):
                     if details:
                         papers_to_fetch[idx].update(details)
                 except Exception as e:
-                    print(f"Error fetching details for {papers_to_fetch[idx].get('link')}: {e}")
+                    logger.error(f"Error fetching details for {papers_to_fetch[idx].get('link')}: {e}")
                 if self.sleep_time > 0:
                     time.sleep(self.sleep_time)
 
@@ -107,19 +110,19 @@ class BaseFetcher(ABC):
                     dt = parser.parse(str(raw_date), tzinfos=TZ_INFOS)
                     paper['date'] = dt.strftime('%Y-%m-%d')
                 except Exception as e:
-                    print(f"Date parse error: {raw_date} -> {e}")
+                    logger.error(f"Date parse error: {raw_date} -> {e}")
 
         # 5. 插入数据库
         try:
             articles_json = json.dumps(papers_to_fetch, ensure_ascii=True, indent=2)
             self.service.insert_articles(articles_json)
-            print(f"Successfully processed {self.journal_name}.")
+            logger.info(f"Successfully processed {self.journal_name}.")
             try: 
                 json.loads(articles_json) 
             except Exception as e:
-                print(f"Error in JSON serialization for {self.journal_name}: {e}")
+                logger.error(f"Error in JSON serialization for {self.journal_name}: {e}")
         except Exception as e:
-            print(f"Error inserting articles for {self.journal_name}: {e}")
+            logger.error(f"Error inserting articles for {self.journal_name}: {e}")
 
 class RSSFetcher(BaseFetcher):
     # 专门处理 RSS 源的基类
@@ -128,10 +131,10 @@ class RSSFetcher(BaseFetcher):
         self.feed_url = feed_url
 
     def fetch_list(self) -> List[Dict]:
-        print(f"Fetching RSS: {self.feed_url}")
+        logger.info(f"Fetching RSS: {self.feed_url}")
         feed = feedparser.parse(self.feed_url,agent='FreshRSS/1.24.3 (Linux; https://freshrss.org)')
         if feed.bozo:
-            print(f"RSS Parse Error: {feed.bozo_exception}")
+            logger.error(f"RSS Parse Error: {feed.bozo_exception}")
             return []
 
         papers = []

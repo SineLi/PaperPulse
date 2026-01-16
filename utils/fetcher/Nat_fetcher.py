@@ -1,6 +1,9 @@
 import html
+import logging
 from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import BaseFetcher
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LINK = "https://www.nature.com/nature/research-articles"
 
@@ -15,7 +18,7 @@ class NatureFetcher(BaseFetcher):
         for page in range(1, self.max_pages + 1):
             # 构造带页码的 URL
             page_url = f"{self.list_url}?page={page}"
-            print(f"Fetching {self.journal_name} list page {page}...")
+            logger.info(f"Fetching {self.journal_name} list page {page}...")
             
             content = self._get_playwright_content(page_url, selector="//*[@id=\"new-article-list\"]/div/ul")
             if not content:
@@ -52,7 +55,7 @@ class NatureFetcher(BaseFetcher):
                     })
             
             all_papers.extend(page_papers)
-            print(f"Page {page}: found {len(page_papers)} articles.")
+            logger.info(f"Page {page}: found {len(page_papers)} articles.")
             
         return all_papers
 
