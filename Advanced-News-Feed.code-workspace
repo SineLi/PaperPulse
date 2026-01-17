@@ -9,5 +9,7 @@
 			"path": "backend"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"python.terminal.activateEnvInCurrentTerminal": true
+	}
 }

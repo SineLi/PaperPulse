@@ -1,15 +1,20 @@
-from typing import Union
-
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers import users, journals
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源，仅用于测试环境
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(users.router)
+app.include_router(journals.router)
 
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
+def root():
+    return {"status": "ok"}

@@ -32,7 +32,21 @@ class UserService:
             user = cursor.fetchone()
             if not user or not verify_password(password, user["password_hash"]):
                 raise ValueError("Invalid credentials")
-            return dict(user)
+            return {
+                "id": user["id"],
+                "username": user["username"],
+                "email": user["email"],
+            }
+
+        
+    def get_available_journals(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, name, sci, CASUp, CASBase, publisher, abbreviation FROM journals WHERE official_url IS NOT NULL OR rss_url IS NOT NULL LIMIT ? OFFSET ?", 
+                (limit, offset))
+            journals = cursor.fetchall()
+            return [dict(journal) for journal in journals]
 
     def follow_journal(self, user_id: int, journal_id: int) -> bool:
         with get_db_connection() as conn:
@@ -80,30 +94,44 @@ class UserService:
                 return True
             return False
         
-    def get_articles_feed(self, user_id: int, limit: int = 200, offset: int = 0) -> list:
+    def get_articles_feed(self, user_id: int, limit: int = 200, offset: int = 0) -> list[dict]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT 
-                    a.id, a.title, a.abstract, a.date, a.journal_name,
-                    CASE WHEN uar.article_id IS NOT NULL THEN 1 ELSE 0 END as is_read
+                SELECT
+                a.id,
+                a.title,
+                a.abstract,
+                a.graphical_abstract,
+                a.date,
+                a.doi,
+                a.llm_summary,
+                j.id   AS journal_id,
+                j.name AS journal_name,
+                j.abbreviation
                 FROM articles a
-                JOIN user_journal_subscriptions ujs ON a.journal_name = (SELECT name FROM journals WHERE id = ujs.journal_id)
-                LEFT JOIN user_article_reads uar ON a.id = uar.article_id AND uar.user_id = ?
+                JOIN journals j ON a.journal_id = j.id
+                JOIN user_journal_subscriptions ujs
+                ON ujs.journal_id = j.id
                 WHERE ujs.user_id = ?
                 ORDER BY a.date DESC
                 LIMIT ? OFFSET ?
                 """,
-                (user_id, user_id, limit, offset)
+                (user_id, limit, offset)
             )
             articles = cursor.fetchall()
             return [dict(article) for article in articles]
 
-    def mark_as_read(self, user_id: int, article_ids: list):
+    def mark_as_read(self, user_id: int, article_ids: list[int]) -> bool:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.executemany(
-                "INSERT OR IGNORE INTO user_article_reads (user_id, article_id) VALUES (?, ?)",
-                [(user_id, aid) for aid in article_ids]
-            )
+            try:
+                cursor.executemany(
+                    "INSERT OR IGNORE INTO user_article_reads (user_id, article_id) VALUES (?, ?)",
+                    [(user_id, aid) for aid in article_ids]
+                )
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
