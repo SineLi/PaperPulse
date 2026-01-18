@@ -66,3 +66,20 @@ def get_available_journals(
         "limit": limit,
         "offset": offset,
     }
+
+@router.get("/followed")
+def get_followed_journals(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int = Depends(get_current_user_id),
+):
+    journals = user_service.get_followed_journals(
+        user_id=user_id,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": journals,
+        "limit": limit,
+        "offset": offset,
+    }

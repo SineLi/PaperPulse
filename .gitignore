@@ -229,3 +229,4 @@ docs/
 requirements.txt
 
 .VSCodeCounter/
+backend/app/index.html

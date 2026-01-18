@@ -48,6 +48,22 @@ class UserService:
             journals = cursor.fetchall()
             return [dict(journal) for journal in journals]
 
+    def get_followed_journals(self, user_id: int, limit: int = 50, offset: int = 0) -> list[int]:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT j.id
+                FROM journals j
+                JOIN user_journal_subscriptions ujs ON j.id = ujs.journal_id
+                WHERE ujs.user_id = ?
+                LIMIT ? OFFSET ?
+                """,
+                (user_id, limit, offset)
+            )
+            rows = cursor.fetchall()
+            return [int(r[0]) for r in rows]
+
     def follow_journal(self, user_id: int, journal_id: int) -> bool:
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -135,3 +151,4 @@ class UserService:
                 return True
             except sqlite3.IntegrityError:
                 return False
+            
