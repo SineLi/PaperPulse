@@ -83,3 +83,23 @@ def get_followed_journals(
         "limit": limit,
         "offset": offset,
     }
+
+@router.post("/favourate")
+def add_favourate(
+    article_id: int,
+    user_id: int = Depends(get_current_user_id),
+):
+    success = user_service.add_favourate(user_id, article_id)
+    if not success:
+        raise HTTPException(status_code=409, detail="Already favourated")
+    return {"success": True}
+
+@router.delete("/favourate")
+def del_favourate(
+    article_id: int,
+    user_id: int = Depends(get_current_user_id),
+):
+    success = user_service.del_favourate(user_id, article_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Favourate not found")
+    return {"success": True}

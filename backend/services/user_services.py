@@ -152,3 +152,25 @@ class UserService:
             except sqlite3.IntegrityError:
                 return False
             
+    def add_favourate(self, user_id: int, article_id: int) -> bool:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "INSERT INTO user_article_favourites (user_id, article_id) VALUES (?, ?)",
+                    (user_id, article_id)
+                )
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False  # 已收藏
+            
+    def del_favourate(self, user_id: int, article_id: int) -> bool:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM user_article_favourites WHERE user_id = ? AND article_id = ?",
+                (user_id, article_id)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
