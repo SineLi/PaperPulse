@@ -6,7 +6,7 @@ from app.schemas import LoginRequest, RegisterRequest
 from services.user_services import UserService
 user_service = UserService()
 
-router = APIRouter(prefix="/auth", tags=["users"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login")
 def login(req: LoginRequest):

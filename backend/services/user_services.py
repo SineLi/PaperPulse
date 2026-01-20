@@ -191,3 +191,17 @@ class UserService:
             )
             conn.commit()
             return cursor.rowcount > 0
+        
+    def get_favorite_articles(self, user_id: int) -> list[int]:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT article_id
+                FROM user_article_favourites
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+            return [int(r[0]) for r in rows]

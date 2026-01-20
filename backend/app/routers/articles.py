@@ -32,7 +32,7 @@ def mark_articles_read(
     user_service.mark_as_read(user_id, article_ids)
     return {"success": True}
 
-@router.post("/favorites")
+@router.post("/{article_id}/favorite")
 def add_favorite(
     article_id: int,
     user_id: int = Depends(get_current_user_id),
@@ -42,7 +42,7 @@ def add_favorite(
         raise HTTPException(status_code=409, detail="Already favorited")
     return {"success": True}
 
-@router.delete("/favorites")
+@router.delete("/{article_id}/favorite")
 def del_favorite(
     article_id: int,
     user_id: int = Depends(get_current_user_id),
@@ -51,3 +51,14 @@ def del_favorite(
     if not success:
         raise HTTPException(status_code=404, detail="Favorite not found")
     return {"success": True}
+
+@router.get("/favorites")
+def get_favorite_articles(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int = Depends(get_current_user_id),
+):
+    article_ids = user_service.get_favorite_articles(
+        user_id=user_id,
+    )
+    return article_ids
