@@ -1,27 +1,33 @@
-from fastapi import APIRouter, HTTPException
-from app.core.security import create_access_token
-
-from app.schemas import LoginRequest, RegisterRequest
+from fastapi import APIRouter, Depends, HTTPException
+from app.core.auth_dependency import get_current_user_id
 
 from services.user_services import UserService
 user_service = UserService()
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-@router.post("/login")
-def login(req: LoginRequest):
-    try:
-        user = user_service.login(req.username, req.password)
-        access_token = create_access_token({"sub": str(user["id"])})
-        return {"access_token": access_token, "token_type": "bearer"}
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    
-@router.post("/register")
-def register(req: RegisterRequest):
-    try:
-        user = user_service.register(req.username, req.email, req.password)
-        access_token = create_access_token({"sub": str(user["id"])})
-        return {"access_token": access_token, "token_type": "bearer"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+@router.get("/me")
+def get_current_user(
+    user_id: int = Depends(get_current_user_id),
+):
+    user = user_service.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@router.get("/me/followed")
+def get_followed_journals(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: int = Depends(get_current_user_id),
+):
+    journals = user_service.get_followed_journals(
+        user_id=user_id,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "items": journals,
+        "limit": limit,
+        "offset": offset,
+    }

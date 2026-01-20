@@ -3,6 +3,23 @@ from db.database import get_db_connection
 from utils.auth import hash_password, verify_password
 
 class UserService:
+    def get_user_by_id(self, user_id: int) -> dict | None:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, username, email FROM users WHERE id = ?",
+                (user_id,)
+            )
+            user = cursor.fetchone()
+            if user:
+                return {
+                    "id": user["id"],
+                    "username": user["username"],
+                    "email": user["email"],
+                }
+            return None
+
+
     def register(self, username: str, email: str, password: str) -> dict:
         hashed_pw = hash_password(password)
         
@@ -152,7 +169,7 @@ class UserService:
             except sqlite3.IntegrityError:
                 return False
             
-    def add_favourate(self, user_id: int, article_id: int) -> bool:
+    def add_favorite(self, user_id: int, article_id: int) -> bool:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
@@ -165,7 +182,7 @@ class UserService:
             except sqlite3.IntegrityError:
                 return False  # 已收藏
             
-    def del_favourate(self, user_id: int, article_id: int) -> bool:
+    def del_favorite(self, user_id: int, article_id: int) -> bool:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
