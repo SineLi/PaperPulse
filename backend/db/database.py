@@ -95,6 +95,19 @@ def init_database(db_path: str = DB_PATH):
         )
     ''')
 
+    # 6.用户已读文章表 (user_article_reads)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_article_reads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            article_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, article_id), -- 防止重复标记
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+        )
+    ''')
+
     # 创建关键索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_doi ON articles(doi)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)')
@@ -102,7 +115,7 @@ def init_database(db_path: str = DB_PATH):
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_journals_name ON journals(name)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_ujs_journal ON user_journal_subscriptions(journal_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_uaf_article ON user_article_favourites(article_id)')
-
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_uar_article ON user_article_reads(article_id)')
     # 提交并关闭
     conn.commit()
     conn.close()
@@ -114,6 +127,8 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
         # 开启 WAL 模式以支持并发读写
         conn.execute("PRAGMA journal_mode=WAL;")
+        # 开启外键约束
+        conn.execute("PRAGMA foreign_keys = ON;")
     except sqlite3.Error as e:
         logger.error(f"Error connecting to database: {e}")
         raise
