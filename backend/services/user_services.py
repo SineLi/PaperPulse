@@ -157,6 +157,33 @@ class UserService:
             )
             articles = cursor.fetchall()
             return [dict(article) for article in articles]
+        
+    def get_article_by_id(self, article_id: int) -> dict | None:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                a.id,
+                a.title,
+                a.abstract,
+                a.graphical_abstract,
+                a.date,
+                a.doi,
+                a.llm_summary,
+                j.id   AS journal_id,
+                j.name AS journal_name,
+                j.abbreviation
+                FROM articles a
+                JOIN journals j ON a.journal_id = j.id
+                WHERE a.id = ?
+                """,
+                (article_id,)
+            )
+            article = cursor.fetchone()
+            if article:
+                return dict(article)
+            return None
 
     def mark_as_read(self, user_id: int, article_ids: list[int]) -> bool:
         if not article_ids:
@@ -219,6 +246,20 @@ class UserService:
                 """
                 SELECT article_id
                 FROM user_article_favourites
+                WHERE user_id = ?
+                """,
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+            return [int(r[0]) for r in rows]
+        
+    def get_read_articles(self, user_id: int) -> list[int]:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT article_id
+                FROM user_article_reads
                 WHERE user_id = ?
                 """,
                 (user_id,)

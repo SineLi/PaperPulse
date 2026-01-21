@@ -70,3 +70,27 @@ def get_favorite_articles(
     return ItemIDs(
         items=article_ids,
     )
+
+@router.get("/read", response_model=ItemIDs)
+def get_read_articles(
+    user_id: int = Depends(get_current_user_id),
+):
+    article_ids = user_service.get_read_articles(
+        user_id=user_id,
+    )
+    return ItemIDs(
+        items=article_ids,
+    )
+
+@router.get("/{article_id}")
+def get_article_detail(
+    article_id: int,
+    user_id: int = Depends(get_current_user_id),
+):
+    article = user_service.get_article_by_id(
+        user_id=user_id,
+        article_id=article_id,
+    )
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article

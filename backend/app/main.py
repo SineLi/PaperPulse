@@ -27,5 +27,5 @@ def root():
 
 @app.get("/test", response_class=FileResponse)
 def test_page():
-    return os.path.join(os.path.dirname(__file__), "index.html")
+    return os.path.join(os.path.dirname(__file__), "test.html")
 
