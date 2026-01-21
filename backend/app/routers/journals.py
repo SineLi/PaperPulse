@@ -27,10 +27,13 @@ def follow_journal(
     journal_id: int,
     user_id: int = Depends(get_current_user_id),
 ):
-    success = user_service.follow_journal(user_id, journal_id)
-    if not success:
-        raise HTTPException(status_code=409, detail="Already followed")
-    return {"success": True}
+    try:
+        success = user_service.follow_journal(user_id, journal_id)
+        if not success:
+            raise HTTPException(status_code=409, detail="Already followed")
+        return {"success": True}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.delete("/{journal_id}/follow")
 def unfollow_journal(

@@ -17,8 +17,6 @@ def get_current_user(
 
 @router.get("/me/journals")
 def get_followed_journals(
-    limit: int = 50,
-    offset: int = 0,
     user_id: int = Depends(get_current_user_id),
 ):
     journal_ids = user_service.get_followed_journals(

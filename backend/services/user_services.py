@@ -65,7 +65,7 @@ class UserService:
             journals = cursor.fetchall()
             return [dict(journal) for journal in journals]
 
-    def get_followed_journals(self, user_id: int, limit: int = 50, offset: int = 0) -> list[int]:
+    def get_followed_journals(self, user_id: int) -> list[int]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -74,9 +74,8 @@ class UserService:
                 FROM journals j
                 JOIN user_journal_subscriptions ujs ON j.id = ujs.journal_id
                 WHERE ujs.user_id = ?
-                LIMIT ? OFFSET ?
                 """,
-                (user_id, limit, offset)
+                (user_id,)
             )
             rows = cursor.fetchall()
             return [int(r[0]) for r in rows]
@@ -96,8 +95,11 @@ class UserService:
                     "UPDATE journals SET crawler_enabled = 1 WHERE id = ?",
                     (journal_id,)
                 )
+                conn.commit()
                 return True
-            except sqlite3.IntegrityError:
+            except sqlite3.IntegrityError as e:
+                if "FOREIGN KEY constraint failed" in str(e):
+                    raise ValueError("Journal not found")
                 return False  # 已关注
 
     def unfollow_journal(self, user_id: int, journal_id: int) -> bool:
@@ -157,16 +159,31 @@ class UserService:
             return [dict(article) for article in articles]
 
     def mark_as_read(self, user_id: int, article_ids: list[int]) -> bool:
+        if not article_ids:
+            return True
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
+                # 为了区分“文章不存在”和“重复标记”，我们不再使用 INSERT OR IGNORE
+                # 而是分两步：1. 检查所有文章 ID 是否有效（外键约束也会在写入时检查）
+                # 2. 执行批量插入
+                
+                # 检查这些文章是否存在
+                placeholders = ', '.join(['?'] * len(article_ids))
+                cursor.execute(f"SELECT COUNT(*) FROM articles WHERE id IN ({placeholders})", article_ids)
+                if cursor.fetchone()[0] < len(set(article_ids)):
+                    raise ValueError("One or more article IDs do not exist")
+
                 cursor.executemany(
                     "INSERT OR IGNORE INTO user_article_reads (user_id, article_id) VALUES (?, ?)",
                     [(user_id, aid) for aid in article_ids]
                 )
                 conn.commit()
                 return True
-            except sqlite3.IntegrityError:
+            except sqlite3.IntegrityError as e:
+                # 虽然用了 OR IGNORE，但如果外键检查生效且失败，依然可能抛出异常
+                if "FOREIGN KEY constraint failed" in str(e):
+                    raise ValueError("One or more article IDs or User ID do not exist")
                 return False
             
     def add_favorite(self, user_id: int, article_id: int) -> bool:
@@ -179,7 +196,10 @@ class UserService:
                 )
                 conn.commit()
                 return True
-            except sqlite3.IntegrityError:
+            except sqlite3.IntegrityError as e:
+                if "FOREIGN KEY constraint failed" in str(e):
+                    # 区分：文章不存在
+                    raise ValueError("Article not found")
                 return False  # 已收藏
             
     def del_favorite(self, user_id: int, article_id: int) -> bool:

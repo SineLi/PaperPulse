@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth_dependency import get_current_user_id
 
+from app.schemas.articles import ArticleFeedResponse, MarkReadRequest
+
 from services.user_services import UserService
 user_service = UserService()
 
@@ -18,29 +20,35 @@ def get_feed(
         limit=limit,
         offset=offset,
     )
-    return {
-        "items": articles,
-        "limit": limit,
-        "offset": offset,
-    }
+    return ArticleFeedResponse(
+        items=articles,
+        limit=limit,
+        offset=offset,
+    )
 
 @router.post("/read")
 def mark_articles_read(
-    article_ids: list[int],
+    req: MarkReadRequest,
     user_id: int = Depends(get_current_user_id),
 ):
-    user_service.mark_as_read(user_id, article_ids)
-    return {"success": True}
+    try:
+        user_service.mark_as_read(user_id, req.article_ids)
+        return {"success": True}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.post("/{article_id}/favorite")
 def add_favorite(
     article_id: int,
     user_id: int = Depends(get_current_user_id),
 ):
-    success = user_service.add_favorite(user_id, article_id)
-    if not success:
-        raise HTTPException(status_code=409, detail="Already favorited")
-    return {"success": True}
+    try:
+        success = user_service.add_favorite(user_id, article_id)
+        if not success:
+            raise HTTPException(status_code=409, detail="Already favorited")
+        return {"success": True}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.delete("/{article_id}/favorite")
 def del_favorite(
