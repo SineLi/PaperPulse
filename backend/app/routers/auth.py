@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.core.security import create_access_token
 
-from app.schemas.users import LoginRequest, RegisterRequest
+from app.schemas.auth import LoginRequest, RegisterRequest
 
 from services.user_services import UserService
 user_service = UserService()

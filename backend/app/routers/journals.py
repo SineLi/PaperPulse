@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth_dependency import get_current_user_id
 
+from app.schemas.articles import ItemJsonsResponse, ItemIDs
+
 from services.user_services import UserService
 user_service = UserService()
 
@@ -16,11 +18,11 @@ def get_available_journals(
         limit=limit,
         offset=offset,
     )
-    return {
-        "items": journals,
-        "limit": limit,
-        "offset": offset,
-    }
+    return ItemJsonsResponse(
+        items=journals,
+        limit=limit,
+        offset=offset,
+    )
 
 @router.post("/{journal_id}/follow")
 def follow_journal(

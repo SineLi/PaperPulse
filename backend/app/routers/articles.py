@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth_dependency import get_current_user_id
 
-from app.schemas.articles import ArticleFeedResponse, MarkReadRequest
+from app.schemas.articles import ItemJsonsResponse, ItemIDs
 
 from services.user_services import UserService
 user_service = UserService()
@@ -9,7 +9,7 @@ user_service = UserService()
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
-@router.get("/feed")
+@router.get("/feed", response_model=ItemJsonsResponse)
 def get_feed(
     limit: int = 50,
     offset: int = 0,
@@ -20,7 +20,7 @@ def get_feed(
         limit=limit,
         offset=offset,
     )
-    return ArticleFeedResponse(
+    return ItemJsonsResponse(
         items=articles,
         limit=limit,
         offset=offset,
@@ -28,11 +28,11 @@ def get_feed(
 
 @router.post("/read")
 def mark_articles_read(
-    req: MarkReadRequest,
+    request: ItemIDs,
     user_id: int = Depends(get_current_user_id),
 ):
     try:
-        user_service.mark_as_read(user_id, req.article_ids)
+        user_service.mark_as_read(user_id, request.items)
         return {"success": True}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -60,13 +60,13 @@ def del_favorite(
         raise HTTPException(status_code=404, detail="Favorite not found")
     return {"success": True}
 
-@router.get("/favorites")
+@router.get("/favorites", response_model=ItemIDs)
 def get_favorite_articles(
-    limit: int = 50,
-    offset: int = 0,
     user_id: int = Depends(get_current_user_id),
 ):
     article_ids = user_service.get_favorite_articles(
         user_id=user_id,
     )
-    return article_ids
+    return ItemIDs(
+        items=article_ids,
+    )
