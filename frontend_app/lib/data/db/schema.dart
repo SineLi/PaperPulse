@@ -16,3 +16,11 @@ const String createArticlesTable = '''
      is_read INTEGER NOT NULL DEFAULT 0
    );
  ''';
+
+const String createJournalsTable = '''
+   CREATE TABLE journals (
+     journal_id INTEGER PRIMARY KEY,
+     name TEXT NOT NULL,
+     abbreviation TEXT NOT NULL
+   );
+ ''';
