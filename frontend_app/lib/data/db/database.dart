@@ -25,15 +25,20 @@ class DatabaseHelper {
       onCreate: (db, version) async {
         await db.execute(createArticlesTable);
         await db.execute(createJournalsTable);
+        await db.execute(createSyncQueueTable);
       },
     );
     return db;
   }
 
-  Future<void> clearDatabase() async {
+  Future<void> resetDatabaseForDev() async {
     final db = await database;
     await db.execute('DROP TABLE IF EXISTS articles');
     await db.execute('DROP TABLE IF EXISTS journals');
+    await db.execute('DROP TABLE IF EXISTS sync_queue');
+    await db.execute(createArticlesTable);
+    await db.execute(createJournalsTable);
+    await db.execute(createSyncQueueTable);
   }
 
   Future<void> dbCheck() async {
