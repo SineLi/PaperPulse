@@ -1,7 +1,6 @@
 import 'database.dart';
 import '../models/article.dart';
 import 'package:sqflite/sqflite.dart';
-import 'syncdb.dart';
 
 class ArticleDatabaseIO {
   final DatabaseHelper dbHelper = DatabaseHelper.instance;

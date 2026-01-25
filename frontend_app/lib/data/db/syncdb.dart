@@ -1,4 +1,5 @@
 import 'database.dart';
+import 'package:sqflite/sqflite.dart';
 
 class SyncDatabaseIO {
   final DatabaseHelper dbHelper = DatabaseHelper.instance;
@@ -9,7 +10,7 @@ class SyncDatabaseIO {
       'article_id': articleId,
       'action': action,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
-    });
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   Future<List<Map<String, Object?>>> getPendingSyncActions({
@@ -26,6 +27,7 @@ class SyncDatabaseIO {
   }
 
   Future<void> removeSyncActions(List<int> ids) async {
+    if (ids.isEmpty) return;
     final db = await dbHelper.database;
     final batch = db.batch();
     for (var id in ids) {
