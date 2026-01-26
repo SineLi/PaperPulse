@@ -1,18 +1,25 @@
 import 'package:flutter/widgets.dart';
-import 'data/db/database.dart';
-import 'data/db/syncdb.dart';
+import 'data/auth/auth_services.dart';
+import 'data/auth/auth_storage.dart';
+import 'data/api/client.dart';
 
 Future<void> main() async {
   print("Starting app...");
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint("Resetting database for development...");
-  await DatabaseHelper.instance.resetDatabaseForDev();
-  final syncIO = SyncDatabaseIO();
+  final authStorage = AuthStorage();
+  final apiClient = ApiClient(
+    baseUrl: 'http://10.0.2.2:8000',
+    authStorage: authStorage,
+  );
 
-  await syncIO.addSyncAction(1, 'favorite');
-  await syncIO.addSyncAction(2, 'read');
-  final actions = await syncIO.getPendingSyncActions();
-  print("Pending sync actions: $actions");
+  final AuthServices authServices = AuthServices(
+    apiClient: apiClient,
+    authStorage: authStorage,
+  );
+
+  await authServices.login('testtest', 'testtest');
+
+  print(await authStorage.getToken());
 
   runApp(
     const Directionality(
