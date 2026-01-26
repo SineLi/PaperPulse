@@ -1,7 +1,5 @@
 import 'package:flutter/widgets.dart';
 import 'data/db/database.dart';
-import 'data/models/article.dart';
-import 'data/db/articledb.dart';
 import 'data/db/syncdb.dart';
 
 Future<void> main() async {
