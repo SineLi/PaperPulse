@@ -2,6 +2,15 @@ import 'dart:convert';
 import '../auth/auth_storage.dart';
 import 'package:http/http.dart' as http;
 
+class ApiException implements Exception {
+  final String message;
+  final int statusCode;
+  ApiException(this.message, this.statusCode);
+
+  @override
+  String toString() => 'ApiException: $message (Status code: $statusCode)';
+}
+
 class ApiClient {
   final String baseUrl;
 
@@ -33,8 +42,9 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return jsonDecode(response.body);
     } else {
-      throw Exception(
+      throw ApiException(
         'Failed to load data: ${response.statusCode}: ${response.body}',
+        response.statusCode,
       );
     }
   }
@@ -59,8 +69,29 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return jsonDecode(response.body);
     } else {
-      throw Exception(
+      throw ApiException(
         'Failed to post data: ${response.statusCode}: ${response.body}',
+        response.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteJson(String endpoint) async {
+    final headers = await _buildHeaders();
+    final response = await http
+        .delete(Uri.parse('$baseUrl$endpoint'), headers: headers)
+        .timeout(
+          Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Request to $endpoint timed out');
+          },
+        );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(response.body);
+    } else {
+      throw ApiException(
+        'Failed to delete data: ${response.statusCode}: ${response.body}',
+        response.statusCode,
       );
     }
   }
