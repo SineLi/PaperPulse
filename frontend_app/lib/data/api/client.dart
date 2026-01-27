@@ -20,12 +20,16 @@ class ApiClient {
     };
   }
 
-  Future<dynamic> getJson(String endpoint) async {
+  Future<Map<String, dynamic>> getJson(String endpoint) async {
     final headers = await _buildHeaders();
-    final response = await http.get(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-    );
+    final response = await http
+        .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
+        .timeout(
+          Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Request to $endpoint timed out');
+          },
+        );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return jsonDecode(response.body);
     } else {
@@ -35,13 +39,23 @@ class ApiClient {
     }
   }
 
-  Future<dynamic> postJson(String endpoint, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> postJson(
+    String endpoint,
+    Map<String, dynamic> data,
+  ) async {
     final headers = await _buildHeaders();
-    final response = await http.post(
-      Uri.parse('$baseUrl$endpoint'),
-      headers: headers,
-      body: jsonEncode(data),
-    );
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl$endpoint'),
+          headers: headers,
+          body: jsonEncode(data),
+        )
+        .timeout(
+          Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Request to $endpoint timed out');
+          },
+        );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return jsonDecode(response.body);
     } else {

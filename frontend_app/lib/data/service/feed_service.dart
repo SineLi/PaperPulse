@@ -11,8 +11,7 @@ class FeedService {
       final response = await _apiClient.getJson(
         '/articles/feed?limit=$limit&offset=$offset',
       );
-      final items =
-          (response as Map<String, dynamic>)['items'] as List<dynamic>;
+      final items = (response)['items'] as List<dynamic>;
       final articles = items
           .map((articleJson) => Article.fromJson(articleJson))
           .toList();

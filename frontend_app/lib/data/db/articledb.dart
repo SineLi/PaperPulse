@@ -139,4 +139,13 @@ class ArticleDatabaseIO {
       });
     });
   }
+
+  Future<int> getMaxArticleId() async {
+    final db = await dbHelper.database;
+    final result = await db.rawQuery(
+      'SELECT MAX(${Article.colId}) as max_id FROM ${Article.tableArticles}',
+    );
+    final maxId = result.first['max_id'] as int?;
+    return maxId ?? 0;
+  }
 }

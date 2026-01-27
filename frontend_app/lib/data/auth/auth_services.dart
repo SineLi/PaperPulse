@@ -26,4 +26,8 @@ class AuthServices {
       throw Exception('Login failed: $e');
     }
   }
+
+  Future<void> logout() async {
+    await _authStorage.deleteToken();
+  }
 }
