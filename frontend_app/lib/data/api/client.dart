@@ -36,7 +36,7 @@ class ApiClient {
         .timeout(
           Duration(seconds: 10),
           onTimeout: () {
-            throw Exception('Request to $endpoint timed out');
+            throw ApiException('Request to $endpoint timed out', 504);
           },
         );
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -63,10 +63,11 @@ class ApiClient {
         .timeout(
           Duration(seconds: 10),
           onTimeout: () {
-            throw Exception('Request to $endpoint timed out');
+            throw ApiException('Request to $endpoint timed out', 504);
           },
         );
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return {};
       return jsonDecode(response.body);
     } else {
       throw ApiException(
@@ -76,18 +77,18 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> deleteJson(String endpoint) async {
+  Future<void> delete(String endpoint) async {
     final headers = await _buildHeaders();
     final response = await http
         .delete(Uri.parse('$baseUrl$endpoint'), headers: headers)
         .timeout(
           Duration(seconds: 10),
           onTimeout: () {
-            throw Exception('Request to $endpoint timed out');
+            throw ApiException('Request to $endpoint timed out', 504);
           },
         );
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(response.body);
+      return;
     } else {
       throw ApiException(
         'Failed to delete data: ${response.statusCode}: ${response.body}',
