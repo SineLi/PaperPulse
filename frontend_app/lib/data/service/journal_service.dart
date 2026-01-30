@@ -12,7 +12,6 @@ class JournalService {
         '/journals/?limit=$limit&offset=$offset',
       );
       final items = (response)['items'] as List<dynamic>;
-      print(items);
       final journals = items
           .map((journalJson) => Journal.fromJson(journalJson))
           .toList();
