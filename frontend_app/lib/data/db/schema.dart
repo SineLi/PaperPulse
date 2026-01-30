@@ -21,7 +21,15 @@ const String createJournalsTable = '''
    CREATE TABLE journals (
      journal_id INTEGER PRIMARY KEY,
      name TEXT NOT NULL,
-     abbreviation TEXT NOT NULL
+     abbreviation TEXT NOT NULL,
+     if0 REAL,
+     if5 REAL,
+     sci INTEGER DEFAULT 0,
+     CASUp TEXT, 
+     CASBase TEXT, 
+     publisher TEXT,
+     is_follow INTEGER NOT NULL DEFAULT 0,
+     update_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
    );
  ''';
 
