@@ -88,6 +88,7 @@ def get_article_detail(
     user_id: int = Depends(get_current_user_id),
 ):
     article = user_service.get_article_by_id(
+        user_id=user_id,
         article_id=article_id,
     )
     if not article:
