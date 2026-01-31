@@ -2,7 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart';
 import 'schema.dart';
-import '../models/article.dart';
 
 class DatabaseHelper {
   Database? _database;
@@ -26,43 +25,25 @@ class DatabaseHelper {
       onCreate: (db, version) async {
         await db.execute(createArticlesTable);
         await db.execute(createJournalsTable);
+        await db.execute(createSyncQueueTable);
       },
     );
     return db;
   }
 
-  Future<void> clearDatabase() async {
+  Future<void> resetDatabaseForDev() async {
     final db = await database;
     await db.execute('DROP TABLE IF EXISTS articles');
     await db.execute('DROP TABLE IF EXISTS journals');
+    await db.execute('DROP TABLE IF EXISTS sync_queue');
+    await db.execute(createArticlesTable);
+    await db.execute(createJournalsTable);
+    await db.execute(createSyncQueueTable);
   }
 
   Future<void> dbCheck() async {
     final db = await database;
     final result = await db.rawQuery("SELECT * FROM articles;");
     print(result);
-  }
-
-  Future<int> addArticle(Article article) async {
-    final db = await database;
-    return await db.insert(
-      Article.tableArticles,
-      article.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<Article?> getArticle(int id) async {
-    final db = await database;
-    final maps = await db.query(
-      Article.tableArticles,
-      where: '${Article.colId} = ?',
-      whereArgs: [id],
-    );
-    if (maps.isNotEmpty) {
-      return Article.fromMap(maps.first);
-    } else {
-      return null;
-    }
   }
 }
