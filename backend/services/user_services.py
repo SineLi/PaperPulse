@@ -60,7 +60,7 @@ class UserService:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, name, sci, CASUp, CASBase, publisher, abbreviation FROM journals WHERE official_url IS NOT NULL OR rss_url IS NOT NULL LIMIT ? OFFSET ?", 
+                "SELECT id, name, sci, if, if5, CASUp, CASBase, publisher, abbreviation FROM journals WHERE official_url IS NOT NULL OR rss_url IS NOT NULL LIMIT ? OFFSET ?", 
                 (limit, offset))
             journals = cursor.fetchall()
             return [dict(journal) for journal in journals]

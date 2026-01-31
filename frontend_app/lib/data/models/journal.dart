@@ -9,7 +9,6 @@ class Journal {
   static const String colCASUp = 'CASUp';
   static const String colCASBase = 'CASBase';
   static const String colPublisher = 'publisher';
-  static const String colIsFollow = 'is_follow';
   static const String colUpdateAt = 'update_at';
 
   final int journalId;
@@ -21,7 +20,6 @@ class Journal {
   final String? CASUp;
   final String? CASBase;
   final String? publisher;
-  final bool isFollow;
   final DateTime updateAt;
 
   Journal({
@@ -34,7 +32,6 @@ class Journal {
     this.CASUp,
     this.CASBase,
     this.publisher,
-    this.isFollow = false,
     DateTime? updateAt,
   }) : updateAt = updateAt ?? DateTime.now();
 
@@ -49,7 +46,6 @@ class Journal {
       colCASUp: CASUp,
       colCASBase: CASBase,
       colPublisher: publisher,
-      colIsFollow: isFollow ? 1 : 0,
       colUpdateAt: updateAt.toIso8601String(),
     };
   }
@@ -65,7 +61,6 @@ class Journal {
       CASUp: map[colCASUp] as String?,
       CASBase: map[colCASBase] as String?,
       publisher: map[colPublisher] as String?,
-      isFollow: (map[colIsFollow] as int? ?? 0) == 1,
     );
   }
 
@@ -80,7 +75,6 @@ class Journal {
       CASUp: json['CASUp'] as String?,
       CASBase: json['CASBase'] as String?,
       publisher: json['publisher'] as String?,
-      isFollow: (json['is_follow'] as int? ?? 0) == 1,
       updateAt: json['update_at'] != null
           ? DateTime.parse(json['update_at'] as String)
           : null,

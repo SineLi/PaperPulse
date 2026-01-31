@@ -28,8 +28,13 @@ const String createJournalsTable = '''
      CASUp TEXT, 
      CASBase TEXT, 
      publisher TEXT,
-     is_follow INTEGER NOT NULL DEFAULT 0,
      update_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+   );
+ ''';
+const String createUserSubscriptionsTable = '''
+   CREATE TABLE user_subscriptions (
+     journal_id INTEGER NOT NULL PRIMARY KEY,
+     subscribed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
    );
  ''';
 
