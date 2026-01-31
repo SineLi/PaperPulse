@@ -1,20 +1,31 @@
 import 'package:flutter/widgets.dart';
-import 'data/db/database.dart';
-import 'data/models/article.dart';
-import 'data/db/articledb.dart';
-import 'data/db/syncdb.dart';
+import 'data/auth/auth_services.dart';
+import 'data/auth/auth_storage.dart';
+import 'data/api/client.dart';
+import 'data/service/user_services.dart';
 
 Future<void> main() async {
   print("Starting app...");
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint("Resetting database for development...");
-  await DatabaseHelper.instance.resetDatabaseForDev();
-  final syncIO = SyncDatabaseIO();
 
-  await syncIO.addSyncAction(1, 'favorite');
-  await syncIO.addSyncAction(2, 'read');
-  final actions = await syncIO.getPendingSyncActions();
-  print("Pending sync actions: $actions");
+  final apiClient = ApiClient(
+    baseUrl: 'http://10.0.2.2:8000',
+    authStorage: AuthStorage(),
+  );
+  final authStorage = AuthStorage();
+  final userServices = UserServices(apiClient: apiClient);
+  final authServices = AuthServices(
+    apiClient: apiClient,
+    authStorage: authStorage,
+    userServices: userServices,
+  );
+
+  final user = await authServices.tryGetCurrentUser();
+  if (user == null) {
+    print("No authenticated user.");
+  } else {
+    print("Current user: ${user.username}");
+  }
 
   runApp(
     const Directionality(

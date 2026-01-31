@@ -10,7 +10,7 @@ class ArticleDatabaseIO {
     return await db.insert(
       Article.tableArticles,
       article.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 
@@ -35,7 +35,7 @@ class ArticleDatabaseIO {
       batch.insert(
         Article.tableArticles,
         article.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
       );
     }
     await batch.commit(noResult: true);
@@ -138,5 +138,25 @@ class ArticleDatabaseIO {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
     });
+  }
+
+  Future<int> getMaxArticleId() async {
+    final db = await dbHelper.database;
+    final result = await db.rawQuery(
+      'SELECT MAX(${Article.colId}) as max_id FROM ${Article.tableArticles}',
+    );
+    final maxId = result.first['max_id'] as int?;
+    return maxId ?? 0;
+  }
+
+  Future<Set<int>> getFavoriteArticleIds() async {
+    final db = await dbHelper.database;
+    final maps = await db.query(
+      Article.tableArticles,
+      columns: [Article.colId],
+      where: '${Article.colIsFavorite} = ?',
+      whereArgs: [1],
+    );
+    return maps.map((map) => map[Article.colId] as int).toSet();
   }
 }

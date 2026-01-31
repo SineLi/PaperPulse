@@ -26,6 +26,7 @@ class DatabaseHelper {
         await db.execute(createArticlesTable);
         await db.execute(createJournalsTable);
         await db.execute(createSyncQueueTable);
+        await db.execute(createUserSubscriptionsTable);
       },
     );
     return db;
@@ -36,9 +37,11 @@ class DatabaseHelper {
     await db.execute('DROP TABLE IF EXISTS articles');
     await db.execute('DROP TABLE IF EXISTS journals');
     await db.execute('DROP TABLE IF EXISTS sync_queue');
+    await db.execute('DROP TABLE IF EXISTS user_subscriptions');
     await db.execute(createArticlesTable);
     await db.execute(createJournalsTable);
     await db.execute(createSyncQueueTable);
+    await db.execute(createUserSubscriptionsTable);
   }
 
   Future<void> dbCheck() async {

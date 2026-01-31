@@ -88,4 +88,25 @@ class Article {
       isRead: (map[colIsRead] as int) == 1,
     );
   }
+
+  factory Article.fromJson(Map<String, dynamic> json) {
+    return Article(
+      articleId: json['id'] as int,
+      title: json['title'] as String,
+      abs: json['abstract'] as String,
+      summary: json['llm_summary'] as String,
+      graphicalAbstractUrl: json['graphical_abstract'] as String?,
+      graphicalAbstractCachePath: null,
+      publishedDate: json['date'] as String,
+      authors: json['authors'] != null
+          ? List<String>.from(json['authors'] as List)
+          : null,
+      journalId: json['journal_id'] as int,
+      journalName: json['journal_name'] as String,
+      journalAbbreviation: json['abbreviation'] as String,
+      doi: json['doi'] as String,
+      isFavorite: false,
+      isRead: false,
+    );
+  }
 }
