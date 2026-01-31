@@ -1,4 +1,5 @@
 import '../api/client.dart';
+import '../models/user.dart';
 
 class UserServices {
   final ApiClient _apiClient;
@@ -43,6 +44,15 @@ class UserServices {
       throw Exception('API Error ${apierr.statusCode}: ${apierr.message}');
     } catch (e) {
       throw Exception('Failed to unfollow journal $journalId: $e');
+    }
+  }
+
+  Future<User> fetchCurrentUser() async {
+    try {
+      final response = await _apiClient.getJson('/users/me');
+      return User.fromJson(response);
+    } catch (e) {
+      throw Exception('Failed to fetch current user: $e');
     }
   }
 }
