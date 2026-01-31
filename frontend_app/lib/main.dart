@@ -1,21 +1,36 @@
 import 'package:flutter/widgets.dart';
 import 'data/db/database.dart';
 import 'data/models/article.dart';
-import 'data/db/articledb.dart';
-import 'data/db/syncdb.dart';
 
 Future<void> main() async {
   print("Starting app...");
+  // await DatabaseHelper.instance.clearDatabase();
+
   WidgetsFlutterBinding.ensureInitialized();
-  debugPrint("Resetting database for development...");
-  await DatabaseHelper.instance.resetDatabaseForDev();
-  final syncIO = SyncDatabaseIO();
 
-  await syncIO.addSyncAction(1, 'favorite');
-  await syncIO.addSyncAction(2, 'read');
-  final actions = await syncIO.getPendingSyncActions();
-  print("Pending sync actions: $actions");
+  await DatabaseHelper.instance.addArticle(
+    Article(
+      articleId: 1,
+      title: "Sample Article",
+      abs: "This is an abstract.",
+      summary: "This is a summary.",
+      publishedDate: "2024-01-01",
+      journalId: 1,
+      journalName: "Sample Journal",
+      journalAbbreviation: "SJ",
+      doi: "10.1000/sampledoi",
+    ),
+  );
 
+  await DatabaseHelper.instance.dbCheck();
+
+  await DatabaseHelper.instance.getArticle(1).then((article) {
+    if (article != null) {
+      print("Retrieved Article: ${article.title}, DOI: ${article.doi}");
+    } else {
+      print("Article not found.");
+    }
+  });
   runApp(
     const Directionality(
       textDirection: TextDirection.ltr,

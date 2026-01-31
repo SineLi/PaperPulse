@@ -24,12 +24,3 @@ const String createJournalsTable = '''
      abbreviation TEXT NOT NULL
    );
  ''';
-
-const String createSyncQueueTable = '''
-   CREATE TABLE sync_queue (
-     id INTEGER PRIMARY KEY AUTOINCREMENT,
-     article_id INTEGER NOT NULL,
-     action TEXT NOT NULL,
-     timestamp INTEGER NOT NULL
-   );
- ''';
