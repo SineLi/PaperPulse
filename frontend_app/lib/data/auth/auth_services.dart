@@ -15,7 +15,10 @@ class AuthServices {
   }) : _authStorage = authStorage,
        _apiClient = apiClient;
 
-  Future<void> login(String username, String password) async {
+  Future<void> login({
+    required String username,
+    required String password,
+  }) async {
     final Map<String, dynamic> loginRequest = {
       "username": username,
       "password": password,
