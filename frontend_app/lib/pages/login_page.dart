@@ -37,7 +37,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 8),
                 Text(
-                  '登录以继续',
+                  '欢迎回来',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -68,7 +68,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withOpacity(0.3),
+                                .withValues(alpha: .3),
                           ),
                           textInputAction: TextInputAction.next,
                         ),
@@ -98,7 +98,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.3),
+                                .withValues(alpha: .3),
                           ),
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.done,
@@ -155,15 +155,9 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       if (username.isEmpty || password.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('用户名和密码不能为空'),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('用户名和密码不能为空')));
         setState(() {
           _isLoading = false;
         });
@@ -173,23 +167,15 @@ class _LoginPageState extends State<LoginPage> {
       await authServices.login(username: username, password: password);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('登录成功'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('登录成功')));
       Navigator.of(context).pushReplacementNamed('/feed');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('登录失败: $e'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('登录失败: $e')));
     }
 
     if (!mounted) return;

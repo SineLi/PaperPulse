@@ -82,14 +82,24 @@ class MyApp extends StatelessWidget {
           );
         }
 
+        final snackBarTheme = SnackBarThemeData(
+          behavior: SnackBarBehavior.fixed,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
+        );
+
         return Provider<AuthServices>.value(
           value: authServices,
           child: MaterialApp(
             title: 'Advanced News Feed',
-            theme: ThemeData(colorScheme: lightColorScheme, useMaterial3: true),
+            theme: ThemeData(
+              colorScheme: lightColorScheme,
+              useMaterial3: true,
+              snackBarTheme: snackBarTheme,
+            ),
             darkTheme: ThemeData(
               colorScheme: darkColorScheme,
               useMaterial3: true,
+              snackBarTheme: snackBarTheme,
             ),
             themeMode: ThemeMode.system,
             home: const LoginPage(),
