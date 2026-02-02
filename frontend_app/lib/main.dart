@@ -85,9 +85,14 @@ class MyApp extends StatelessWidget {
         return Provider<AuthServices>.value(
           value: authServices,
           child: MaterialApp(
-            title: 'Flutter Demo',
-            theme: ThemeData(primarySwatch: Colors.blue),
-            home: LoginPage(),
+            title: 'Advanced News Feed',
+            theme: ThemeData(colorScheme: lightColorScheme, useMaterial3: true),
+            darkTheme: ThemeData(
+              colorScheme: darkColorScheme,
+              useMaterial3: true,
+            ),
+            themeMode: ThemeMode.system,
+            home: const LoginPage(),
             routes: {
               '/feed': (context) => const FeedPage(username: 'placeholder'),
             },
