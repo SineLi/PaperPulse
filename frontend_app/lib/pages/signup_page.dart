@@ -3,24 +3,31 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+      extendBodyBehindAppBar: true,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -28,23 +35,27 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo / App Icon
                 Icon(
-                  Icons.account_circle_outlined,
+                  Icons.person_add_outlined,
                   size: 80,
                   color: colorScheme.primary,
                 ),
-
                 const SizedBox(height: 8),
                 Text(
-                  '欢迎回来',
+                  '创建新账户',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '请填写以下信息以注册',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // Login Card
+                const SizedBox(height: 32),
                 Card(
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -56,30 +67,41 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Username Field
                         TextField(
                           controller: _usernameController,
                           decoration: InputDecoration(
                             labelText: '用户名',
-                            hintText: '请输入用户名',
                             prefixIcon: const Icon(Icons.person_outline),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: .3),
+                                .withOpacity(0.3),
                           ),
                           textInputAction: TextInputAction.next,
                         ),
                         const SizedBox(height: 16),
-
-                        // Password Field
+                        TextField(
+                          controller: _emailController,
+                          decoration: InputDecoration(
+                            labelText: '邮箱',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 16),
                         TextField(
                           controller: _passwordController,
                           decoration: InputDecoration(
                             labelText: '密码',
-                            hintText: '请输入密码',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               icon: Icon(
@@ -98,17 +120,44 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: .3),
+                                .withOpacity(0.3),
                           ),
                           obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _confirmPasswordController,
+                          decoration: InputDecoration(
+                            labelText: '确认密码',
+                            prefixIcon: const Icon(Icons.check_outlined),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscureConfirmPassword =
+                                      !_obscureConfirmPassword;
+                                });
+                              },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: colorScheme.surfaceContainerHighest
+                                .withOpacity(0.3),
+                          ),
+                          obscureText: _obscureConfirmPassword,
                           textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _handleLogin(),
+                          onSubmitted: (_) => _handleRegister(),
                         ),
                         const SizedBox(height: 24),
-
-                        // Login Button
                         FilledButton(
-                          onPressed: _isLoading ? null : _handleLogin,
+                          onPressed: _isLoading ? null : _handleRegister,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -125,29 +174,32 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                 )
                               : const Text(
-                                  '登录',
+                                  '注册',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                         ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('还没有账号？'),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pushNamed('/signup');
-                              },
-                              child: const Text('立即注册'),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '已有账户？',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('立即登录'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -157,50 +209,57 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleRegister() async {
     setState(() {
       _isLoading = true;
     });
 
     final authServices = context.read<AuthServices>();
     final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
 
     try {
-      if (username.isEmpty || password.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('用户名和密码不能为空')));
+      if (username.isEmpty ||
+          email.isEmpty ||
+          password.isEmpty ||
+          confirmPassword.isEmpty) {
+        throw Exception('所有字段都不能为空');
+      }
+
+      if (password != confirmPassword) {
+        throw Exception('两次输入的密码不一致');
+      }
+
+      await authServices.register(username, email, password);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('注册成功，请登录')));
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceAll('Exception: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('注册失败: $message')));
+    } finally {
+      if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        return;
       }
-
-      await authServices.login(username: username, password: password);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('登录成功')));
-      Navigator.of(context).pushReplacementNamed('/feed');
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('登录失败: $e')));
     }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   @override
   void dispose() {
     _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 }

@@ -15,6 +15,7 @@ import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 
 import 'pages/login_page.dart';
+import 'pages/signup_page.dart';
 import 'pages/feed_page.dart';
 
 Future<void> main() async {
@@ -105,6 +106,8 @@ class MyApp extends StatelessWidget {
             home: const LoginPage(),
             routes: {
               '/feed': (context) => const FeedPage(username: 'placeholder'),
+              '/login': (context) => const LoginPage(),
+              '/signup': (context) => const RegisterPage(),
             },
           ),
         );
