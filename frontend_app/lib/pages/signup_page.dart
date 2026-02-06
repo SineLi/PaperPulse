@@ -26,8 +26,8 @@ class _RegisterPageState extends State<RegisterPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      extendBodyBehindAppBar: true,
+      // appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+      // extendBodyBehindAppBar: true,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -41,13 +41,13 @@ class _RegisterPageState extends State<RegisterPage> {
                   color: colorScheme.primary,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  '创建新账户',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
-                  ),
-                ),
+                // Text(
+                //   '创建新账户',
+                //   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                //     fontWeight: FontWeight.bold,
+                //     color: colorScheme.onSurface,
+                //   ),
+                // ),
                 const SizedBox(height: 8),
                 Text(
                   '请填写以下信息以注册',
@@ -77,7 +77,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withOpacity(0.3),
+                                .withValues(alpha: .3),
                           ),
                           textInputAction: TextInputAction.next,
                         ),
@@ -92,7 +92,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withOpacity(0.3),
+                                .withValues(alpha: .3),
                           ),
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
@@ -120,7 +120,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withOpacity(0.3),
+                                .withValues(alpha: .3),
                           ),
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.next,
@@ -149,7 +149,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                             filled: true,
                             fillColor: colorScheme.surfaceContainerHighest
-                                .withOpacity(0.3),
+                                .withValues(alpha: .3),
                           ),
                           obscureText: _obscureConfirmPassword,
                           textInputAction: TextInputAction.done,
