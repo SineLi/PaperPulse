@@ -3,12 +3,14 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 
+import '../widgets/feed_card.dart';
+
 class FeedPage extends StatelessWidget {
   final String username;
   const FeedPage({super.key, required this.username});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: const Center(child: Text('Feed page placeholder')));
+    return Scaffold(body: const Center(child: FeedItemCard()));
   }
 }
