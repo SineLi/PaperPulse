@@ -19,6 +19,10 @@ class JournalRepo {
     return await _journalDatabaseIO.getJournals(limit: limit, offset: offset);
   }
 
+  Future<Journal?> getLocalJournalById(int journalId) async {
+    return await _journalDatabaseIO.getJournal(journalId);
+  }
+
   Future<int> syncJournalsEmpty({int pageSize = 1000}) async {
     final localCount = await _journalDatabaseIO.getJournalCount();
     if (localCount > 0) {
