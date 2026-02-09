@@ -1,45 +1,51 @@
 import 'package:flutter/material.dart';
+import '../data/models/article_view_data.dart';
+import '../data/models/article.dart';
 
 class FeedItemCard extends StatelessWidget {
-  const FeedItemCard({super.key, this.onTap});
-
+  final ArticleViewData articleViewData;
   final VoidCallback? onTap;
+
+  FeedItemCard({super.key, required Article article, this.onTap})
+    : articleViewData = ArticleViewData.fromArticle(article);
 
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(20);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
-      elevation: 2,
+      elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: radius),
-      clipBehavior: Clip.antiAlias, // 关键：让右侧图片也跟着圆角裁剪
+      shape: RoundedRectangleBorder(
+        borderRadius: radius,
+        side: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: SizedBox(
           height: 140,
           child: Row(
             children: [
-              // 左侧信息区
               Expanded(
                 child: Container(
-                  color: const Color(0xFFF6F3FF), // 轻微的淡紫背景，接近示意图
+                  color: colorScheme.secondaryContainer.withValues(alpha: .3),
                   padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 顶部：头像 + Journal · 2h
                       Row(
                         children: [
-                          const CircleAvatar(
-                            radius: 14,
-                            backgroundColor: Color(0xFF0F8A6A),
+                          CircleAvatar(
+                            radius: 8,
+                            backgroundColor: articleViewData.tagColor,
                             child: Text(
-                              'TC',
+                              articleViewData.displayJournalInitials,
                               style: TextStyle(
-                                color: Colors.white,
+                                color: colorScheme.onPrimary,
                                 fontWeight: FontWeight.w700,
-                                fontSize: 12,
+                                fontSize: 8,
                               ),
                             ),
                           ),
@@ -47,22 +53,25 @@ class FeedItemCard extends StatelessWidget {
                           Expanded(
                             child: RichText(
                               overflow: TextOverflow.ellipsis,
-                              text: const TextSpan(
+                              text: TextSpan(
                                 style: TextStyle(
-                                  color: Color(0xFF2E2E2E),
-                                  fontSize: 14,
+                                  color: colorScheme.onSurface,
+                                  fontSize: 10,
                                 ),
                                 children: [
                                   TextSpan(
-                                    text: 'Journal',
-                                    style: TextStyle(
+                                    text:
+                                        articleViewData.displayJournalName ??
+                                        articleViewData.article.journalName,
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   TextSpan(
-                                    text: '  ·  2h',
+                                    text:
+                                        " · ${articleViewData.publishedDate ?? ''}",
                                     style: TextStyle(
-                                      color: Color(0xFF7A7A7A),
+                                      color: colorScheme.onSurfaceVariant,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -72,40 +81,35 @@ class FeedItemCard extends StatelessWidget {
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 10),
-
-                      // 标题
-                      const Text(
-                        'Title title title',
-                        maxLines: 2,
+                      const SizedBox(height: 4),
+                      Text(
+                        articleViewData.displayTitle ??
+                            articleViewData.article.title,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 22,
-                          height: 1.1,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.black,
+                          fontSize: 16,
+                          height: 1.15,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
                         ),
                       ),
-
                       const Spacer(),
-
-                      // Tag（示意）
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
+                          horizontal: 8,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEFEAFB),
+                          color: colorScheme.tertiaryContainer,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Text(
-                          'tag',
+                        child: Text(
+                          articleViewData.displayMaintag ?? 'Article',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 8,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF3C2E63),
+                            color: colorScheme.onTertiaryContainer,
                           ),
                         ),
                       ),
@@ -114,35 +118,19 @@ class FeedItemCard extends StatelessWidget {
                 ),
               ),
 
-              // 右侧 GA 预览区（先用占位）
+              // 右侧预览区
               SizedBox(
                 width: 150,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 占位图：后面你可以换成 Image.network / Image.file
-                    Container(
-                      color: const Color(0xFFE9E9E9),
-                      child: const Center(
-                        child: Icon(
-                          Icons.image,
-                          size: 34,
-                          color: Color(0xFF9A9A9A),
-                        ),
-                      ),
+                child: Container(
+                  // 使用最浅的容器色作为占位背景
+                  color: colorScheme.surfaceContainerHighest,
+                  child: Center(
+                    child: Icon(
+                      Icons.image,
+                      size: 34,
+                      color: colorScheme.outline,
                     ),
-
-                    // 可选：轻微渐变，让图片更像“预览卡片”
-                    Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0x00000000), Color(0x14000000)],
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
