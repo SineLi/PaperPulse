@@ -6,11 +6,14 @@ import 'data/api/client.dart';
 import 'data/auth/auth_services.dart';
 import 'data/auth/auth_storage.dart';
 import 'data/db/articledb.dart';
-import 'data/db/subscripdb.dart';
+import 'data/db/journaldb.dart';
 import 'data/db/syncdb.dart';
+import 'data/db/subscripdb.dart';
 import 'data/repositories/feed_repo.dart';
+import 'data/repositories/journal_repo.dart';
 import 'data/repositories/user_repo.dart';
 import 'data/service/feed_service.dart';
+import 'data/service/journal_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 
@@ -36,9 +39,18 @@ Future<void> main() async {
 
   final articleDb = ArticleDatabaseIO();
   final feedService = FeedService(apiClient: apiClient);
+
+  final journalDb = JournalDatabaseIO();
+  final journalService = JournalService(apiClient: apiClient);
+  final journalRepo = JournalRepo(
+    journalService: journalService,
+    journalDatabaseIO: journalDb,
+  );
+
   final feedRepo = FeedRepo(
     feedService: feedService,
     articleDatabaseIO: articleDb,
+    journalRepo: journalRepo,
   );
 
   final syncDb = SyncDatabaseIO();
@@ -55,13 +67,14 @@ Future<void> main() async {
     feedRepo: feedRepo,
   );
 
-  runApp(MyApp(authServices: authServices));
+  runApp(MyApp(authServices: authServices, feedRepo: feedRepo));
 }
 
 class MyApp extends StatelessWidget {
   final AuthServices authServices;
+  final FeedRepo feedRepo;
 
-  const MyApp({super.key, required this.authServices});
+  const MyApp({super.key, required this.authServices, required this.feedRepo});
 
   static const _defaultColorSeed = Colors.blue;
 
@@ -90,25 +103,28 @@ class MyApp extends StatelessWidget {
 
         return Provider<AuthServices>.value(
           value: authServices,
-          child: MaterialApp(
-            title: 'Advanced News Feed',
-            theme: ThemeData(
-              colorScheme: lightColorScheme,
-              useMaterial3: true,
-              snackBarTheme: snackBarTheme,
+          child: Provider<FeedRepo>.value(
+            value: feedRepo,
+            child: MaterialApp(
+              title: 'Advanced News Feed',
+              theme: ThemeData(
+                colorScheme: lightColorScheme,
+                useMaterial3: true,
+                snackBarTheme: snackBarTheme,
+              ),
+              darkTheme: ThemeData(
+                colorScheme: darkColorScheme,
+                useMaterial3: true,
+                snackBarTheme: snackBarTheme,
+              ),
+              themeMode: ThemeMode.system,
+              home: const LoginPage(),
+              routes: {
+                '/feed': (context) => const FeedPage(username: 'placeholder'),
+                '/login': (context) => const LoginPage(),
+                '/signup': (context) => const RegisterPage(),
+              },
             ),
-            darkTheme: ThemeData(
-              colorScheme: darkColorScheme,
-              useMaterial3: true,
-              snackBarTheme: snackBarTheme,
-            ),
-            themeMode: ThemeMode.system,
-            home: const LoginPage(),
-            routes: {
-              '/feed': (context) => const FeedPage(username: 'placeholder'),
-              '/login': (context) => const LoginPage(),
-              '/signup': (context) => const RegisterPage(),
-            },
           ),
         );
       },
