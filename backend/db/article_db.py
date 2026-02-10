@@ -38,6 +38,17 @@ class ArticleRepository:
             )
             conn.commit()
 
+    def clear_batch_llm_status(self, batch_id):
+        """清除指定 batch 的所有文章状态（用于重试）"""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE articles SET llm_status = NULL, llm_summary = NULL WHERE llm_status = ?",
+                (batch_id,)
+            )
+            conn.commit()
+
+
     def update_article_summaries(self, updates):
         """批量更新文章摘要和状态"""
         # updates = [(summary, status, id), ...]
