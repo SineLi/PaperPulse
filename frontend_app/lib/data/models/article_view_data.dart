@@ -137,6 +137,9 @@ class ArticleViewData {
     return tagColorMap[key] ?? Colors.grey;
   }
 
+  String? get graphicalAbsUrl => article.graphicalAbstractUrl ?? '';
+  String? get graphicalAbsCachePath => article.graphicalAbstractCachePath;
+
   bool get isRead => article.isRead;
   bool get isFavorite => article.isFavorite;
 }

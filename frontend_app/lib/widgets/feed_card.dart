@@ -14,6 +14,11 @@ class FeedItemCard extends StatelessWidget {
     final radius = BorderRadius.circular(20);
     final colorScheme = Theme.of(context).colorScheme;
 
+    // 1. 判断是否存在图片路径
+    final hasImage =
+        articleViewData.graphicalAbsUrl != null &&
+        articleViewData.graphicalAbsUrl!.isNotEmpty;
+
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -25,6 +30,7 @@ class FeedItemCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: SizedBox(
+          // 如果没有图片，高度可以让它自适应，或者保持固定高度
           height: 140,
           child: Row(
             children: [
@@ -118,21 +124,35 @@ class FeedItemCard extends StatelessWidget {
                 ),
               ),
 
-              // 右侧预览区
-              SizedBox(
-                width: 150,
-                child: Container(
-                  // 使用最浅的容器色作为占位背景
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Center(
-                    child: Icon(
-                      Icons.image,
-                      size: 34,
-                      color: colorScheme.outline,
-                    ),
+              // 2. 使用 if 进行条件渲染：只有 hasImage 为 true 时才渲染右侧组件
+              if (hasImage)
+                SizedBox(
+                  width: 150,
+                  child: Container(
+                    color: colorScheme.surfaceContainerHighest,
+                    // 这里可以根据实际情况改为显示网络图片
+                    child: articleViewData.graphicalAbsUrl != null
+                        ? Image.network(
+                            articleViewData.graphicalAbsUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Center(
+                                child: Icon(
+                                  Icons.broken_image,
+                                  color: colorScheme.outline,
+                                ),
+                              );
+                            },
+                          )
+                        : Center(
+                            child: Icon(
+                              Icons.image,
+                              size: 34,
+                              color: colorScheme.outline,
+                            ),
+                          ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
