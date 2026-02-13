@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/models/article.dart';
 import '../data/repositories/feed_repo.dart';
+import '../data/service/sync_service.dart';
 
 import '../widgets/feed_card.dart';
 
@@ -83,6 +84,7 @@ class _FeedPageState extends State<FeedPage> {
 
     try {
       final feedRepo = context.read<FeedRepo>();
+      final syncService = context.read<SyncService>();
 
       // 1. 调用远程刷新接口，获取最新文章并存入数据库
       // refreshArticles() 方法应该返回新增文章数量，或者 void
@@ -98,6 +100,9 @@ class _FeedPageState extends State<FeedPage> {
 
       // 3. 重新加载
       await _loadMoreArticles();
+
+      // 4. 同步收藏等操作
+      await syncService.pullStatus();
     } catch (e) {
       if (mounted) {
         setState(() {

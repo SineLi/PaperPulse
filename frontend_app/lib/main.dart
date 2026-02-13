@@ -67,14 +67,25 @@ Future<void> main() async {
     feedRepo: feedRepo,
   );
 
-  runApp(MyApp(authServices: authServices, feedRepo: feedRepo));
+  runApp(
+    MyApp(
+      authServices: authServices,
+      feedRepo: feedRepo,
+      syncService: syncService,
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
   final AuthServices authServices;
   final FeedRepo feedRepo;
-
-  const MyApp({super.key, required this.authServices, required this.feedRepo});
+  final SyncService syncService;
+  const MyApp({
+    super.key,
+    required this.authServices,
+    required this.feedRepo,
+    required this.syncService,
+  });
 
   static const _defaultColorSeed = Colors.blue;
 
@@ -105,25 +116,28 @@ class MyApp extends StatelessWidget {
           value: authServices,
           child: Provider<FeedRepo>.value(
             value: feedRepo,
-            child: MaterialApp(
-              title: 'Advanced News Feed',
-              theme: ThemeData(
-                colorScheme: lightColorScheme,
-                useMaterial3: true,
-                snackBarTheme: snackBarTheme,
+            child: Provider<SyncService>.value(
+              value: syncService,
+              child: MaterialApp(
+                title: 'Advanced News Feed',
+                theme: ThemeData(
+                  colorScheme: lightColorScheme,
+                  useMaterial3: true,
+                  snackBarTheme: snackBarTheme,
+                ),
+                darkTheme: ThemeData(
+                  colorScheme: darkColorScheme,
+                  useMaterial3: true,
+                  snackBarTheme: snackBarTheme,
+                ),
+                themeMode: ThemeMode.system,
+                home: const LoginPage(),
+                routes: {
+                  '/feed': (context) => const FeedPage(username: 'placeholder'),
+                  '/login': (context) => const LoginPage(),
+                  '/signup': (context) => const RegisterPage(),
+                },
               ),
-              darkTheme: ThemeData(
-                colorScheme: darkColorScheme,
-                useMaterial3: true,
-                snackBarTheme: snackBarTheme,
-              ),
-              themeMode: ThemeMode.system,
-              home: const LoginPage(),
-              routes: {
-                '/feed': (context) => const FeedPage(username: 'placeholder'),
-                '/login': (context) => const LoginPage(),
-                '/signup': (context) => const RegisterPage(),
-              },
             ),
           ),
         );
