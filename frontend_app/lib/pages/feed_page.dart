@@ -124,7 +124,7 @@ class _FeedPageState extends State<FeedPage> {
         child: NestedScrollView(
           controller: _scrollController,
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
-              SliverAppBar.large(
+            SliverAppBar.large(
               title: const Text('文章推送'),
               actions: [
                 IconButton(
