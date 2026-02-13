@@ -1,4 +1,5 @@
 import '../service/feed_service.dart';
+import '../service/image_cache_service.dart';
 import '../db/articledb.dart';
 import '../models/article.dart';
 import 'journal_repo.dart';
@@ -7,6 +8,7 @@ class FeedRepo {
   final FeedService _feedService;
   final ArticleDatabaseIO _articleDatabaseIO;
   final JournalRepo? _journalRepo;
+  final ImageCacheService? _imageCacheService;
 
   // 内存缓存 Publisher
   final Map<int, String> _publisherCache = {};
@@ -15,9 +17,11 @@ class FeedRepo {
     required FeedService feedService,
     required ArticleDatabaseIO articleDatabaseIO,
     JournalRepo? journalRepo,
+    ImageCacheService? imageCacheService,
   }) : _feedService = feedService,
        _articleDatabaseIO = articleDatabaseIO,
-       _journalRepo = journalRepo;
+       _journalRepo = journalRepo,
+       _imageCacheService = imageCacheService;
 
   Future<List<Article>> getLocalArticles({
     int limit = 50,
@@ -78,6 +82,21 @@ class FeedRepo {
 
       await _articleDatabaseIO.addArticles(newArticles);
       newArticlesCount += newArticles.length;
+
+      // 后台预缓存新文章的图片
+      if (_imageCacheService != null) {
+        _imageCacheService.precacheArticles(
+          newArticles
+              .map(
+                (a) => (
+                  articleId: a.articleId,
+                  url: a.graphicalAbstractUrl,
+                  cachePath: a.graphicalAbstractCachePath,
+                ),
+              )
+              .toList(),
+        );
+      }
     }
     return newArticlesCount;
   }

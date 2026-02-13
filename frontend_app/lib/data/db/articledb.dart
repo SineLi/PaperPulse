@@ -159,4 +159,32 @@ class ArticleDatabaseIO {
     );
     return maps.map((map) => map[Article.colId] as int).toSet();
   }
+
+  /// 更新文章的缓存图片路径
+  Future<int> updateCachePath(int articleId, String cachePath) async {
+    final db = await dbHelper.database;
+    return await db.update(
+      Article.tableArticles,
+      {Article.colGACachePath: cachePath},
+      where: '${Article.colId} = ?',
+      whereArgs: [articleId],
+    );
+  }
+
+  /// 获取所有没有缓存路径但有远程图片 URL 的文章
+  Future<List<Map<String, dynamic>>> getUncachedImageArticles({
+    int limit = 50,
+  }) async {
+    final db = await dbHelper.database;
+    return await db.query(
+      Article.tableArticles,
+      columns: [Article.colId, Article.colGAUrl, Article.colGACachePath],
+      where:
+          '${Article.colGAUrl} IS NOT NULL AND ${Article.colGAUrl} != ? '
+          'AND (${Article.colGACachePath} IS NULL OR ${Article.colGACachePath} = ?)',
+      whereArgs: ['', ''],
+      limit: limit,
+      orderBy: '${Article.colId} DESC',
+    );
+  }
 }

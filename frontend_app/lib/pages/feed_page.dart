@@ -28,15 +28,17 @@ class _FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     _loadMoreArticles();
+  }
 
-    _scrollController.addListener(() {
-      if (_scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent - 300 &&
-          !_isLoading &&
-          _hasMore) {
-        _loadMoreArticles();
-      }
-    });
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification &&
+        notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 300 &&
+        !_isLoading &&
+        _hasMore) {
+      _loadMoreArticles();
+    }
+    return false;
   }
 
   Future<void> _loadMoreArticles() async {
@@ -117,43 +119,46 @@ class _FeedPageState extends State<FeedPage> {
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      body: NestedScrollView(
-        controller: _scrollController,
-        headerSliverBuilder: (context, innerBoxIsScrolled) => [
-          SliverAppBar.large(
-            title: const Text('文章推送'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.search_rounded),
-                tooltip: '搜索',
-                onPressed: () {
-                  // TODO: implement search
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.account_circle_outlined),
-                tooltip: widget.username,
-                onPressed: () {
-                  // TODO: implement profile
-                },
-              ),
-              const SizedBox(width: 4),
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: NestedScrollView(
+          controller: _scrollController,
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+              SliverAppBar.large(
+              title: const Text('文章推送'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search_rounded),
+                  tooltip: '搜索',
+                  onPressed: () {
+                    // TODO: implement search
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.account_circle_outlined),
+                  tooltip: widget.username,
+                  onPressed: () {
+                    // TODO: implement profile
+                  },
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ],
+          body: Column(
+            children: [
+              // ── 刷新进度指示条 ──
+              if (_isRefreshing)
+                LinearProgressIndicator(
+                  minHeight: 3,
+                  color: colorScheme.primary,
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                ),
+
+              // ── 主体内容 ──
+              Expanded(child: _buildBody(colorScheme, textTheme)),
             ],
           ),
-        ],
-        body: Column(
-          children: [
-            // ── 刷新进度指示条 ──
-            if (_isRefreshing)
-              LinearProgressIndicator(
-                minHeight: 3,
-                color: colorScheme.primary,
-                backgroundColor: colorScheme.surfaceContainerHighest,
-              ),
-
-            // ── 主体内容 ──
-            Expanded(child: _buildBody(colorScheme, textTheme)),
-          ],
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/models/article_view_data.dart';
 import '../data/models/article.dart';
+import 'cached_image.dart';
 
 class FeedItemCard extends StatelessWidget {
   final ArticleViewData articleViewData;
@@ -138,36 +139,13 @@ class FeedItemCard extends StatelessWidget {
       child: SizedBox(
         width: 100,
         height: 100,
-        child: Image.network(
-          articleViewData.graphicalAbsUrl!,
+        child: CachedArticleImage(
+          articleId: articleViewData.article.articleId,
+          imageUrl: articleViewData.graphicalAbsUrl!,
+          cachePath: articleViewData.graphicalAbsCachePath,
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.image_outlined,
-              color: colorScheme.outlineVariant,
-              size: 28,
-            ),
-          ),
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return Container(
-              color: colorScheme.surfaceContainerHighest,
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded /
-                              progress.expectedTotalBytes!
-                        : null,
-                  ),
-                ),
-              ),
-            );
-          },
+          width: 100,
+          height: 100,
         ),
       ),
     );

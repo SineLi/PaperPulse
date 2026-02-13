@@ -16,6 +16,7 @@ import 'data/service/feed_service.dart';
 import 'data/service/journal_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
+import 'data/service/image_cache_service.dart';
 
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
@@ -47,10 +48,13 @@ Future<void> main() async {
     journalDatabaseIO: journalDb,
   );
 
+  final imageCacheService = ImageCacheService(articleDb: articleDb);
+
   final feedRepo = FeedRepo(
     feedService: feedService,
     articleDatabaseIO: articleDb,
     journalRepo: journalRepo,
+    imageCacheService: imageCacheService,
   );
 
   final syncDb = SyncDatabaseIO();
@@ -72,6 +76,7 @@ Future<void> main() async {
       authServices: authServices,
       feedRepo: feedRepo,
       syncService: syncService,
+      imageCacheService: imageCacheService,
     ),
   );
 }
@@ -80,11 +85,13 @@ class MyApp extends StatelessWidget {
   final AuthServices authServices;
   final FeedRepo feedRepo;
   final SyncService syncService;
+  final ImageCacheService imageCacheService;
   const MyApp({
     super.key,
     required this.authServices,
     required this.feedRepo,
     required this.syncService,
+    required this.imageCacheService,
   });
 
   static const _defaultColorSeed = Colors.blue;
@@ -118,25 +125,29 @@ class MyApp extends StatelessWidget {
             value: feedRepo,
             child: Provider<SyncService>.value(
               value: syncService,
-              child: MaterialApp(
-                title: 'Advanced News Feed',
-                theme: ThemeData(
-                  colorScheme: lightColorScheme,
-                  useMaterial3: true,
-                  snackBarTheme: snackBarTheme,
+              child: Provider<ImageCacheService>.value(
+                value: imageCacheService,
+                child: MaterialApp(
+                  title: 'Advanced News Feed',
+                  theme: ThemeData(
+                    colorScheme: lightColorScheme,
+                    useMaterial3: true,
+                    snackBarTheme: snackBarTheme,
+                  ),
+                  darkTheme: ThemeData(
+                    colorScheme: darkColorScheme,
+                    useMaterial3: true,
+                    snackBarTheme: snackBarTheme,
+                  ),
+                  themeMode: ThemeMode.system,
+                  home: const LoginPage(),
+                  routes: {
+                    '/feed': (context) =>
+                        const FeedPage(username: 'placeholder'),
+                    '/login': (context) => const LoginPage(),
+                    '/signup': (context) => const RegisterPage(),
+                  },
                 ),
-                darkTheme: ThemeData(
-                  colorScheme: darkColorScheme,
-                  useMaterial3: true,
-                  snackBarTheme: snackBarTheme,
-                ),
-                themeMode: ThemeMode.system,
-                home: const LoginPage(),
-                routes: {
-                  '/feed': (context) => const FeedPage(username: 'placeholder'),
-                  '/login': (context) => const LoginPage(),
-                  '/signup': (context) => const RegisterPage(),
-                },
               ),
             ),
           ),
