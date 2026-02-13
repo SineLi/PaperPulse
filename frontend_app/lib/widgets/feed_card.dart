@@ -31,13 +31,13 @@ class FeedItemCard extends StatelessWidget {
         onTap: onTap,
         child: SizedBox(
           // 如果没有图片，高度可以让它自适应，或者保持固定高度
-          height: 140,
+          height: 120,
           child: Row(
             children: [
               Expanded(
                 child: Container(
                   color: colorScheme.secondaryContainer.withValues(alpha: .3),
-                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -87,24 +87,25 @@ class FeedItemCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         articleViewData.displayTitle ??
                             articleViewData.article.title,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           height: 1.15,
                           fontWeight: FontWeight.w700,
                           color: colorScheme.onSurface,
                         ),
                       ),
                       const Spacer(),
+                      const SizedBox(height: 2),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
+                          horizontal: 6,
+                          vertical: 4,
                         ),
                         decoration: BoxDecoration(
                           color: colorScheme.tertiaryContainer,
