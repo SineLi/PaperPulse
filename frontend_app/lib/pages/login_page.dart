@@ -19,137 +19,140 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo / App Icon
-                Icon(
-                  Icons.account_circle_outlined,
-                  size: 80,
-                  color: colorScheme.primary,
-                ),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 48),
 
-                const SizedBox(height: 8),
-                Text(
-                  '欢迎回来',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Login Card
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: colorScheme.outlineVariant),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Username Field
-                        TextField(
-                          controller: _usernameController,
-                          decoration: InputDecoration(
-                            labelText: '用户名',
-                            hintText: '请输入用户名',
-                            prefixIcon: const Icon(Icons.person_outline),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: .3),
-                          ),
-                          textInputAction: TextInputAction.next,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Password Field
-                        TextField(
-                          controller: _passwordController,
-                          decoration: InputDecoration(
-                            labelText: '密码',
-                            hintText: '请输入密码',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: .3),
-                          ),
-                          obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _handleLogin(),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Login Button
-                        FilledButton(
-                          onPressed: _isLoading ? null : _handleLogin,
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: _isLoading
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: colorScheme.onPrimary,
-                                  ),
-                                )
-                              : const Text(
-                                  '登录',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('还没有账号？'),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pushNamed('/signup');
-                              },
-                              child: const Text('立即注册'),
-                            ),
-                          ],
-                        ),
-                      ],
+                  // ── 品牌区域 ──
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Icon(
+                      Icons.rss_feed_rounded,
+                      size: 40,
+                      color: colorScheme.onPrimaryContainer,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  Text(
+                    'Advanced News Feed',
+                    style: textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '欢迎回来',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 36),
+
+                  // ── 表单 ──
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      labelText: '用户名',
+                      hintText: '请输入用户名',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _passwordController,
+                    decoration: InputDecoration(
+                      labelText: '密码',
+                      hintText: '请输入密码',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _handleLogin(),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // ── 登录按钮 ──
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _isLoading ? null : _handleLogin,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.onPrimary,
+                              ),
+                            )
+                          : const Text(
+                              '登录',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '还没有账号？',
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.of(context).pushNamed('/signup'),
+                        child: const Text('立即注册'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 48),
+                ],
+              ),
             ),
           ),
         ),

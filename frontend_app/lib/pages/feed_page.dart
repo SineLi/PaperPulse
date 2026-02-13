@@ -19,6 +19,7 @@ class _FeedPageState extends State<FeedPage> {
   final ScrollController _scrollController = ScrollController();
   final List<Article> _articles = [];
   bool _isLoading = false;
+  bool _isRefreshing = false;
   bool _hasMore = true;
   int _currentOffset = 0;
   static const int _limit = 20;
@@ -30,7 +31,7 @@ class _FeedPageState extends State<FeedPage> {
 
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent - 200 &&
+              _scrollController.position.maxScrollExtent - 300 &&
           !_isLoading &&
           _hasMore) {
         _loadMoreArticles();
@@ -41,9 +42,7 @@ class _FeedPageState extends State<FeedPage> {
   Future<void> _loadMoreArticles() async {
     if (_isLoading) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final feedRepo = context.read<FeedRepo>();
@@ -62,55 +61,46 @@ class _FeedPageState extends State<FeedPage> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error loading articles: $e')));
+        ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
       }
     }
   }
 
   Future<void> _refreshArticles() async {
-    // 只有在非加载状态下才允许刷新，或者你也可以允许中断当前加载
-    if (_isLoading && _articles.isNotEmpty) return;
+    if (_isRefreshing) return;
 
-    setState(() {
-      _isLoading = true;
-      // 注意：刷新时不一定要清空列表，可以先保持旧数据，等新数据来了再替换
-      // 但这里为了简单，我们选择清空并重置偏移量
-    });
+    setState(() => _isRefreshing = true);
 
     try {
       final feedRepo = context.read<FeedRepo>();
       final syncService = context.read<SyncService>();
 
-      // 1. 调用远程刷新接口，获取最新文章并存入数据库
-      // refreshArticles() 方法应该返回新增文章数量，或者 void
-      print(await feedRepo.refreshArticles());
+      final count = await feedRepo.refreshArticles();
 
-      // 2. 刷新成功后，重置本地状态，重新加载第一页
       setState(() {
         _currentOffset = 0;
         _articles.clear();
         _hasMore = true;
-        _isLoading = false; // 先设为 false，因为 _loadMoreArticles 会再次设为 true
+        _isRefreshing = false;
       });
 
-      // 3. 重新加载
       await _loadMoreArticles();
-
-      // 4. 同步收藏等操作
       await syncService.pullStatus();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+
+      if (mounted && count > 0) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Refresh failed: $e')));
+        ).showSnackBar(SnackBar(content: Text('已更新 $count 篇新文章')));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('刷新失败: $e')));
       }
     }
   }
@@ -123,27 +113,201 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Latest Articles')),
-      body: _articles.isEmpty && _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refreshArticles,
-              child: ListView.builder(
-                controller: _scrollController,
-                itemCount: _articles.length + (_hasMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == _articles.length) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final article = _articles[index];
-                  return FeedItemCard(article: article);
+      body: NestedScrollView(
+        controller: _scrollController,
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverAppBar.large(
+            title: const Text('文章推送'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search_rounded),
+                tooltip: '搜索',
+                onPressed: () {
+                  // TODO: implement search
                 },
               ),
+              IconButton(
+                icon: const Icon(Icons.account_circle_outlined),
+                tooltip: widget.username,
+                onPressed: () {
+                  // TODO: implement profile
+                },
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+        ],
+        body: Column(
+          children: [
+            // ── 刷新进度指示条 ──
+            if (_isRefreshing)
+              LinearProgressIndicator(
+                minHeight: 3,
+                color: colorScheme.primary,
+                backgroundColor: colorScheme.surfaceContainerHighest,
+              ),
+
+            // ── 主体内容 ──
+            Expanded(child: _buildBody(colorScheme, textTheme)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(ColorScheme colorScheme, TextTheme textTheme) {
+    // 首次加载 → 骨架屏
+    if (_articles.isEmpty && _isLoading) {
+      return _buildSkeletonList(colorScheme);
+    }
+
+    // 空状态
+    if (_articles.isEmpty && !_isLoading) {
+      return _buildEmptyState(colorScheme, textTheme);
+    }
+
+    // 文章列表
+    return RefreshIndicator(
+      onRefresh: _refreshArticles,
+      edgeOffset: 0,
+      child: ListView.builder(
+        padding: const EdgeInsets.only(top: 4, bottom: 88),
+        itemCount: _articles.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == _articles.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
+            );
+          }
+          return FeedItemCard(article: _articles[index]);
+        },
+      ),
+    );
+  }
+
+  // ── 骨架屏 ──
+  Widget _buildSkeletonList(ColorScheme colorScheme) {
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 4, bottom: 88),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 6,
+      itemBuilder: (context, index) => _SkeletonCard(colorScheme: colorScheme),
+    );
+  }
+
+  // ── 空状态 ──
+  Widget _buildEmptyState(ColorScheme colorScheme, TextTheme textTheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
             ),
+            const SizedBox(height: 16),
+            Text(
+              '暂无文章',
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '下拉刷新以获取最新内容',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: .7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: _refreshArticles,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('刷新'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── 骨架卡片 ──
+class _SkeletonCard extends StatelessWidget {
+  final ColorScheme colorScheme;
+  const _SkeletonCard({required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    final bone = colorScheme.surfaceContainerHighest;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _bone(bone, width: 140, height: 10),
+                  const SizedBox(height: 12),
+                  _bone(bone, height: 14),
+                  const SizedBox(height: 6),
+                  _bone(bone, height: 14),
+                  const SizedBox(height: 6),
+                  _bone(bone, width: 180, height: 14),
+                  const SizedBox(height: 14),
+                  _bone(bone, width: 64, height: 18, radius: 8),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(width: 100, height: 100, color: bone),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _bone(
+    Color color, {
+    double? width,
+    required double height,
+    double radius = 4,
+  }) {
+    return Container(
+      width: width ?? double.infinity,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(radius),
+      ),
     );
   }
 }
