@@ -28,6 +28,7 @@ class CachedArticleImage extends StatefulWidget {
 
 class _CachedArticleImageState extends State<CachedArticleImage> {
   String? _localPath;
+  bool _networkFailed = false;
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     if (oldWidget.articleId != widget.articleId ||
         oldWidget.imageUrl != widget.imageUrl) {
       _localPath = null;
+      _networkFailed = false;
       _resolveImage();
     }
   }
@@ -60,6 +62,14 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     }
   }
 
+  void _retry() {
+    setState(() {
+      _localPath = null;
+      _networkFailed = false;
+    });
+    _resolveImage();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -72,18 +82,29 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         width: widget.width,
         height: widget.height,
         errorBuilder: (context, error, stackTrace) =>
-            _buildPlaceholder(colorScheme),
+            _buildPlaceholder(colorScheme, tappable: true),
       );
     }
 
     // 回退到网络图片
+    if (_networkFailed) {
+      return _buildPlaceholder(colorScheme, tappable: true);
+    }
+
     return Image.network(
       widget.imageUrl,
       fit: widget.fit,
       width: widget.width,
       height: widget.height,
-      errorBuilder: (context, error, stackTrace) =>
-          _buildPlaceholder(colorScheme),
+      errorBuilder: (context, error, stackTrace) {
+        // 网络加载也失败时，标记错误状态以支持点击重试
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_networkFailed) {
+            setState(() => _networkFailed = true);
+          }
+        });
+        return _buildPlaceholder(colorScheme, tappable: true);
+      },
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
         return _buildLoading(colorScheme, progress);
@@ -91,17 +112,22 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     );
   }
 
-  Widget _buildPlaceholder(ColorScheme colorScheme) {
-    return Container(
+  Widget _buildPlaceholder(ColorScheme colorScheme, {bool tappable = false}) {
+    final placeholder = Container(
       width: widget.width,
       height: widget.height,
       color: colorScheme.surfaceContainerHighest,
       child: Icon(
-        Icons.image_outlined,
+        tappable ? Icons.refresh_rounded : Icons.image_outlined,
         color: colorScheme.outlineVariant,
         size: 28,
       ),
     );
+
+    if (tappable) {
+      return GestureDetector(onTap: _retry, child: placeholder);
+    }
+    return placeholder;
   }
 
   Widget _buildLoading(ColorScheme colorScheme, ImageChunkEvent progress) {

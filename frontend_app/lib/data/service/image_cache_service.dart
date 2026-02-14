@@ -4,14 +4,22 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import '../db/articledb.dart';
+import '../models/article.dart';
 
 /// 负责下载文章图片并缓存到本地文件系统，
 /// 同时将缓存路径写回数据库。
 class ImageCacheService {
   final ArticleDatabaseIO _articleDb;
 
-  /// 内存中记录正在下载的 URL，避免重复请求
-  final Set<String> _downloading = {};
+  static const _userAgent =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      '(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0';
+
+  /// 正在下载的 URL -> 等待通知的回调列表（避免重复请求，同时保留所有回调）
+  final Map<String, List<void Function(String path)>> _downloading = {};
+
+  /// 记录下载失败的文章 (articleId -> url)，以便刷新时重试
+  final Map<int, String> _failedArticles = {};
 
   late final Future<Directory> _cacheDirFuture = _initCacheDir();
 
@@ -53,8 +61,14 @@ class ImageCacheService {
     String url,
     void Function(String path)? onCached,
   ) async {
-    if (_downloading.contains(url)) return;
-    _downloading.add(url);
+    // 已在下载中 → 注册回调后返回，由先前的下载任务负责通知
+    if (_downloading.containsKey(url)) {
+      if (onCached != null) {
+        _downloading[url]!.add(onCached);
+      }
+      return;
+    }
+    _downloading[url] = onCached != null ? [onCached] : [];
 
     try {
       final cacheDir = await _cacheDirFuture;
@@ -65,44 +79,124 @@ class ImageCacheService {
       if (await file.exists()) {
         // 文件存在但 DB 记录缺失，补写 DB
         await _articleDb.updateCachePath(articleId, file.path);
-        onCached?.call(file.path);
+        _notifyCallbacks(url, file.path);
         return;
       }
+
+      final headers = _buildHeaders(url);
 
       const maxRetries = 3;
       for (var attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           final response = await http
-              .get(Uri.parse(url))
+              .get(Uri.parse(url), headers: headers)
               .timeout(const Duration(seconds: 30));
 
           if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
             await file.writeAsBytes(response.bodyBytes);
             await _articleDb.updateCachePath(articleId, file.path);
-            onCached?.call(file.path);
+            _failedArticles.remove(articleId);
+            _notifyCallbacks(url, file.path);
             return;
           }
 
-          // 4xx 客户端错误不重试
-          if (response.statusCode >= 400 && response.statusCode < 500) return;
-        } on SocketException catch (_) {
-          // 网络不可达
-        } on HttpException catch (_) {
-          // HTTP 协议错误
-        } on http.ClientException catch (_) {
-          // http 包客户端异常
-        } catch (_) {
-          // TimeoutException 等其他异常
+          // 4xx 客户端错误（除 403/429 外）不重试
+          if (response.statusCode >= 400 &&
+              response.statusCode < 500 &&
+              response.statusCode != 403 &&
+              response.statusCode != 429) {
+            print('Image download failed with ${response.statusCode}: $url');
+            _failedArticles[articleId] = url;
+            return;
+          }
+
+          // 403/429/5xx 继续重试
+          print(
+            'Image download got ${response.statusCode} (attempt $attempt): $url',
+          );
+        } on SocketException catch (e) {
+          print('Network error while downloading image (attempt $attempt): $e');
+        } on HttpException catch (e) {
+          print('HTTP error while downloading image (attempt $attempt): $e');
+        } on http.ClientException catch (e) {
+          print(
+            'HTTP client error while downloading image (attempt $attempt): $e',
+          );
+        } catch (e) {
+          print('Unexpected error downloading image (attempt $attempt): $e');
         }
 
         if (attempt < maxRetries) {
-          // 指数退避：1s, 2s
           await Future.delayed(Duration(seconds: attempt));
         }
       }
+      print('Image download failed after $maxRetries retries: $url');
+      _failedArticles[articleId] = url;
     } finally {
       _downloading.remove(url);
     }
+  }
+
+  /// 通知所有等待该 URL 下载完成的回调
+  void _notifyCallbacks(String url, String path) {
+    final callbacks = _downloading[url];
+    if (callbacks != null) {
+      for (final cb in callbacks) {
+        cb(path);
+      }
+    }
+  }
+
+  /// 根据 URL 的域名构造浏览器级别的请求头（Referer + UA），
+  /// 解决出版商防盗链导致的 403 问题。
+  static Map<String, String> _buildHeaders(String url) {
+    final uri = Uri.tryParse(url);
+    final origin = uri != null ? '${uri.scheme}://${uri.host}' : '';
+    return {
+      'User-Agent': _userAgent,
+      'Referer': origin.isNotEmpty ? '$origin/' : '',
+      'Accept':
+          'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Sec-Fetch-Dest': 'image',
+      'Sec-Fetch-Mode': 'no-cors',
+      'Sec-Fetch-Site': 'same-origin',
+    };
+  }
+
+  /// 重试之前下载失败的图片（供刷新时调用）
+  Future<void> retryFailedImages() async {
+    if (_failedArticles.isEmpty) return;
+
+    // 复制一份，避免迭代时修改
+    final toRetry = Map<int, String>.from(_failedArticles);
+    _failedArticles.clear();
+
+    final tasks = <Future<void>>[];
+    for (final entry in toRetry.entries) {
+      tasks.add(_downloadAndCache(entry.key, entry.value, null));
+    }
+    final batches = _chunk(tasks, 4);
+    for (final batch in batches) {
+      await Future.wait(batch);
+    }
+  }
+
+  /// 扫描数据库中未缓存的图片并尝试下载
+  Future<void> retryUncachedFromDb() async {
+    final uncached = await _articleDb.getUncachedImageArticles(limit: 100);
+    if (uncached.isEmpty) return;
+
+    final items = uncached
+        .map(
+          (row) => (
+            articleId: row[Article.colId] as int,
+            url: row[Article.colGAUrl] as String?,
+            cachePath: row[Article.colGACachePath] as String?,
+          ),
+        )
+        .toList();
+    await precacheArticles(items);
   }
 
   /// 批量预缓存多篇文章的图片

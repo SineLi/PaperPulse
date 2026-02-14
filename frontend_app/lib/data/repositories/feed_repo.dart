@@ -98,6 +98,12 @@ class FeedRepo {
         );
       }
     }
+    // 刷新时重试之前下载失败的图片 + 数据库中未缓存的图片
+    if (_imageCacheService != null) {
+      _imageCacheService.retryFailedImages();
+      _imageCacheService.retryUncachedFromDb();
+    }
+
     return newArticlesCount;
   }
 }
