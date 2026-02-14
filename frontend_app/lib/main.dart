@@ -20,7 +20,8 @@ import 'data/service/image_cache_service.dart';
 
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
-import 'pages/feed_page.dart';
+import 'pages/bootstrap_page.dart';
+import 'pages/app_shell_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -140,10 +141,10 @@ class MyApp extends StatelessWidget {
                     snackBarTheme: snackBarTheme,
                   ),
                   themeMode: ThemeMode.system,
-                  home: const LoginPage(),
+                  home: const BootstrapPage(),
                   routes: {
                     '/feed': (context) =>
-                        const FeedPage(username: 'placeholder'),
+                        const AppShellPage(username: 'placeholder'),
                     '/login': (context) => const LoginPage(),
                     '/signup': (context) => const RegisterPage(),
                   },

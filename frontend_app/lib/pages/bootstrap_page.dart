@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/models/user.dart';
-import 'feed_page.dart';
+import 'app_shell_page.dart';
 import 'login_page.dart';
 
 class BootstrapPage extends StatelessWidget {
@@ -28,7 +28,7 @@ class BootstrapPage extends StatelessWidget {
         if (user == null) {
           return const LoginPage();
         }
-        return FeedPage(username: user.username);
+        return AppShellPage(username: user.username);
       },
     );
   }

@@ -128,6 +128,11 @@ class _FeedPageState extends State<FeedPage> {
               title: const Text('文章推送'),
               actions: [
                 IconButton(
+                  icon: const Icon(Icons.filter_list),
+                  tooltip: '筛选',
+                  onPressed: () {},
+                ),
+                IconButton(
                   icon: const Icon(Icons.search_rounded),
                   tooltip: '搜索',
                   onPressed: () {
@@ -135,8 +140,8 @@ class _FeedPageState extends State<FeedPage> {
                   },
                 ),
                 IconButton(
-                  icon: const Icon(Icons.account_circle_outlined),
-                  tooltip: widget.username,
+                  icon: const Icon(Icons.settings),
+                  tooltip: '设置',
                   onPressed: () {
                     // TODO: implement profile
                   },
