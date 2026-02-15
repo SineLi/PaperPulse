@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'fav_page.dart';
 import 'feed_page.dart';
 
 class AppShellPage extends StatefulWidget {
@@ -17,15 +18,11 @@ class _AppShellPageState extends State<AppShellPage> {
   Widget build(BuildContext context) {
     final pages = [
       const _PlaceholderTab(
-        icon: Icons.menu_book_rounded,
+        icon: Icons.book_rounded,
         title: '期刊',
         subtitle: '期刊页开发中',
       ),
-      const _PlaceholderTab(
-        icon: Icons.bookmark_rounded,
-        title: '收藏',
-        subtitle: '收藏页开发中',
-      ),
+      const FavPage(),
       FeedPage(username: widget.username),
     ];
 
