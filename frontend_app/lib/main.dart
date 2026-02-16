@@ -28,7 +28,7 @@ Future<void> main() async {
 
   final authStorage = AuthStorage();
   final apiClient = ApiClient(
-    baseUrl: 'http://10.0.2.2:8000',
+    baseUrl: 'https://api.fooood.life',
     authStorage: authStorage,
   );
 
@@ -76,6 +76,7 @@ Future<void> main() async {
     MyApp(
       authServices: authServices,
       feedRepo: feedRepo,
+      journalRepo: journalRepo,
       syncService: syncService,
       imageCacheService: imageCacheService,
     ),
@@ -85,12 +86,14 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   final AuthServices authServices;
   final FeedRepo feedRepo;
+  final JournalRepo journalRepo;
   final SyncService syncService;
   final ImageCacheService imageCacheService;
   const MyApp({
     super.key,
     required this.authServices,
     required this.feedRepo,
+    required this.journalRepo,
     required this.syncService,
     required this.imageCacheService,
   });
@@ -122,32 +125,35 @@ class MyApp extends StatelessWidget {
 
         return Provider<AuthServices>.value(
           value: authServices,
-          child: Provider<FeedRepo>.value(
-            value: feedRepo,
-            child: Provider<SyncService>.value(
-              value: syncService,
-              child: Provider<ImageCacheService>.value(
-                value: imageCacheService,
-                child: MaterialApp(
-                  title: 'Advanced News Feed',
-                  theme: ThemeData(
-                    colorScheme: lightColorScheme,
-                    useMaterial3: true,
-                    snackBarTheme: snackBarTheme,
+          child: Provider<JournalRepo>.value(
+            value: journalRepo,
+            child: Provider<FeedRepo>.value(
+              value: feedRepo,
+              child: Provider<SyncService>.value(
+                value: syncService,
+                child: Provider<ImageCacheService>.value(
+                  value: imageCacheService,
+                  child: MaterialApp(
+                    title: 'Advanced News Feed',
+                    theme: ThemeData(
+                      colorScheme: lightColorScheme,
+                      useMaterial3: true,
+                      snackBarTheme: snackBarTheme,
+                    ),
+                    darkTheme: ThemeData(
+                      colorScheme: darkColorScheme,
+                      useMaterial3: true,
+                      snackBarTheme: snackBarTheme,
+                    ),
+                    themeMode: ThemeMode.system,
+                    home: const BootstrapPage(),
+                    routes: {
+                      '/feed': (context) =>
+                          const AppShellPage(username: 'placeholder'),
+                      '/login': (context) => const LoginPage(),
+                      '/signup': (context) => const RegisterPage(),
+                    },
                   ),
-                  darkTheme: ThemeData(
-                    colorScheme: darkColorScheme,
-                    useMaterial3: true,
-                    snackBarTheme: snackBarTheme,
-                  ),
-                  themeMode: ThemeMode.system,
-                  home: const BootstrapPage(),
-                  routes: {
-                    '/feed': (context) =>
-                        const AppShellPage(username: 'placeholder'),
-                    '/login': (context) => const LoginPage(),
-                    '/signup': (context) => const RegisterPage(),
-                  },
                 ),
               ),
             ),

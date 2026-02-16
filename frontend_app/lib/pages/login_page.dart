@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
+import 'initializing_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -49,7 +50,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    'Advanced News Feed',
+                    'PaperPulse',
                     style: textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: colorScheme.onSurface,
@@ -186,7 +187,11 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('登录成功')));
-      Navigator.of(context).pushReplacementNamed('/feed');
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => InitializingPage(usernameHint: username),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
