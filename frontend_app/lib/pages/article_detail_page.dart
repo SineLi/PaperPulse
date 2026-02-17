@@ -29,9 +29,15 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   late int _currentIndex;
   late ArticleViewData _viewData;
   late ScrollController _scrollController;
-  bool _bottomBarVisible = true;
+  bool _barsVisible = true;
   double _lastScrollOffset = 0;
   late bool _isFavorite;
+
+  /// 切换动画方向: 1 = 下一篇(左滑), -1 = 上一篇(右滑)
+  int _slideDirection = 1;
+
+  /// 用于 AnimatedSwitcher 的 key
+  late ValueKey<int> _contentKey;
 
   @override
   void initState() {
@@ -39,6 +45,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     _currentIndex = widget.initialIndex;
     _viewData = ArticleViewData.fromArticle(widget.articles[_currentIndex]);
     _isFavorite = _viewData.isFavorite;
+    _contentKey = ValueKey(_currentIndex);
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
     _markAsRead();
@@ -47,10 +54,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   void _onScroll() {
     final offset = _scrollController.offset;
     final delta = offset - _lastScrollOffset;
-    if (delta > 8 && _bottomBarVisible) {
-      setState(() => _bottomBarVisible = false);
-    } else if (delta < -8 && !_bottomBarVisible) {
-      setState(() => _bottomBarVisible = true);
+    if (delta > 8 && _barsVisible) {
+      setState(() => _barsVisible = false);
+    } else if (delta < -8 && !_barsVisible) {
+      setState(() => _barsVisible = true);
     }
     _lastScrollOffset = offset;
   }
@@ -58,12 +65,14 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   void _navigateTo(int index) {
     if (index < 0 || index >= widget.articles.length) return;
     setState(() {
+      _slideDirection = index > _currentIndex ? 1 : -1;
       _currentIndex = index;
       _viewData = ArticleViewData.fromArticle(widget.articles[_currentIndex]);
       _isFavorite = _viewData.isFavorite;
+      _contentKey = ValueKey(_currentIndex);
       _scrollController.jumpTo(0);
       _lastScrollOffset = 0;
-      _bottomBarVisible = true;
+      _barsVisible = true;
     });
     _markAsRead();
   }
@@ -116,12 +125,18 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           CustomScrollView(
             controller: _scrollController,
             slivers: [
-              // AppBar
+              // AppBar — floating + snap，向下滚动隐藏，向上微滑即回
               SliverAppBar(
-                pinned: true,
-                title: Text(
-                  _viewData.displayJournalName ?? _viewData.article.journalName,
-                  style: textTheme.titleMedium,
+                floating: true,
+                snap: true,
+                title: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  // child: Text(
+                  //   _viewData.displayJournalName ??
+                  //       _viewData.article.journalName,
+                  //   key: ValueKey('appbar_$_currentIndex'),
+                  //   style: textTheme.titleMedium,
+                  // ),
                 ),
                 actions: [
                   IconButton(
@@ -133,76 +148,30 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 ],
               ),
 
-              // 正文
+              // 正文 — 带切换动画
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 4),
-
-                      // ── 期刊 · 日期 ──
-                      _buildMetadataRow(colorScheme, textTheme),
-                      const SizedBox(height: 16),
-
-                      // ── 标题 ──
-                      Text(
-                        _viewData.displayTitle ?? _viewData.article.title,
-                        style: textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.35,
-                          color: colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // ── DOI ──
-                      if (_viewData.article.doi.isNotEmpty)
-                        _buildDoiRow(colorScheme, textTheme),
-
-                      const SizedBox(height: 12),
-
-                      // ── 标签 ──
-                      _buildTags(colorScheme, textTheme),
-
-                      const SizedBox(height: 20),
-                      Divider(color: colorScheme.outlineVariant, height: 1),
-                      const SizedBox(height: 20),
-
-                      // ── 摘要 / 正文 ──
-                      if (_viewData.displaySummary != null &&
-                          _viewData.displaySummary!.isNotEmpty)
-                        _buildSection(
-                          '摘要',
-                          _viewData.displaySummary!,
-                          colorScheme,
-                          textTheme,
-                        ),
-
-                      // ── 亮点 ──
-                      if (_viewData.displayHighlights != null &&
-                          _viewData.displayHighlights!.isNotEmpty)
-                        _buildSection(
-                          '亮点',
-                          _viewData.displayHighlights!,
-                          colorScheme,
-                          textTheme,
-                        ),
-
-                      // ── 创新点 ──
-                      if (_viewData.displayInnovations != null &&
-                          _viewData.displayInnovations!.isNotEmpty)
-                        _buildInnovations(colorScheme, textTheme),
-
-                      // ── 图形摘要 ──
-                      if (_viewData.graphicalAbsUrl != null &&
-                          _viewData.graphicalAbsUrl!.isNotEmpty)
-                        _buildGraphicalAbstract(colorScheme, textTheme),
-
-                      // 底部留白，给 BottomBar
-                      const SizedBox(height: 100),
-                    ],
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    // 根据 child 的 key 判断进场方向
+                    final isIncoming = child.key == _contentKey;
+                    final offsetBegin = isIncoming
+                        ? Offset(_slideDirection * 0.15, 0)
+                        : Offset(-_slideDirection * 0.15, 0);
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: offsetBegin,
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: FadeTransition(opacity: animation, child: child),
+                    );
+                  },
+                  child: _buildArticleContent(
+                    colorScheme,
+                    textTheme,
+                    key: _contentKey,
                   ),
                 ),
               ),
@@ -215,13 +184,96 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             right: 0,
             bottom: 0,
             child: AnimatedSlide(
-              offset: _bottomBarVisible ? Offset.zero : const Offset(0, 1),
+              offset: _barsVisible ? Offset.zero : const Offset(0, 1),
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
               child: _buildBottomBar(colorScheme, textTheme),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── 文章正文内容（独立 widget 方便做 AnimatedSwitcher） ──
+  Widget _buildArticleContent(
+    ColorScheme colorScheme,
+    TextTheme textTheme, {
+    required Key key,
+  }) {
+    return KeyedSubtree(
+      key: key,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 6),
+
+            // ── 期刊 · 日期 ──
+            _buildMetadataRow(colorScheme, textTheme),
+            const SizedBox(height: 18),
+
+            // ── 标题 ──
+            Text(
+              _viewData.displayTitle ?? _viewData.article.title,
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontSize: 28,
+                height: 1.4,
+                letterSpacing: -0.3,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ── DOI ──
+            if (_viewData.article.doi.isNotEmpty)
+              _buildDoiRow(colorScheme, textTheme),
+
+            const SizedBox(height: 14),
+
+            // ── 标签 ──
+            _buildTags(colorScheme, textTheme),
+
+            const SizedBox(height: 24),
+            Divider(color: colorScheme.outlineVariant, height: 1),
+            const SizedBox(height: 24),
+
+            // ── 摘要 / 正文 ──
+            if (_viewData.displaySummary != null &&
+                _viewData.displaySummary!.isNotEmpty)
+              _buildSection(
+                '总结',
+                _viewData.displaySummary!,
+                colorScheme,
+                textTheme,
+              ),
+
+            // ── 亮点 ──
+            if (_viewData.displayHighlights != null &&
+                _viewData.displayHighlights!.isNotEmpty)
+              _buildSection(
+                '亮点',
+                _viewData.displayHighlights!,
+                colorScheme,
+                textTheme,
+              ),
+
+            // ── 创新点 ──
+            if (_viewData.displayInnovations != null &&
+                _viewData.displayInnovations!.isNotEmpty)
+              _buildInnovations(colorScheme, textTheme),
+
+            // ── 图形摘要 ──
+            if (_viewData.graphicalAbsUrl != null &&
+                _viewData.graphicalAbsUrl!.isNotEmpty)
+              _buildGraphicalAbstract(colorScheme, textTheme),
+
+            // 底部留白
+            const SizedBox(height: 100),
+          ],
+        ),
       ),
     );
   }
@@ -245,9 +297,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
               _viewData.displayJournalName ?? _viewData.article.journalName,
               if (_viewData.publishedDate != null) _viewData.publishedDate,
             ].join(' · '),
-            style: textTheme.labelMedium?.copyWith(
+            style: textTheme.bodySmall?.copyWith(
               color: colorScheme.onSurfaceVariant,
-              letterSpacing: 0.2,
+              fontSize: 13,
+              letterSpacing: 0.15,
             ),
           ),
         ),
@@ -346,23 +399,26 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     TextTheme textTheme,
   ) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: 24,
               color: colorScheme.onSurface,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             content,
-            style: textTheme.bodyMedium?.copyWith(
+            style: textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
-              height: 1.65,
+              fontSize: 16,
+              height: 1.75,
+              letterSpacing: 0.1,
             ),
           ),
         ],
@@ -373,26 +429,27 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   // ── 创新点列表 ──
   Widget _buildInnovations(ColorScheme colorScheme, TextTheme textTheme) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '创新点',
-            style: textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: 24,
               color: colorScheme.onSurface,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           ..._viewData.displayInnovations!.asMap().entries.map(
             (entry) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    margin: const EdgeInsets.only(top: 7),
+                    margin: const EdgeInsets.only(top: 8),
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
@@ -404,9 +461,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                   Expanded(
                     child: Text(
                       entry.value,
-                      style: textTheme.bodyMedium?.copyWith(
+                      style: textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onSurfaceVariant,
-                        height: 1.55,
+                        fontSize: 15,
+                        height: 1.65,
+                        letterSpacing: 0.1,
                       ),
                     ),
                   ),
@@ -422,14 +481,15 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   // ── 图形摘要 ──
   Widget _buildGraphicalAbstract(ColorScheme colorScheme, TextTheme textTheme) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '图形摘要',
-            style: textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              fontSize: 24,
               color: colorScheme.onSurface,
             ),
           ),
