@@ -5,8 +5,8 @@ import 'feed_page.dart';
 import 'journal_page.dart';
 
 class AppShellPage extends StatefulWidget {
-  final String username;
-  const AppShellPage({super.key, required this.username});
+  // final String username;
+  const AppShellPage({super.key});
 
   @override
   State<AppShellPage> createState() => _AppShellPageState();
@@ -17,11 +17,7 @@ class _AppShellPageState extends State<AppShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const JournalPage(),
-      const FavPage(),
-      FeedPage(username: widget.username),
-    ];
+    final pages = [const JournalPage(), const FavPage(), FeedPage()];
 
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: pages),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models/article.dart';
+import '../pages/article_detail_page.dart';
 import 'feed_card.dart';
 
 /// 加载文章的回调：返回指定分页的文章列表
@@ -234,7 +235,19 @@ class _ArticleListPageState extends State<ArticleListPage> {
             ),
           );
         }
-        return FeedItemCard(article: _articles[index]);
+        return FeedItemCard(
+          article: _articles[index],
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ArticleDetailPage(
+                  articles: List.unmodifiable(_articles),
+                  initialIndex: index,
+                ),
+              ),
+            );
+          },
+        );
       },
     );
 

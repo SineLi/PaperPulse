@@ -6,8 +6,8 @@ import '../data/service/sync_service.dart';
 import '../widgets/article_list_page.dart';
 
 class FeedPage extends StatelessWidget {
-  final String username;
-  const FeedPage({super.key, required this.username});
+  // final String username;
+  const FeedPage({super.key});
 
   @override
   Widget build(BuildContext context) {

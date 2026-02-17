@@ -76,7 +76,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
         if (user == null) {
           return const LoginPage();
         }
-        return AppShellPage(username: user.username);
+        return AppShellPage();
       },
     );
   }

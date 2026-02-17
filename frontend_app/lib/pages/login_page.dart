@@ -201,12 +201,9 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('登录成功')));
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              AppShellPage(username: currentUser?.username ?? username),
-        ),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => AppShellPage()));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
