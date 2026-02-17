@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/models/user.dart';
+import '../data/repositories/feed_repo.dart';
 import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';
+import '../data/service/sync_service.dart';
 import 'app_shell_page.dart';
 import 'login_page.dart';
 
@@ -24,18 +26,31 @@ class _BootstrapPageState extends State<BootstrapPage> {
     final authServices = context.read<AuthServices>();
     final journalRepo = context.read<JournalRepo>();
     final userRepo = context.read<UserRepo>();
-    _bootstrapFuture = _bootstrap(authServices, journalRepo, userRepo);
+    final feedRepo = context.read<FeedRepo>();
+    final syncService = context.read<SyncService>();
+    _bootstrapFuture = _bootstrap(
+      authServices,
+      journalRepo,
+      userRepo,
+      feedRepo,
+      syncService,
+    );
   }
 
   Future<User?> _bootstrap(
     AuthServices authServices,
     JournalRepo journalRepo,
     UserRepo userRepo,
+    FeedRepo feedRepo,
+    SyncService syncService,
   ) async {
     final user = await authServices.tryGetCurrentUser();
     if (user != null) {
       await journalRepo.syncJournalsEmpty();
       await userRepo.syncSubscribedJournalIds();
+      await syncService.flush();
+      await syncService.pullStatus();
+      await feedRepo.refreshArticles();
     }
     return user;
   }
