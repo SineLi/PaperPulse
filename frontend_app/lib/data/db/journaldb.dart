@@ -34,7 +34,7 @@ class JournalDatabaseIO {
       Journal.tableJournals,
       limit: limit,
       offset: offset,
-      orderBy: '${Journal.colId} DESC',
+      orderBy: '${Journal.colId} ASC',
     );
     return maps.map((map) => Journal.fromMap(map)).toList();
   }

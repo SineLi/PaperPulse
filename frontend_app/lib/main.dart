@@ -17,6 +17,7 @@ import 'data/service/journal_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 import 'data/service/image_cache_service.dart';
+import 'data/repositories/user_repo.dart';
 
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
@@ -77,6 +78,7 @@ Future<void> main() async {
       authServices: authServices,
       feedRepo: feedRepo,
       journalRepo: journalRepo,
+      userRepo: userRepo,
       syncService: syncService,
       imageCacheService: imageCacheService,
     ),
@@ -87,6 +89,7 @@ class MyApp extends StatelessWidget {
   final AuthServices authServices;
   final FeedRepo feedRepo;
   final JournalRepo journalRepo;
+  final UserRepo userRepo;
   final SyncService syncService;
   final ImageCacheService imageCacheService;
   const MyApp({
@@ -94,6 +97,7 @@ class MyApp extends StatelessWidget {
     required this.authServices,
     required this.feedRepo,
     required this.journalRepo,
+    required this.userRepo,
     required this.syncService,
     required this.imageCacheService,
   });
@@ -127,32 +131,34 @@ class MyApp extends StatelessWidget {
           value: authServices,
           child: Provider<JournalRepo>.value(
             value: journalRepo,
-            child: Provider<FeedRepo>.value(
-              value: feedRepo,
-              child: Provider<SyncService>.value(
-                value: syncService,
-                child: Provider<ImageCacheService>.value(
-                  value: imageCacheService,
-                  child: MaterialApp(
-                    title: 'Advanced News Feed',
-                    theme: ThemeData(
-                      colorScheme: lightColorScheme,
-                      useMaterial3: true,
-                      snackBarTheme: snackBarTheme,
+            child: Provider<UserRepo>.value(
+              value: userRepo,
+              child: Provider<FeedRepo>.value(
+                value: feedRepo,
+                child: Provider<SyncService>.value(
+                  value: syncService,
+                  child: Provider<ImageCacheService>.value(
+                    value: imageCacheService,
+                    child: MaterialApp(
+                      title: 'Advanced News Feed',
+                      theme: ThemeData(
+                        colorScheme: lightColorScheme,
+                        useMaterial3: true,
+                        snackBarTheme: snackBarTheme,
+                      ),
+                      darkTheme: ThemeData(
+                        colorScheme: darkColorScheme,
+                        useMaterial3: true,
+                        snackBarTheme: snackBarTheme,
+                      ),
+                      themeMode: ThemeMode.system,
+                      home: const BootstrapPage(),
+                      routes: {
+                        '/feed': (context) =>
+                            const AppShellPage(username: 'placeholder'),
+                        '/login': (context) => const LoginPage(),
+                      },
                     ),
-                    darkTheme: ThemeData(
-                      colorScheme: darkColorScheme,
-                      useMaterial3: true,
-                      snackBarTheme: snackBarTheme,
-                    ),
-                    themeMode: ThemeMode.system,
-                    home: const BootstrapPage(),
-                    routes: {
-                      '/feed': (context) =>
-                          const AppShellPage(username: 'placeholder'),
-                      '/login': (context) => const LoginPage(),
-                      '/signup': (context) => const RegisterPage(),
-                    },
                   ),
                 ),
               ),

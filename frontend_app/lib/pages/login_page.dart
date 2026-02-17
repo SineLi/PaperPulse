@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
-import 'initializing_page.dart';
+import '../data/repositories/journal_repo.dart';
+import 'app_shell_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -167,6 +168,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final authServices = context.read<AuthServices>();
+    final journalRepo = context.read<JournalRepo>();
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
@@ -182,6 +184,8 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       await authServices.login(username: username, password: password);
+      final currentUser = await authServices.tryGetCurrentUser();
+      await journalRepo.syncJournalsEmpty();
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -189,7 +193,8 @@ class _LoginPageState extends State<LoginPage> {
       ).showSnackBar(const SnackBar(content: Text('登录成功')));
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => InitializingPage(usernameHint: username),
+          builder: (_) =>
+              AppShellPage(username: currentUser?.username ?? username),
         ),
       );
     } catch (e) {
