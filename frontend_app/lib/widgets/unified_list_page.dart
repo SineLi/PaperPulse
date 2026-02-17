@@ -359,7 +359,25 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           body: Column(
             children: [
               // ── 搜索栏 ──
-              if (_isSearchMode) _buildSearchBar(colorScheme),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  child: _isSearchMode
+                      ? KeyedSubtree(
+                          key: const ValueKey('search_open'),
+                          child: _buildSearchBar(colorScheme),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('search_closed')),
+                ),
+              ),
 
               // ── 刷新进度指示条 ──
               if (_isRefreshing)
