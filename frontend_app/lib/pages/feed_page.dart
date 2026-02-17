@@ -6,7 +6,6 @@ import '../data/service/sync_service.dart';
 import '../widgets/article_list_page.dart';
 
 class FeedPage extends StatelessWidget {
-  // final String username;
   const FeedPage({super.key});
 
   @override
@@ -16,29 +15,16 @@ class FeedPage extends StatelessWidget {
 
     return ArticleListPage(
       title: '文章推送',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.filter_list),
-          tooltip: '筛选',
-          onPressed: () {},
-        ),
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          tooltip: '搜索',
-          onPressed: () {
-            // TODO: implement search
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          tooltip: '设置',
-          onPressed: () {
-            // TODO: implement profile
-          },
-        ),
-      ],
       loadArticles: (limit, offset) =>
           feedRepo.getLocalArticles(limit: limit, offset: offset),
+      searchArticles: (query, limit, offset) =>
+          feedRepo.searchLocalArticles(query, limit: limit, offset: offset),
+      onFilter: () {
+        // TODO: implement filter bottom sheet
+      },
+      onSettings: () {
+        // TODO: implement settings
+      },
       onRefresh: () => feedRepo.refreshArticles(),
       onPostRefresh: () => syncService.pullStatus(),
       emptyTitle: '暂无文章',

@@ -15,37 +15,24 @@ class FavPage extends StatelessWidget {
 
     return ArticleListPage(
       title: '我的收藏',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.filter_list),
-          tooltip: '筛选',
-          onPressed: () {},
-        ),
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          tooltip: '搜索',
-          onPressed: () {
-            // TODO: implement search
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.settings),
-          tooltip: '设置',
-          onPressed: () {
-            // TODO: implement profile
-          },
-        ),
-      ],
       loadArticles: (limit, offset) =>
           feedRepo.getLocalFavoriteArticles(limit: limit, offset: offset),
+      searchArticles: (query, limit, offset) =>
+          feedRepo.searchLocalArticles(query, limit: limit, offset: offset),
+      onFilter: () {
+        // TODO: implement filter bottom sheet
+      },
+      onSettings: () {
+        // TODO: implement settings
+      },
       onRefresh: () async {
         await syncService.pullStatus();
-        return 0; // pullStatus 不返回新增数量，返回 0 跳过提示
+        return 0;
       },
       emptyIcon: Icons.bookmark_border_rounded,
       emptyTitle: '暂无收藏',
       emptySubtitle: '收藏的文章会出现在这里',
-      emptyActionLabel: null, // 空状态不显示刷新按钮
+      emptyActionLabel: null,
     );
   }
 }

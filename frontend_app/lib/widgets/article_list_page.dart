@@ -8,12 +8,20 @@ import 'unified_list_page.dart';
 /// 加载文章的回调：返回指定分页的文章列表
 typedef ArticleLoader = Future<List<Article>> Function(int limit, int offset);
 
+/// 搜索文章的回调
+typedef ArticleSearcher =
+    Future<List<Article>> Function(String query, int limit, int offset);
+
 /// 文章列表页：基于 [UnifiedListPage] 的便捷封装，
 /// 内置 FeedItemCard 和文章骨架屏。
 class ArticleListPage extends StatelessWidget {
   final String title;
   final List<Widget>? actions;
   final ArticleLoader loadArticles;
+  final ArticleSearcher? searchArticles;
+  final VoidCallback? onFilter;
+  final bool filterActive;
+  final VoidCallback? onSettings;
   final Future<int> Function()? onRefresh;
   final Future<void> Function()? onPostRefresh;
   final RefreshMessageBuilder? refreshMessageBuilder;
@@ -28,6 +36,10 @@ class ArticleListPage extends StatelessWidget {
     required this.title,
     required this.loadArticles,
     this.actions,
+    this.searchArticles,
+    this.onFilter,
+    this.filterActive = false,
+    this.onSettings,
     this.onRefresh,
     this.onPostRefresh,
     this.refreshMessageBuilder,
@@ -44,6 +56,11 @@ class ArticleListPage extends StatelessWidget {
       title: title,
       actions: actions,
       loadItems: loadArticles,
+      searchItems: searchArticles,
+      searchHint: '搜索文章标题、摘要、期刊…',
+      onFilter: onFilter,
+      filterActive: filterActive,
+      onSettings: onSettings,
       onRefresh: onRefresh,
       onPostRefresh: onPostRefresh,
       refreshMessageBuilder: refreshMessageBuilder,

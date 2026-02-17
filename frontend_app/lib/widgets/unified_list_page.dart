@@ -1,7 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 /// 加载数据的回调：返回指定分页的数据列表
 typedef ItemLoader<T> = Future<List<T>> Function(int limit, int offset);
+
+/// 搜索数据的回调：返回指定分页的搜索结果
+typedef SearchLoader<T> =
+    Future<List<T>> Function(String query, int limit, int offset);
 
 /// 刷新数据的回调：返回新增数量
 typedef ItemRefresher = Future<int> Function();
@@ -16,13 +22,13 @@ typedef ItemWidgetBuilder<T> =
 /// 骨架卡片构建器
 typedef SkeletonBuilder = Widget Function(ColorScheme colorScheme);
 
-/// 通用分页列表页，封装了分页加载、骨架屏、空状态和下拉刷新逻辑。
+/// 通用分页列表页，封装了分页加载、骨架屏、空状态、下拉刷新、搜索和筛选逻辑。
 /// 可以通过泛型 [T] 适配任意数据类型（文章、期刊等）。
 class UnifiedListPage<T> extends StatefulWidget {
   /// AppBar 标题
   final String title;
 
-  /// AppBar 右侧操作按钮
+  /// AppBar 右侧额外操作按钮（显示在内置按钮之前）
   final List<Widget>? actions;
 
   /// 加载数据的回调
@@ -37,6 +43,29 @@ class UnifiedListPage<T> extends StatefulWidget {
   /// 骨架卡片数量
   final int skeletonCount;
 
+  // ── 搜索相关 ──
+
+  /// 搜索回调（为 null 则不显示搜索按钮）
+  final SearchLoader<T>? searchItems;
+
+  /// 搜索框提示文字
+  final String searchHint;
+
+  // ── 筛选相关 ──
+
+  /// 筛选按钮点击回调（为 null 则不显示筛选按钮）
+  final VoidCallback? onFilter;
+
+  /// 当前是否处于筛选激活状态（用于显示筛选图标的激活样式）
+  final bool filterActive;
+
+  // ── 设置 ──
+
+  /// 设置按钮点击回调（为 null 则不显示设置按钮）
+  final VoidCallback? onSettings;
+
+  // ── 刷新相关 ──
+
   /// 下拉刷新回调（为 null 则禁用刷新）
   final ItemRefresher? onRefresh;
 
@@ -45,6 +74,8 @@ class UnifiedListPage<T> extends StatefulWidget {
 
   /// 刷新成功后的提示文案
   final RefreshMessageBuilder? refreshMessageBuilder;
+
+  // ── 空状态 ──
 
   /// 空状态图标
   final IconData emptyIcon;
@@ -69,6 +100,11 @@ class UnifiedListPage<T> extends StatefulWidget {
     required this.skeletonBuilder,
     this.skeletonCount = 6,
     this.actions,
+    this.searchItems,
+    this.searchHint = '搜索…',
+    this.onFilter,
+    this.filterActive = false,
+    this.onSettings,
     this.onRefresh,
     this.onPostRefresh,
     this.refreshMessageBuilder,
@@ -91,6 +127,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   bool _hasMore = true;
   int _currentOffset = 0;
 
+  // ── 搜索状态 ──
+  bool _isSearchMode = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  Timer? _debounce;
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -108,13 +151,71 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     return false;
   }
 
+  // ── 搜索逻辑 ──
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchMode = !_isSearchMode;
+      if (!_isSearchMode) {
+        _searchController.clear();
+        _searchQuery = '';
+        _resetAndReload();
+      } else {
+        // 进入搜索模式后聚焦输入框
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (value.trim() != _searchQuery) {
+        _searchQuery = value.trim();
+        _resetAndReload();
+      }
+    });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _searchQuery = '';
+    _resetAndReload();
+    _searchFocusNode.requestFocus();
+  }
+
+  void _resetAndReload() {
+    setState(() {
+      _currentOffset = 0;
+      _items.clear();
+      _hasMore = true;
+      _isLoading = false;
+    });
+    _loadMore();
+  }
+
+  // ── 分页加载 ──
+
   Future<void> _loadMore() async {
     if (_isLoading) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final batch = await widget.loadItems(widget.pageSize, _currentOffset);
+      final List<T> batch;
+      if (_isSearchMode &&
+          _searchQuery.isNotEmpty &&
+          widget.searchItems != null) {
+        batch = await widget.searchItems!(
+          _searchQuery,
+          widget.pageSize,
+          _currentOffset,
+        );
+      } else {
+        batch = await widget.loadItems(widget.pageSize, _currentOffset);
+      }
 
       if (mounted) {
         setState(() {
@@ -175,7 +276,68 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  // ── 构建 AppBar Actions ──
+
+  List<Widget> _buildActions() {
+    final actions = <Widget>[];
+
+    // 额外的自定义操作
+    if (widget.actions != null) {
+      actions.addAll(widget.actions!);
+    }
+
+    // 筛选按钮
+    if (widget.onFilter != null) {
+      actions.add(
+        IconButton(
+          icon: Icon(
+            widget.filterActive
+                ? Icons.filter_list
+                : Icons.filter_list_outlined,
+          ),
+          tooltip: '筛选',
+          onPressed: widget.onFilter,
+          style: widget.filterActive
+              ? IconButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                )
+              : null,
+        ),
+      );
+    }
+
+    // 搜索按钮
+    if (widget.searchItems != null) {
+      actions.add(
+        IconButton(
+          icon: Icon(
+            _isSearchMode ? Icons.search_off_rounded : Icons.search_rounded,
+          ),
+          tooltip: _isSearchMode ? '关闭搜索' : '搜索',
+          onPressed: _toggleSearch,
+        ),
+      );
+    }
+
+    // 设置按钮
+    if (widget.onSettings != null) {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: '设置',
+          onPressed: widget.onSettings,
+        ),
+      );
+    }
+
+    actions.add(const SizedBox(width: 4));
+    return actions;
   }
 
   @override
@@ -191,14 +353,14 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
             SliverAppBar.large(
               title: Text(widget.title),
-              actions: [
-                if (widget.actions != null) ...widget.actions!,
-                const SizedBox(width: 4),
-              ],
+              actions: _buildActions(),
             ),
           ],
           body: Column(
             children: [
+              // ── 搜索栏 ──
+              if (_isSearchMode) _buildSearchBar(colorScheme),
+
               // ── 刷新进度指示条 ──
               if (_isRefreshing)
                 LinearProgressIndicator(
@@ -216,10 +378,49 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     );
   }
 
+  // ── 搜索栏 ──
+  Widget _buildSearchBar(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SearchBar(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        hintText: widget.searchHint,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Icon(Icons.search, color: colorScheme.onSurfaceVariant),
+        ),
+        trailing: [
+          if (_searchController.text.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 20),
+              onPressed: _clearSearch,
+            ),
+        ],
+        onChanged: _onSearchChanged,
+        elevation: const WidgetStatePropertyAll(0),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        backgroundColor: WidgetStatePropertyAll(
+          colorScheme.surfaceContainerHigh,
+        ),
+      ),
+    );
+  }
+
   Widget _buildBody(ColorScheme colorScheme, TextTheme textTheme) {
     // 首次加载 → 骨架屏
     if (_items.isEmpty && _isLoading) {
       return _buildSkeletonList(colorScheme);
+    }
+
+    // 搜索模式空结果
+    if (_items.isEmpty &&
+        !_isLoading &&
+        _isSearchMode &&
+        _searchQuery.isNotEmpty) {
+      return _buildSearchEmpty(colorScheme, textTheme);
     }
 
     // 空状态
@@ -256,7 +457,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       },
     );
 
-    if (widget.onRefresh != null) {
+    if (widget.onRefresh != null && !_isSearchMode) {
       return RefreshIndicator(
         onRefresh: _refresh,
         edgeOffset: 0,
@@ -274,6 +475,39 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: widget.skeletonCount,
       itemBuilder: (context, index) => widget.skeletonBuilder(colorScheme),
+    );
+  }
+
+  // ── 搜索空结果 ──
+  Widget _buildSearchEmpty(ColorScheme colorScheme, TextTheme textTheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '未找到相关结果',
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '尝试使用其他关键词搜索',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: .7),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

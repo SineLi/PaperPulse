@@ -171,6 +171,26 @@ class ArticleDatabaseIO {
     );
   }
 
+  /// 搜索文章（按标题、摘要、期刊名模糊匹配）
+  Future<List<Article>> searchArticles(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final db = await dbHelper.database;
+    final pattern = '%$query%';
+    final maps = await db.query(
+      Article.tableArticles,
+      where:
+          '${Article.colTitle} LIKE ? OR ${Article.colAbs} LIKE ? OR ${Article.colJournalName} LIKE ?',
+      whereArgs: [pattern, pattern, pattern],
+      orderBy: '${Article.colId} DESC',
+      limit: limit,
+      offset: offset,
+    );
+    return maps.map((map) => Article.fromMap(map)).toList();
+  }
+
   /// 获取所有没有缓存路径但有远程图片 URL 的文章
   Future<List<Map<String, dynamic>>> getUncachedImageArticles({
     int limit = 50,

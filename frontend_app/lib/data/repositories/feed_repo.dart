@@ -80,6 +80,29 @@ class FeedRepo {
     return enrichedArticles;
   }
 
+  /// 搜索本地文章（按标题/摘要/期刊名模糊匹配）
+  Future<List<Article>> searchLocalArticles(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    List<Article> articles = await _articleDatabaseIO.searchArticles(
+      query,
+      limit: limit,
+      offset: offset,
+    );
+
+    if (_journalRepo == null) return articles;
+
+    List<Article> enrichedArticles = [];
+    for (var article in articles) {
+      String publisher = await _getPublisher(article.journalId);
+      enrichedArticles.add(article.copyWith(publisher: publisher));
+    }
+
+    return enrichedArticles;
+  }
+
   Future<int> refreshArticles() async {
     final maxId = await _articleDatabaseIO.getMaxArticleId();
     int newArticlesCount = 0;

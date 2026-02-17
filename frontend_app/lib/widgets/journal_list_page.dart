@@ -7,14 +7,22 @@ import 'unified_list_page.dart';
 /// 加载期刊的回调：返回指定分页的期刊列表
 typedef JournalLoader = Future<List<Journal>> Function(int limit, int offset);
 
+/// 搜索期刊的回调
+typedef JournalSearcher =
+    Future<List<Journal>> Function(String query, int limit, int offset);
+
 /// 期刊列表页：基于 [UnifiedListPage] 的便捷封装，
 /// 内置 JournalCard 和期刊骨架屏。
 class JournalListPage extends StatelessWidget {
   final String title;
   final List<Widget>? actions;
   final JournalLoader loadJournals;
+  final JournalSearcher? searchJournals;
   final bool Function(int journalId) isFollowed;
   final Future<void> Function(Journal journal, bool follow)? onFollowChanged;
+  final VoidCallback? onFilter;
+  final bool filterActive;
+  final VoidCallback? onSettings;
   final IconData emptyIcon;
   final String emptyTitle;
   final String emptySubtitle;
@@ -25,8 +33,12 @@ class JournalListPage extends StatelessWidget {
     required this.title,
     required this.loadJournals,
     required this.isFollowed,
+    this.searchJournals,
     this.onFollowChanged,
     this.actions,
+    this.onFilter,
+    this.filterActive = false,
+    this.onSettings,
     this.emptyIcon = Icons.book_outlined,
     this.emptyTitle = '暂无期刊',
     this.emptySubtitle = '期刊数据加载中…',
@@ -39,6 +51,11 @@ class JournalListPage extends StatelessWidget {
       title: title,
       actions: actions,
       loadItems: loadJournals,
+      searchItems: searchJournals,
+      searchHint: '搜索期刊名称、缩写、出版商…',
+      onFilter: onFilter,
+      filterActive: filterActive,
+      onSettings: onSettings,
       emptyIcon: emptyIcon,
       emptyTitle: emptyTitle,
       emptySubtitle: emptySubtitle,

@@ -71,19 +71,18 @@ class _JournalPageState extends State<JournalPage> {
 
     return JournalListPage(
       title: '期刊',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.search_rounded),
-          tooltip: '搜索',
-          onPressed: () {
-            // TODO: implement journal search
-          },
-        ),
-      ],
       loadJournals: (limit, offset) =>
           journalRepo.getLocalJournals(limit: limit, offset: offset),
+      searchJournals: (query, limit, offset) =>
+          journalRepo.searchLocalJournals(query, limit: limit, offset: offset),
       isFollowed: (journalId) => _followedIds.contains(journalId),
       onFollowChanged: _handleFollowChanged,
+      onFilter: () {
+        // TODO: implement journal filter bottom sheet
+      },
+      onSettings: () {
+        // TODO: implement settings
+      },
       emptyIcon: Icons.book_outlined,
       emptyTitle: '暂无期刊',
       emptySubtitle: '期刊数据尚未同步',
