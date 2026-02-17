@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/auth/auth_services.dart';
 import '../data/models/user.dart';
 import '../data/repositories/journal_repo.dart';
+import '../data/repositories/user_repo.dart';
 import 'app_shell_page.dart';
 import 'login_page.dart';
 
@@ -22,16 +23,19 @@ class _BootstrapPageState extends State<BootstrapPage> {
     super.initState();
     final authServices = context.read<AuthServices>();
     final journalRepo = context.read<JournalRepo>();
-    _bootstrapFuture = _bootstrap(authServices, journalRepo);
+    final userRepo = context.read<UserRepo>();
+    _bootstrapFuture = _bootstrap(authServices, journalRepo, userRepo);
   }
 
   Future<User?> _bootstrap(
     AuthServices authServices,
     JournalRepo journalRepo,
+    UserRepo userRepo,
   ) async {
     final user = await authServices.tryGetCurrentUser();
     if (user != null) {
       await journalRepo.syncJournalsEmpty();
+      await userRepo.syncSubscribedJournalIds();
     }
     return user;
   }

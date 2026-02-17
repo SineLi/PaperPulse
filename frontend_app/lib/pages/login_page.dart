@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/repositories/journal_repo.dart';
+import '../data/repositories/user_repo.dart';
 import 'app_shell_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -169,6 +170,7 @@ class _LoginPageState extends State<LoginPage> {
 
     final authServices = context.read<AuthServices>();
     final journalRepo = context.read<JournalRepo>();
+    final userRepo = context.read<UserRepo>();
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
@@ -186,6 +188,7 @@ class _LoginPageState extends State<LoginPage> {
       await authServices.login(username: username, password: password);
       final currentUser = await authServices.tryGetCurrentUser();
       await journalRepo.syncJournalsEmpty();
+      await userRepo.syncSubscribedJournalIds();
 
       if (!mounted) return;
       ScaffoldMessenger.of(

@@ -33,6 +33,8 @@ class _JournalCardState extends State<JournalCard>
     String processed = name
         .replaceAll(RegExp(r'^The\s+', caseSensitive: false), '')
         .replaceAll(RegExp(r'^Journal of\s+', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+of\s+', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\s+and\s+', caseSensitive: false), ' ')
         .trim();
 
     if (processed.isEmpty) return name[0].toUpperCase();
