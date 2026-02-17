@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'fav_page.dart';
 import 'feed_page.dart';
+import 'journal_page.dart';
 
 class AppShellPage extends StatefulWidget {
   final String username;
@@ -17,11 +18,7 @@ class _AppShellPageState extends State<AppShellPage> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const _PlaceholderTab(
-        icon: Icons.book_rounded,
-        title: '期刊',
-        subtitle: '期刊页开发中',
-      ),
+      const JournalPage(),
       const FavPage(),
       FeedPage(username: widget.username),
     ];
