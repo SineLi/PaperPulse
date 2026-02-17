@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models/article.dart';
@@ -99,11 +100,12 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       ).showSnackBar(const SnackBar(content: Text('该文章没有 DOI')));
       return;
     }
-    final url = 'https://doi.org/$doi';
-    Clipboard.setData(ClipboardData(text: url));
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('已复制链接: $url')));
+    SharePlus.instance.share(
+      ShareParams(
+        text:
+            '${_viewData.displayJournalName} | ${_viewData.displayTitle ?? _viewData.article.title}: \n https://doi.org/$doi',
+      ),
+    );
   }
 
   @override
