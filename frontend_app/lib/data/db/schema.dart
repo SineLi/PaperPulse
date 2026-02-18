@@ -46,3 +46,10 @@ const String createSyncQueueTable = '''
      timestamp INTEGER NOT NULL
    );
  ''';
+
+const String createMetadataTable = '''
+   CREATE TABLE metadata (
+     key TEXT PRIMARY KEY,
+     value TEXT NOT NULL
+   );
+ ''';

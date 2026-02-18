@@ -104,8 +104,10 @@ class FeedRepo {
   }
 
   Future<int> refreshArticles() async {
-    final maxId = await _articleDatabaseIO.getMaxArticleId();
+    // 使用独立的 feed 同步 ID，不受收藏单篇拉取的影响
+    final lastSyncId = await _articleDatabaseIO.getLastFeedSyncId();
     int newArticlesCount = 0;
+    int maxSeenId = lastSyncId;
 
     for (var offset = 0; ; offset += 100) {
       final articles = await _feedService.fetchArticles(
@@ -116,15 +118,22 @@ class FeedRepo {
       if (articles.isEmpty) {
         break;
       }
-      if (articles.every((article) => article.articleId <= maxId)) {
+      if (articles.every((article) => article.articleId <= lastSyncId)) {
         break;
       }
       final newArticles = articles
-          .where((article) => article.articleId > maxId)
+          .where((article) => article.articleId > lastSyncId)
           .toList();
 
       await _articleDatabaseIO.addArticles(newArticles);
       newArticlesCount += newArticles.length;
+
+      // 记录本次刷新看到的最大 ID
+      for (var article in newArticles) {
+        if (article.articleId > maxSeenId) {
+          maxSeenId = article.articleId;
+        }
+      }
 
       // 后台预缓存新文章的图片
       if (_imageCacheService != null) {
@@ -141,6 +150,12 @@ class FeedRepo {
         );
       }
     }
+
+    // 更新 feed 同步 ID
+    if (maxSeenId > lastSyncId) {
+      await _articleDatabaseIO.setLastFeedSyncId(maxSeenId);
+    }
+
     // 刷新时重试之前下载失败的图片 + 数据库中未缓存的图片
     if (_imageCacheService != null) {
       _imageCacheService.retryFailedImages();

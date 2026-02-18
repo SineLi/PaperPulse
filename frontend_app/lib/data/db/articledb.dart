@@ -140,6 +140,32 @@ class ArticleDatabaseIO {
     });
   }
 
+  /// 获取上次 feed 批量刷新的最大 article_id
+  /// 与 getMaxArticleId 不同，此值只在 feed 刷新时更新，
+  /// 不受收藏同步单独拉取文章的影响
+  Future<int> getLastFeedSyncId() async {
+    final db = await dbHelper.database;
+    final result = await db.query(
+      'metadata',
+      where: 'key = ?',
+      whereArgs: ['last_feed_sync_id'],
+    );
+    if (result.isNotEmpty) {
+      return int.tryParse(result.first['value'] as String) ?? 0;
+    }
+    // 首次使用（如新安装后还没刷新过），回退到 0
+    return 0;
+  }
+
+  /// 更新 feed 批量刷新的最大 article_id
+  Future<void> setLastFeedSyncId(int id) async {
+    final db = await dbHelper.database;
+    await db.insert('metadata', {
+      'key': 'last_feed_sync_id',
+      'value': id.toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   Future<int> getMaxArticleId() async {
     final db = await dbHelper.database;
     final result = await db.rawQuery(
