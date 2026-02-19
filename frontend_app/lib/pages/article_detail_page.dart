@@ -41,8 +41,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   /// 用于 AnimatedSwitcher 的 key
   late ValueKey<int> _contentKey;
 
-  /// 边缘过度滚动阈值
-  static const double _overscrollThreshold = 120;
+  /// 边缘过度滚动阈值（由设置 swipeSensitivity 覆盖）
+  static const double _overscrollThresholdDefault = 120;
 
   /// 已达到阈值，等待松手后触发切换的方向: 1=下一篇, -1=上一篇, 0=无
   int _pendingDirection = 0;
@@ -75,6 +75,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
   /// 监听滚动：达到阈值时振动提示并显示 hint，松手时才真正切换
   bool _onScrollNotification(ScrollNotification notification) {
+    final settings = context.read<SettingsController>().setting;
+    final threshold = settings.swipeSensitivity.toDouble();
+
     if (notification is ScrollStartNotification) {
       _pendingDirection = 0;
       _showReleaseHint = false;
@@ -86,10 +89,12 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
       final metrics = notification.metrics;
 
-      // 顶端越界 → 准备上一篇
-      if (metrics.pixels < metrics.minScrollExtent && _currentIndex > 0) {
+      // 顶端越界 → 准备上一篇（受 swipeToChangeArticleUp 控制）
+      if (settings.swipeToChangeArticleUp &&
+          metrics.pixels < metrics.minScrollExtent &&
+          _currentIndex > 0) {
         final overscroll = metrics.minScrollExtent - metrics.pixels;
-        if (overscroll > _overscrollThreshold) {
+        if (overscroll > threshold) {
           if (!_hapticFired) {
             _hapticFired = true;
             HapticFeedback.mediumImpact();
@@ -108,11 +113,12 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           _hapticFired = false;
         }
       }
-      // 底端越界 → 准备下一篇
-      else if (metrics.pixels > metrics.maxScrollExtent &&
+      // 底端越界 → 准备下一篇（受 swipeToChangeArticleDown 控制）
+      else if (settings.swipeToChangeArticleDown &&
+          metrics.pixels > metrics.maxScrollExtent &&
           _currentIndex < widget.articles.length - 1) {
         final overscroll = metrics.pixels - metrics.maxScrollExtent;
-        if (overscroll > _overscrollThreshold) {
+        if (overscroll > threshold) {
           if (!_hapticFired) {
             _hapticFired = true;
             HapticFeedback.mediumImpact();
@@ -211,141 +217,143 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final textTheme = Theme.of(context).textTheme;
     final settings = context.watch<SettingsController>().setting;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // ── 主要内容 ──
-          Listener(
-            onPointerDown: (_) => _pointerIsDown = true,
-            onPointerUp: (_) => _triggerPendingSwitch(),
-            onPointerCancel: (_) => _triggerPendingSwitch(),
-            child: NotificationListener<ScrollNotification>(
-              onNotification: _onScrollNotification,
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
-                ),
-                slivers: [
-                  // AppBar — floating + snap，向下滚动隐藏，向上微滑即回
-                  SliverAppBar(
-                    floating: true,
-                    snap: true,
-                    title: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                    ),
-                    actions: [
-                      IconButton(
-                        icon: const Icon(Icons.open_in_browser_rounded),
-                        tooltip: '在浏览器中打开',
-                        onPressed: _shareDoi,
-                      ),
-                      const SizedBox(width: 4),
-                    ],
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // ── 主要内容 ──
+            Listener(
+              onPointerDown: (_) => _pointerIsDown = true,
+              onPointerUp: (_) => _triggerPendingSwitch(),
+              onPointerCancel: (_) => _triggerPendingSwitch(),
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _onScrollNotification,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
                   ),
-
-                  // 正文 — 带上下切换动画
-                  SliverToBoxAdapter(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) {
-                        final isIncoming = child.key == _contentKey;
-                        final offsetBegin = isIncoming
-                            ? Offset(0, _slideDirection * 0.12)
-                            : Offset(0, -_slideDirection * 0.12);
-                        return SlideTransition(
-                          position: Tween<Offset>(
-                            begin: offsetBegin,
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: _buildArticleContent(
-                        colorScheme,
-                        textTheme,
-                        settings,
-                        key: _contentKey,
+                  slivers: [
+                    // AppBar — floating + snap，向下滚动隐藏，向上微滑即回
+                    SliverAppBar(
+                      floating: true,
+                      snap: true,
+                      title: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
                       ),
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.open_in_browser_rounded),
+                          tooltip: '在浏览器中打开',
+                          onPressed: _shareDoi,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
 
-          // ── 切换提示 ──
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: _pendingDirection == 1 ? 0 : null,
-            top: _pendingDirection == -1 ? 0 : null,
-            child: IgnorePointer(
-              ignoring: true,
-              child: SafeArea(
-                bottom: _pendingDirection == 1,
-                top: _pendingDirection == -1,
-                child: Center(
-                  child: AnimatedOpacity(
-                    opacity: _showReleaseHint ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOut,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 12),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.inverseSurface,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _pendingDirection == -1
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            size: 18,
-                            color: colorScheme.onInverseSurface,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _pendingDirection == -1 ? '松手切换上一篇' : '松手切换下一篇',
-                            style: TextStyle(
-                              color: colorScheme.onInverseSurface,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                    // 正文 — 带上下切换动画
+                    SliverToBoxAdapter(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) {
+                          final isIncoming = child.key == _contentKey;
+                          final offsetBegin = isIncoming
+                              ? Offset(0, _slideDirection * 0.12)
+                              : Offset(0, -_slideDirection * 0.12);
+                          return SlideTransition(
+                            position: Tween<Offset>(
+                              begin: offsetBegin,
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: FadeTransition(
+                              opacity: animation,
+                              child: child,
                             ),
-                          ),
-                        ],
+                          );
+                        },
+                        child: _buildArticleContent(
+                          colorScheme,
+                          textTheme,
+                          settings,
+                          key: _contentKey,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── 切换提示 ──
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: _pendingDirection == 1 ? 0 : null,
+              top: _pendingDirection == -1 ? 0 : null,
+              child: IgnorePointer(
+                ignoring: true,
+                child: SafeArea(
+                  bottom: _pendingDirection == 1,
+                  top: _pendingDirection == -1,
+                  child: Center(
+                    child: AnimatedOpacity(
+                      opacity: _showReleaseHint ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOut,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.inverseSurface,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _pendingDirection == -1
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: colorScheme.onInverseSurface,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _pendingDirection == -1 ? '松手切换上一篇' : '松手切换下一篇',
+                              style: TextStyle(
+                                color: colorScheme.onInverseSurface,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // ── 底部功能栏 ──
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedSlide(
-              offset: _barsVisible ? Offset.zero : const Offset(0, 1),
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              child: _buildBottomBar(colorScheme, textTheme),
+            // ── 底部功能栏 ──
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedSlide(
+                offset: _barsVisible ? Offset.zero : const Offset(0, 1),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                child: _buildBottomBar(colorScheme, textTheme),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

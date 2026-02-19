@@ -14,6 +14,10 @@ class AppSetting {
   final bool headerBold;
   final bool titleBold;
   final bool wifiOnlyImages;
+  final bool swipeToChangeArticleUp;
+  final bool swipeToChangeArticleDown;
+  final int swipeSensitivity; // 50-200 px
+  final bool enablePredictiveBack;
 
   AppSetting({
     required this.themeMode,
@@ -25,6 +29,10 @@ class AppSetting {
     this.headerBold = true,
     this.titleBold = true,
     this.wifiOnlyImages = false,
+    this.swipeToChangeArticleUp = true,
+    this.swipeToChangeArticleDown = true,
+    this.swipeSensitivity = 120,
+    this.enablePredictiveBack = true,
   });
 
   AppSetting copyWith({
@@ -37,6 +45,10 @@ class AppSetting {
     bool? headerBold,
     bool? titleBold,
     bool? wifiOnlyImages,
+    bool? swipeToChangeArticleUp,
+    bool? swipeToChangeArticleDown,
+    int? swipeSensitivity,
+    bool? enablePredictiveBack,
   }) {
     return AppSetting(
       themeMode: themeMode ?? this.themeMode,
@@ -48,6 +60,12 @@ class AppSetting {
       headerBold: headerBold ?? this.headerBold,
       titleBold: titleBold ?? this.titleBold,
       wifiOnlyImages: wifiOnlyImages ?? this.wifiOnlyImages,
+      swipeToChangeArticleUp:
+          swipeToChangeArticleUp ?? this.swipeToChangeArticleUp,
+      swipeToChangeArticleDown:
+          swipeToChangeArticleDown ?? this.swipeToChangeArticleDown,
+      swipeSensitivity: swipeSensitivity ?? this.swipeSensitivity,
+      enablePredictiveBack: enablePredictiveBack ?? this.enablePredictiveBack,
     );
   }
 
@@ -73,7 +91,13 @@ class SettingStorage {
   static const String _keyHeaderBold = 'settings.headerBold';
   static const String _keyTitleBold = 'settings.titleBold';
   static const String _keyWifiOnlyImages = 'settings.wifiOnlyImages';
-
+  static const String _keySwipeToChangeArticleUp =
+      'settings.swipeToChangeArticleUp';
+  static const String _keySwipeToChangeArticleDown =
+      'settings.swipeToChangeArticleDown';
+  static const String _keySwipeSensitivity = 'settings.swipeSensitivity';
+  static const String _keyEnablePredictiveBack =
+      'settings.enablePredictiveBack';
   Future<AppSetting> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AppSetting(
@@ -86,6 +110,11 @@ class SettingStorage {
       headerBold: prefs.getBool(_keyHeaderBold) ?? true,
       titleBold: prefs.getBool(_keyTitleBold) ?? true,
       wifiOnlyImages: prefs.getBool(_keyWifiOnlyImages) ?? false,
+      swipeToChangeArticleUp: prefs.getBool(_keySwipeToChangeArticleUp) ?? true,
+      swipeToChangeArticleDown:
+          prefs.getBool(_keySwipeToChangeArticleDown) ?? true,
+      swipeSensitivity: prefs.getInt(_keySwipeSensitivity) ?? 140,
+      enablePredictiveBack: prefs.getBool(_keyEnablePredictiveBack) ?? true,
     );
   }
 
@@ -100,6 +129,16 @@ class SettingStorage {
     await prefs.setBool(_keyHeaderBold, setting.headerBold);
     await prefs.setBool(_keyTitleBold, setting.titleBold);
     await prefs.setBool(_keyWifiOnlyImages, setting.wifiOnlyImages);
+    await prefs.setBool(
+      _keySwipeToChangeArticleUp,
+      setting.swipeToChangeArticleUp,
+    );
+    await prefs.setBool(
+      _keySwipeToChangeArticleDown,
+      setting.swipeToChangeArticleDown,
+    );
+    await prefs.setInt(_keySwipeSensitivity, setting.swipeSensitivity);
+    await prefs.setBool(_keyEnablePredictiveBack, setting.enablePredictiveBack);
   }
 }
 
@@ -180,6 +219,30 @@ class SettingsController extends ChangeNotifier {
     await _storage.save(_setting);
     notifyListeners();
   }
+
+  Future<void> updateSwipeToChangeArticleUp(bool enabled) async {
+    _setting = _setting.copyWith(swipeToChangeArticleUp: enabled);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
+
+  Future<void> updateSwipeToChangeArticleDown(bool enabled) async {
+    _setting = _setting.copyWith(swipeToChangeArticleDown: enabled);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
+
+  Future<void> updateSwipeSensitivity(int sensitivity) async {
+    _setting = _setting.copyWith(swipeSensitivity: sensitivity);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
+
+  Future<void> updateEnablePredictiveBack(bool enabled) async {
+    _setting = _setting.copyWith(enablePredictiveBack: enabled);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -204,67 +267,70 @@ class SettingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>().setting;
 
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('设置')),
-          SliverList(
-            delegate: SliverChildListDelegate([
-              ListTile(
-                leading: const Icon(Icons.account_circle_outlined),
-                title: const Text('账户'),
-                subtitle: Text('账户信息，登录状态'),
-                // trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const AccountSettingsPage(),
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('设置')),
+            SliverList(
+              delegate: SliverChildListDelegate([
+                ListTile(
+                  leading: const Icon(Icons.account_circle_outlined),
+                  title: const Text('账户'),
+                  subtitle: Text('账户信息，登录状态'),
+                  // trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AccountSettingsPage(),
+                    ),
                   ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('外观'),
-                subtitle: Text('颜色，字体'),
-                // trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ThemeSettingsPage(),
+                ListTile(
+                  leading: const Icon(Icons.palette_outlined),
+                  title: const Text('外观'),
+                  subtitle: Text('颜色，字体'),
+                  // trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ThemeSettingsPage(),
+                    ),
                   ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.public_rounded),
-                title: const Text('网络'),
-                subtitle: Text('后端接口，图片下载'),
-                // trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const NetworkSettingsPage(),
+                ListTile(
+                  leading: const Icon(Icons.public_rounded),
+                  title: const Text('网络'),
+                  subtitle: Text('后端接口，图片下载'),
+                  // trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NetworkSettingsPage(),
+                    ),
                   ),
                 ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.gesture_outlined),
-                title: const Text('操作'),
-                subtitle: Text('手势，动画'),
-                // trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const OperationSettingsPage(),
+                ListTile(
+                  leading: const Icon(Icons.gesture_outlined),
+                  title: const Text('操作'),
+                  subtitle: Text('手势，动画'),
+                  // trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const OperationSettingsPage(),
+                    ),
                   ),
                 ),
-              ),
-              ListTile(
-                leading: Icon(Icons.info_outline_rounded),
-                title: Text('关于'),
-                subtitle: Text('PaperPulse v1.0'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const AboutPage()),
+                ListTile(
+                  leading: Icon(Icons.info_outline_rounded),
+                  title: Text('关于'),
+                  subtitle: Text('PaperPulse v1.0'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const AboutPage()),
+                  ),
                 ),
-              ),
-            ]),
-          ),
-        ],
+                SizedBox(height: 48),
+              ]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -278,12 +344,14 @@ class AccountSettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('账户')),
-          const SliverFillRemaining(child: Center(child: Text('敬请期待'))),
-        ],
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('账户')),
+            const SliverFillRemaining(child: Center(child: Text('敬请期待'))),
+          ],
+        ),
       ),
     );
   }
@@ -300,122 +368,126 @@ class ThemeSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>().setting;
 
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('外观')),
-          SliverList(
-            delegate: SliverChildListDelegate([
-              const _SettingsSectionHeader(title: '颜色'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment<int>(value: 0, label: Text('浅色')),
-                    ButtonSegment<int>(value: 1, label: Text('深色')),
-                    ButtonSegment<int>(value: 2, label: Text('跟随系统')),
-                  ],
-                  selected: <int>{settings.themeMode},
-                  onSelectionChanged: (selection) {
-                    context.read<SettingsController>().updateThemeMode(
-                      selection.first,
-                    );
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('外观')),
+            SliverList(
+              delegate: SliverChildListDelegate([
+                const _SettingsSectionHeader(title: '颜色'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment<int>(value: 0, label: Text('浅色')),
+                      ButtonSegment<int>(value: 1, label: Text('深色')),
+                      ButtonSegment<int>(value: 2, label: Text('跟随系统')),
+                    ],
+                    selected: <int>{settings.themeMode},
+                    onSelectionChanged: (selection) {
+                      context.read<SettingsController>().updateThemeMode(
+                        selection.first,
+                      );
+                    },
+                  ),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.contrast),
+                  title: const Text('AMOLED 深黑'),
+                  subtitle: const Text('仅在深色主题下生效'),
+                  value: settings.amoled,
+                  onChanged: (value) {
+                    context.read<SettingsController>().updateAmoled(value);
                   },
                 ),
-              ),
-              SwitchListTile(
-                secondary: const Icon(Icons.contrast),
-                title: const Text('AMOLED 深黑'),
-                subtitle: const Text('仅在深色主题下生效'),
-                value: settings.amoled,
-                onChanged: (value) {
-                  context.read<SettingsController>().updateAmoled(value);
-                },
-              ),
-              const _SettingsSectionHeader(title: '字体'),
+                const _SettingsSectionHeader(title: '字体'),
 
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Card(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '三体·黑暗森林',
-                            style: TextStyle(
-                              fontSize: settings.titleFontSize.toDouble(),
-                              fontWeight: settings.titleBold
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Card(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '三体·黑暗森林',
+                              style: TextStyle(
+                                fontSize: settings.titleFontSize.toDouble(),
+                                fontWeight: settings.titleBold
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '序章',
-                            style: TextStyle(
-                              fontSize: settings.headerFontSize.toDouble(),
-                              fontWeight: settings.headerBold
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: Theme.of(
-                                context,
-                              ).textTheme.bodyMedium?.color,
+                            const SizedBox(height: 6),
+                            Text(
+                              '序章',
+                              style: TextStyle(
+                                fontSize: settings.headerFontSize.toDouble(),
+                                fontWeight: settings.headerBold
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium?.color,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            """褐蚁已经忘记这里曾是它的家园。这段时光对于暮色中的大地和刚刚出现的星星来说短得可以忽略不计，但对于它来说却是漫长的。
+                            const SizedBox(height: 8),
+                            Text(
+                              """褐蚁已经忘记这里曾是它的家园。这段时光对于暮色中的大地和刚刚出现的星星来说短得可以忽略不计，但对于它来说却是漫长的。
 在那个已被忘却的日子里，它的世界颠覆了。泥土飞走，出现了一条又深又宽的峡谷，然后泥土又轰隆隆地飞回来，峡谷消失了，在原来峡谷的尽头出现了一座黑色的孤峰。其实，在这片广阔的疆域上，这种事常常发生，泥土飞走又飞回，峡谷出现又消失，然后是孤峰降临，好像是给每次灾变打上一个醒目的标记。褐蚁和几百个同族带着幸存的蚁后向太阳落下的方向走了一段路，建立了新的帝国。""",
-                            style: TextStyle(
-                              fontSize: settings.contentFontSize.toDouble(),
+                              style: TextStyle(
+                                fontSize: settings.contentFontSize.toDouble(),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              SizedBox(height: 12),
-              _FontSizeRow(
-                label: '正文',
-                value: settings.contentFontSize,
-                min: 12,
-                max: 24,
-                onSizeChanged: (v) =>
-                    context.read<SettingsController>().updateContentFontSize(v),
-              ),
-              _FontSizeRow(
-                label: '副标题',
-                value: settings.headerFontSize,
-                min: 16,
-                max: 32,
-                isBold: settings.headerBold,
-                showBoldToggle: true,
-                onSizeChanged: (v) =>
-                    context.read<SettingsController>().updateHeaderFontSize(v),
-                onBoldChanged: (b) =>
-                    context.read<SettingsController>().updateHeaderBold(b),
-              ),
-              _FontSizeRow(
-                label: '标题',
-                value: settings.titleFontSize,
-                min: 20,
-                max: 40,
-                isBold: settings.titleBold,
-                showBoldToggle: true,
-                onSizeChanged: (v) =>
-                    context.read<SettingsController>().updateTitleFontSize(v),
-                onBoldChanged: (b) =>
-                    context.read<SettingsController>().updateTitleBold(b),
-              ),
-            ]),
-          ),
-        ],
+                SizedBox(height: 12),
+                _FontSizeRow(
+                  label: '正文',
+                  value: settings.contentFontSize,
+                  min: 12,
+                  max: 24,
+                  onSizeChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateContentFontSize(v),
+                ),
+                _FontSizeRow(
+                  label: '副标题',
+                  value: settings.headerFontSize,
+                  min: 16,
+                  max: 32,
+                  isBold: settings.headerBold,
+                  showBoldToggle: true,
+                  onSizeChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateHeaderFontSize(v),
+                  onBoldChanged: (b) =>
+                      context.read<SettingsController>().updateHeaderBold(b),
+                ),
+                _FontSizeRow(
+                  label: '标题',
+                  value: settings.titleFontSize,
+                  min: 20,
+                  max: 40,
+                  isBold: settings.titleBold,
+                  showBoldToggle: true,
+                  onSizeChanged: (v) =>
+                      context.read<SettingsController>().updateTitleFontSize(v),
+                  onBoldChanged: (b) =>
+                      context.read<SettingsController>().updateTitleBold(b),
+                ),
+              ]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -472,50 +544,53 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>().setting;
 
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('网络')),
-          SliverList(
-            delegate: SliverChildListDelegate([
-              const _SettingsSectionHeader(title: 'API 接口'),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _baseUrlController,
-                      decoration: const InputDecoration(
-                        labelText: 'API Base URL',
-                        hintText: 'https://api.fooood.life',
-                        border: OutlineInputBorder(),
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('网络')),
+            SliverList(
+              delegate: SliverChildListDelegate([
+                const _SettingsSectionHeader(title: 'API 接口'),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _baseUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'API Base URL',
+                          hintText: 'https://api.fooood.life',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.url,
                       ),
-                      keyboardType: TextInputType.url,
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton(
-                        onPressed: _saveBaseUrl,
-                        child: const Text('保存'),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed: _saveBaseUrl,
+                          child: const Text('保存'),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const _SettingsSectionHeader(title: '图片下载'),
-              SwitchListTile(
-                secondary: const Icon(Icons.wifi_rounded),
-                title: const Text('仅在 Wi-Fi 下下载图片'),
-                subtitle: const Text('移动网络下将不加载封面与图形摘要'),
-                value: settings.wifiOnlyImages,
-                onChanged: (v) =>
-                    context.read<SettingsController>().updateWifiOnlyImages(v),
-              ),
-            ]),
-          ),
-        ],
+                const _SettingsSectionHeader(title: '图片下载'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.wifi_rounded),
+                  title: const Text('仅在 Wi-Fi 下下载图片'),
+                  subtitle: const Text('移动网络下将不加载封面与图形摘要'),
+                  value: settings.wifiOnlyImages,
+                  onChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateWifiOnlyImages(v),
+                ),
+              ]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -523,23 +598,72 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
 
 // ---------------------------------------------------------------------------
 // 操作子页
-
-class OperationSettingsPage extends StatelessWidget {
+class OperationSettingsPage extends StatefulWidget {
   const OperationSettingsPage({super.key});
 
   @override
+  State<OperationSettingsPage> createState() => _OperationSettingsPageState();
+}
+
+class _OperationSettingsPageState extends State<OperationSettingsPage> {
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('操作')),
-          const SliverFillRemaining(child: Center(child: Text('敬请期待'))),
-        ],
+    final settings = context.watch<SettingsController>().setting;
+
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('操作')),
+            SliverList(
+              delegate: SliverChildListDelegate([
+                const _SettingsSectionHeader(title: '手势'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.swipe_up_rounded),
+                  title: const Text('上滑切换文章'),
+                  subtitle: const Text('在底端继续向上滑动切换到下一篇文章'),
+                  value: settings.swipeToChangeArticleUp,
+                  onChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateSwipeToChangeArticleUp(v),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.swipe_down_rounded),
+                  title: const Text('下滑切换文章'),
+                  subtitle: const Text('在顶端继续向下滑动切换到上一篇文章'),
+                  value: settings.swipeToChangeArticleDown,
+                  onChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateSwipeToChangeArticleDown(v),
+                ),
+                SizedBox(height: 12),
+                _FontSizeRow(
+                  label: '滑动切换灵敏度',
+                  value: settings.swipeSensitivity,
+                  min: 50,
+                  max: 200,
+                  onSizeChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateSwipeSensitivity(v),
+                ),
+                const _SettingsSectionHeader(title: '动画'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.arrow_back),
+                  title: const Text('启用预测性返回动画'),
+                  subtitle: const Text('在支持的设备上，启用后在返回时可能会有更流畅的过渡动画'),
+                  value: settings.enablePredictiveBack,
+                  onChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateEnablePredictiveBack(v),
+                ),
+              ]),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-
 // ---------------------------------------------------------------------------
 // 关于页
 
@@ -548,19 +672,21 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          const SliverAppBar.large(title: Text('关于')),
-          const SliverFillRemaining(
-            child: Center(
-              child: Text(
-                'PaperPulse v1.0\nPowered by Flutter',
-                textAlign: TextAlign.center,
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('关于')),
+            const SliverFillRemaining(
+              child: Center(
+                child: Text(
+                  'PaperPulse v1.0\nPowered by Flutter',
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -673,6 +799,31 @@ class _FontSizeRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── 可预测返回作用域 ──
+/// 根据 [SettingsController.setting.enablePredictiveBack] 的值,
+/// 决定是否允许 Android 系统级可预测返回手势动画。
+/// 当关闭时, 用 [PopScope] 阻止系统预测预览, 但正常返回仍可用。
+class PredictiveBackScope extends StatelessWidget {
+  final Widget child;
+  const PredictiveBackScope({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = context
+        .watch<SettingsController>()
+        .setting
+        .enablePredictiveBack;
+    if (enabled) return child;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) Navigator.of(context).pop(result);
+      },
+      child: child,
     );
   }
 }
