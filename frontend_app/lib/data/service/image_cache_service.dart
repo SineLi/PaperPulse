@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -11,6 +12,9 @@ import '../models/article.dart';
 class ImageCacheService {
   final ArticleDatabaseIO _articleDb;
 
+  static const int _maxConcurrentDownloads = 3;
+  static const Duration _retryBatchDelay = Duration(milliseconds: 500);
+
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       '(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0';
@@ -20,6 +24,9 @@ class ImageCacheService {
 
   /// 记录下载失败的文章 (articleId -> url)，以便刷新时重试
   final Map<int, String> _failedArticles = {};
+
+  int _activeDownloads = 0;
+  final List<Completer<void>> _downloadWaiters = [];
 
   late final Future<Directory> _cacheDirFuture = _initCacheDir();
 
@@ -70,10 +77,11 @@ class ImageCacheService {
     }
     _downloading[url] = onCached != null ? [onCached] : [];
 
+    var slotAcquired = false;
     try {
       final cacheDir = await _cacheDirFuture;
       final ext = _extensionFromUrl(url);
-      final fileName = '${articleId}$ext';
+      final fileName = '$articleId$ext';
       final file = File(p.join(cacheDir.path, fileName));
 
       if (await file.exists()) {
@@ -82,6 +90,9 @@ class ImageCacheService {
         _notifyCallbacks(url, file.path);
         return;
       }
+
+      await _acquireDownloadSlot();
+      slotAcquired = true;
 
       final headers = _buildHeaders(url);
 
@@ -133,7 +144,34 @@ class ImageCacheService {
       print('Image download failed after $maxRetries retries: $url');
       _failedArticles[articleId] = url;
     } finally {
+      if (slotAcquired) {
+        _releaseDownloadSlot();
+      }
       _downloading.remove(url);
+    }
+  }
+
+  Future<void> _acquireDownloadSlot() async {
+    if (_activeDownloads < _maxConcurrentDownloads) {
+      _activeDownloads += 1;
+      return;
+    }
+
+    final waiter = Completer<void>();
+    _downloadWaiters.add(waiter);
+    await waiter.future;
+    _activeDownloads += 1;
+  }
+
+  void _releaseDownloadSlot() {
+    if (_activeDownloads > 0) {
+      _activeDownloads -= 1;
+    }
+    if (_downloadWaiters.isNotEmpty) {
+      final next = _downloadWaiters.removeAt(0);
+      if (!next.isCompleted) {
+        next.complete();
+      }
     }
   }
 
@@ -176,9 +214,13 @@ class ImageCacheService {
     for (final entry in toRetry.entries) {
       tasks.add(_downloadAndCache(entry.key, entry.value, null));
     }
-    final batches = _chunk(tasks, 4);
-    for (final batch in batches) {
+    final batches = _chunk(tasks, _maxConcurrentDownloads);
+    for (var i = 0; i < batches.length; i++) {
+      final batch = batches[i];
       await Future.wait(batch);
+      if (i < batches.length - 1) {
+        await Future.delayed(_retryBatchDelay);
+      }
     }
   }
 
@@ -208,14 +250,19 @@ class ImageCacheService {
       if (item.url == null || item.url!.isEmpty) continue;
       if (item.cachePath != null &&
           item.cachePath!.isNotEmpty &&
-          File(item.cachePath!).existsSync())
+          File(item.cachePath!).existsSync()) {
         continue;
+      }
       tasks.add(_downloadAndCache(item.articleId, item.url!, null));
     }
-    // 并发但限制为 4 个
-    final batches = _chunk(tasks, 4);
-    for (final batch in batches) {
+    // 并发但限制为 _maxConcurrentDownloads 个，并在批次间做短暂等待
+    final batches = _chunk(tasks, _maxConcurrentDownloads);
+    for (var i = 0; i < batches.length; i++) {
+      final batch = batches[i];
       await Future.wait(batch);
+      if (i < batches.length - 1) {
+        await Future.delayed(_retryBatchDelay);
+      }
     }
   }
 
