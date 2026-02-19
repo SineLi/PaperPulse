@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../pages/setting_page.dart';
+
 /// 加载数据的回调：返回指定分页的数据列表
 typedef ItemLoader<T> = Future<List<T>> Function(int limit, int offset);
 
@@ -294,22 +296,22 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
     // 筛选按钮
     if (widget.onFilter != null) {
-      actions.add(
-        IconButton(
-          icon: Icon(
-            widget.filterActive
-                ? Icons.filter_list
-                : Icons.filter_list_outlined,
-          ),
-          tooltip: '筛选',
-          onPressed: widget.onFilter,
-          style: widget.filterActive
-              ? IconButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                )
-              : null,
-        ),
-      );
+      // actions.add(
+      //   IconButton(
+      //     icon: Icon(
+      //       widget.filterActive
+      //           ? Icons.filter_list
+      //           : Icons.filter_list_outlined,
+      //     ),
+      //     tooltip: '筛选',
+      //     onPressed: widget.onFilter,
+      //     style: widget.filterActive
+      //         ? IconButton.styleFrom(
+      //             foregroundColor: Theme.of(context).colorScheme.primary,
+      //           )
+      //         : null,
+      //   ),
+      // );
     }
 
     // 搜索按钮
@@ -331,7 +333,12 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         IconButton(
           icon: const Icon(Icons.settings_outlined),
           tooltip: '设置',
-          onPressed: widget.onSettings,
+          onPressed: 
+        () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const SettingPage()),
+          );
+        }
         ),
       );
     }

@@ -20,9 +20,9 @@ import 'data/service/image_cache_service.dart';
 import 'data/repositories/user_repo.dart';
 
 import 'pages/login_page.dart';
-import 'pages/signup_page.dart';
 import 'pages/bootstrap_page.dart';
 import 'pages/app_shell_page.dart';
+import 'pages/setting_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -130,38 +130,51 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
         );
 
-        return Provider<AuthServices>.value(
-          value: authServices,
-          child: Provider<ArticleDatabaseIO>.value(
-            value: articleDb,
-            child: Provider<JournalRepo>.value(
-              value: journalRepo,
-              child: Provider<UserRepo>.value(
-                value: userRepo,
-                child: Provider<FeedRepo>.value(
-                  value: feedRepo,
-                  child: Provider<SyncService>.value(
-                    value: syncService,
-                    child: Provider<ImageCacheService>.value(
-                      value: imageCacheService,
-                      child: MaterialApp(
-                        title: 'Advanced News Feed',
-                        theme: ThemeData(
-                          colorScheme: lightColorScheme,
-                          useMaterial3: true,
-                          snackBarTheme: snackBarTheme,
+        return ChangeNotifierProvider(
+          create: (_) => SettingsController(SettingStorage())..load(),
+          child: Provider<AuthServices>.value(
+            value: authServices,
+            child: Provider<ArticleDatabaseIO>.value(
+              value: articleDb,
+              child: Provider<JournalRepo>.value(
+                value: journalRepo,
+                child: Provider<UserRepo>.value(
+                  value: userRepo,
+                  child: Provider<FeedRepo>.value(
+                    value: feedRepo,
+                    child: Provider<SyncService>.value(
+                      value: syncService,
+                      child: Provider<ImageCacheService>.value(
+                        value: imageCacheService,
+                        child: Consumer<SettingsController>(
+                          builder: (context, settingsCtrl, _) {
+                            // 同步 Wi-Fi 专属下载设置到图片缓存服务
+                            imageCacheService.wifiOnly =
+                                settingsCtrl.setting.wifiOnlyImages;
+                            return MaterialApp(
+                              title: 'PaperPulse',
+                              theme: ThemeData(
+                                colorScheme: lightColorScheme,
+                                useMaterial3: true,
+                                snackBarTheme: snackBarTheme,
+                              ),
+                              darkTheme: ThemeData(
+                                colorScheme: darkColorScheme,
+                                useMaterial3: true,
+                                snackBarTheme: snackBarTheme,
+                              ),
+                              themeMode: context
+                                  .watch<SettingsController>()
+                                  .themeMode,
+                              home: const BootstrapPage(),
+                              routes: {
+                                '/feed': (context) => const AppShellPage(),
+                                '/login': (context) => const LoginPage(),
+                                '/settings': (context) => const SettingPage(),
+                              },
+                            );
+                          },
                         ),
-                        darkTheme: ThemeData(
-                          colorScheme: darkColorScheme,
-                          useMaterial3: true,
-                          snackBarTheme: snackBarTheme,
-                        ),
-                        themeMode: ThemeMode.system,
-                        home: const BootstrapPage(),
-                        routes: {
-                          '/feed': (context) => const AppShellPage(),
-                          '/login': (context) => const LoginPage(),
-                        },
                       ),
                     ),
                   ),

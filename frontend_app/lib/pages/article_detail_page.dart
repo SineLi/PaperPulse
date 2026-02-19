@@ -7,6 +7,7 @@ import '../data/models/article.dart';
 import '../data/models/article_view_data.dart';
 import '../data/db/articledb.dart';
 import '../widgets/cached_image.dart';
+import 'setting_page.dart';
 
 /// 文章详情页
 ///
@@ -208,6 +209,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final settings = context.watch<SettingsController>().setting;
 
     return Scaffold(
       body: Stack(
@@ -267,6 +269,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                       child: _buildArticleContent(
                         colorScheme,
                         textTheme,
+                        settings,
                         key: _contentKey,
                       ),
                     ),
@@ -350,7 +353,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   // ── 文章正文内容（独立 widget 方便做 AnimatedSwitcher） ──
   Widget _buildArticleContent(
     ColorScheme colorScheme,
-    TextTheme textTheme, {
+    TextTheme textTheme,
+    AppSetting settings, {
     required Key key,
   }) {
     return KeyedSubtree(
@@ -370,8 +374,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             Text(
               _viewData.displayTitle ?? _viewData.article.title,
               style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                fontSize: 28,
+                fontWeight: settings.titleBold
+                    ? FontWeight.w800
+                    : FontWeight.w400,
+                fontSize: settings.titleFontSize.toDouble(),
                 height: 1.4,
                 letterSpacing: -0.3,
                 color: colorScheme.onSurface,
@@ -400,6 +406,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 _viewData.displaySummary!,
                 colorScheme,
                 textTheme,
+                settings,
               ),
 
             // ── 亮点 ──
@@ -410,17 +417,18 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 _viewData.displayHighlights!,
                 colorScheme,
                 textTheme,
+                settings,
               ),
 
             // ── 创新点 ──
             if (_viewData.displayInnovations != null &&
                 _viewData.displayInnovations!.isNotEmpty)
-              _buildInnovations(colorScheme, textTheme),
+              _buildInnovations(colorScheme, textTheme, settings),
 
             // ── 图形摘要 ──
             if (_viewData.graphicalAbsUrl != null &&
                 _viewData.graphicalAbsUrl!.isNotEmpty)
-              _buildGraphicalAbstract(colorScheme, textTheme),
+              _buildGraphicalAbstract(colorScheme, textTheme, settings),
 
             // 底部留白
             const SizedBox(height: 100),
@@ -549,6 +557,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     String content,
     ColorScheme colorScheme,
     TextTheme textTheme,
+    AppSetting settings,
   ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
@@ -558,8 +567,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           Text(
             title,
             style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 24,
+              fontWeight: settings.headerBold
+                  ? FontWeight.w800
+                  : FontWeight.w400,
+              fontSize: settings.headerFontSize.toDouble(),
               color: colorScheme.onSurface,
             ),
           ),
@@ -568,7 +579,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             content,
             style: textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
-              fontSize: 16,
+              fontSize: settings.contentFontSize.toDouble(),
               height: 1.75,
               letterSpacing: 0.1,
             ),
@@ -579,7 +590,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   // ── 创新点列表 ──
-  Widget _buildInnovations(ColorScheme colorScheme, TextTheme textTheme) {
+  Widget _buildInnovations(
+    ColorScheme colorScheme,
+    TextTheme textTheme,
+    AppSetting settings,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
@@ -588,8 +603,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           Text(
             '创新点',
             style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 24,
+              fontWeight: settings.headerBold
+                  ? FontWeight.w800
+                  : FontWeight.w400,
+              fontSize: settings.headerFontSize.toDouble(),
               color: colorScheme.onSurface,
             ),
           ),
@@ -615,7 +632,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                       entry.value,
                       style: textTheme.bodyLarge?.copyWith(
                         color: colorScheme.onSurfaceVariant,
-                        fontSize: 15,
+                        fontSize: settings.contentFontSize.toDouble(),
                         height: 1.65,
                         letterSpacing: 0.1,
                       ),
@@ -631,7 +648,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   // ── 图形摘要 ──
-  Widget _buildGraphicalAbstract(ColorScheme colorScheme, TextTheme textTheme) {
+  Widget _buildGraphicalAbstract(
+    ColorScheme colorScheme,
+    TextTheme textTheme,
+    AppSetting settings,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
@@ -640,8 +661,10 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           Text(
             '图形摘要',
             style: textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              fontSize: 24,
+              fontWeight: settings.headerBold
+                  ? FontWeight.w800
+                  : FontWeight.w400,
+              fontSize: settings.headerFontSize.toDouble(),
               color: colorScheme.onSurface,
             ),
           ),

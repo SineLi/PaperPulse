@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -28,6 +29,9 @@ class ImageCacheService {
   int _activeDownloads = 0;
   final List<Completer<void>> _downloadWaiters = [];
 
+  /// 仅在 Wi-Fi 下下载图片（由 SettingsController 同步更新）
+  bool wifiOnly = false;
+
   late final Future<Directory> _cacheDirFuture = _initCacheDir();
 
   ImageCacheService({required ArticleDatabaseIO articleDb})
@@ -45,11 +49,13 @@ class ImageCacheService {
   /// 获取文章图片的本地缓存路径。
   /// 如果已缓存则直接返回路径；否则后台下载并返回 null。
   /// [onCached] 下载完成后的回调（可用于刷新 UI）。
+  /// [wifiOnly] 为 true 时仅在 Wi-Fi 下触发下载。
   String? getCachedPath({
     required int articleId,
     required String url,
     String? existingCachePath,
     void Function(String path)? onCached,
+    bool? wifiOnly,
   }) {
     // 已有缓存路径且文件存在
     if (existingCachePath != null && existingCachePath.isNotEmpty) {
@@ -59,15 +65,23 @@ class ImageCacheService {
     }
 
     // 触发后台下载
-    _downloadAndCache(articleId, url, onCached);
+    _downloadAndCache(articleId, url, onCached,
+        wifiOnly: wifiOnly ?? this.wifiOnly);
     return null;
   }
 
   Future<void> _downloadAndCache(
     int articleId,
     String url,
-    void Function(String path)? onCached,
-  ) async {
+    void Function(String path)? onCached, {
+    bool wifiOnly = false,
+  }) async {
+    // Wi-Fi 专属模式：非 Wi-Fi 网络时跳过下载
+    if (wifiOnly) {
+      final result = await Connectivity().checkConnectivity();
+      final isWifi = result.contains(ConnectivityResult.wifi);
+      if (!isWifi) return;
+    }
     // 已在下载中 → 注册回调后返回，由先前的下载任务负责通知
     if (_downloading.containsKey(url)) {
       if (onCached != null) {
@@ -243,9 +257,15 @@ class ImageCacheService {
 
   /// 批量预缓存多篇文章的图片
   Future<void> precacheArticles(
-    List<({int articleId, String? url, String? cachePath})> items,
-  ) async {
-    final tasks = <Future<void>>[];
+    List<({int articleId, String? url, String? cachePath})> items, {
+    bool? wifiOnly,
+  }) async {
+    if (wifiOnly ?? this.wifiOnly) {
+      final result = await Connectivity().checkConnectivity();
+      final isWifi = result.contains(ConnectivityResult.wifi);
+      if (!isWifi) return;
+    }
+    final tasks = <Future<void>>[]; 
     for (final item in items) {
       if (item.url == null || item.url!.isEmpty) continue;
       if (item.cachePath != null &&
