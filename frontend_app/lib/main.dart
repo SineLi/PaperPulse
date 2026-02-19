@@ -17,7 +17,6 @@ import 'data/service/journal_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 import 'data/service/image_cache_service.dart';
-import 'data/repositories/user_repo.dart';
 
 import 'pages/login_page.dart';
 import 'pages/bootstrap_page.dart';

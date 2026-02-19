@@ -40,6 +40,14 @@ dependencies:
   path: ^1.9.1
   sqflite: ^2.4.2
   flutter_secure_storage: ^10.0.0
+  provider: ^6.1.5+1
+  dynamic_color: ^1.8.1
+  intl: ^0.20.2
+  timeago: ^3.7.1
+  share_plus: ^11.1.0
+  shared_preferences: ^2.5.4
+  flutter_svg: ^2.2.3
+  connectivity_plus: ^7.0.0
 
 dev_dependencies:
   flutter_test:
@@ -93,3 +101,5 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  assets:
+    - assets/logo.svg

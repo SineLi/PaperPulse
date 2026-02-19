@@ -683,7 +683,11 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         controller: _baseUrlController,
                         decoration: const InputDecoration(
                           labelText: 'API Base URL',
+<<<<<<< HEAD
                           hintText: '',
+=======
+                          hintText: 'https://api.fooood.life',
+>>>>>>> parent of 3308df9 (Revert "Flutter/UI")
                           border: OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.url,

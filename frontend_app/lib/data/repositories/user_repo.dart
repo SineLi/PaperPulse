@@ -28,12 +28,12 @@ class UserRepo {
   Future<void> followJournal(int journalId) async {
     await _userServices.followJournal(journalId);
     await _subscriptionDatabaseIO.addSubscriptions([journalId]);
-    _feedRepo.refreshArticles();
+    await _feedRepo.refreshArticles();
   }
 
   Future<void> unfollowJournal(int journalId) async {
     await _userServices.unfollowJournal(journalId);
     await _subscriptionDatabaseIO.removeSubscription(journalId);
-    _feedRepo.refreshArticles();
+    await _feedRepo.refreshArticles();
   }
 }

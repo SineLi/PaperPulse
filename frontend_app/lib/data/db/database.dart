@@ -21,12 +21,27 @@ class DatabaseHelper {
     );
     final db = await openDatabase(
       dbFileDir,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute(createArticlesTable);
         await db.execute(createJournalsTable);
         await db.execute(createSyncQueueTable);
         await db.execute(createUserSubscriptionsTable);
+        await db.execute(createMetadataTable);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(createMetadataTable);
+          // 用当前 max article_id 初始化 last_feed_sync_id，保证向后兼容
+          final result = await db.rawQuery(
+            'SELECT MAX(article_id) as max_id FROM articles',
+          );
+          final maxId = result.first['max_id'] as int? ?? 0;
+          await db.insert('metadata', {
+            'key': 'last_feed_sync_id',
+            'value': maxId.toString(),
+          });
+        }
       },
     );
     return db;
@@ -38,10 +53,12 @@ class DatabaseHelper {
     await db.execute('DROP TABLE IF EXISTS journals');
     await db.execute('DROP TABLE IF EXISTS sync_queue');
     await db.execute('DROP TABLE IF EXISTS user_subscriptions');
+    await db.execute('DROP TABLE IF EXISTS metadata');
     await db.execute(createArticlesTable);
     await db.execute(createJournalsTable);
     await db.execute(createSyncQueueTable);
     await db.execute(createUserSubscriptionsTable);
+    await db.execute(createMetadataTable);
   }
 
   Future<void> dbCheck() async {
