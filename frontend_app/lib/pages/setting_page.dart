@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
@@ -798,12 +799,18 @@ class AboutPage extends StatelessWidget {
         body: CustomScrollView(
           slivers: [
             const SliverAppBar.large(title: Text('关于')),
-            const SliverFillRemaining(
-              child: Center(
-                child: Text(
-                  'PaperPulse v1.0\nPowered by Flutter',
-                  textAlign: TextAlign.center,
-                ),
+            SliverFillRemaining(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SvgPicture.asset('assets/logo.svg', width: 80),
+                  SizedBox(height: 20),
+                  Text(
+                    'PaperPulse v0.0.1\nPowered by Flutter',
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 120),
+                ],
               ),
             ),
           ],

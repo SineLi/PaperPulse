@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/repositories/feed_repo.dart';
@@ -46,10 +47,9 @@ class _LoginPageState extends State<LoginPage> {
                       color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    child: Icon(
-                      Icons.rss_feed_rounded,
-                      size: 40,
-                      color: colorScheme.onPrimaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SvgPicture.asset('assets/logo.svg'),
                     ),
                   ),
                   const SizedBox(height: 20),
