@@ -19,23 +19,6 @@ class JournalRepo {
     return await _journalDatabaseIO.getJournals(limit: limit, offset: offset);
   }
 
-  Future<Journal?> getLocalJournalById(int journalId) async {
-    return await _journalDatabaseIO.getJournal(journalId);
-  }
-
-  /// 搜索本地期刊（按名称/缩写/出版商模糊匹配）
-  Future<List<Journal>> searchLocalJournals(
-    String query, {
-    int limit = 50,
-    int offset = 0,
-  }) async {
-    return await _journalDatabaseIO.searchJournals(
-      query,
-      limit: limit,
-      offset: offset,
-    );
-  }
-
   Future<int> syncJournalsEmpty({int pageSize = 1000}) async {
     final localCount = await _journalDatabaseIO.getJournalCount();
     if (localCount > 0) {

@@ -29,7 +29,6 @@ class Article {
   final String journalName;
   final String journalAbbreviation;
   final String doi;
-  final String publisher;
   final bool isFavorite;
   final bool isRead;
 
@@ -46,36 +45,9 @@ class Article {
     required this.journalName,
     required this.journalAbbreviation,
     required this.doi,
-    this.publisher = '',
     this.isFavorite = false,
     this.isRead = false,
   });
-
-  Article copyWith({
-    String? publisher,
-    bool? isFavorite,
-    bool? isRead,
-    String? graphicalAbstractCachePath,
-  }) {
-    return Article(
-      articleId: articleId,
-      title: title,
-      abs: abs,
-      summary: summary,
-      graphicalAbstractUrl: graphicalAbstractUrl,
-      graphicalAbstractCachePath:
-          graphicalAbstractCachePath ?? this.graphicalAbstractCachePath,
-      publishedDate: publishedDate,
-      authors: authors,
-      journalId: journalId,
-      journalName: journalName,
-      journalAbbreviation: journalAbbreviation,
-      doi: doi,
-      publisher: publisher ?? this.publisher,
-      isFavorite: isFavorite ?? this.isFavorite,
-      isRead: isRead ?? this.isRead,
-    );
-  }
 
   Map<String, Object?> toMap() {
     return {
