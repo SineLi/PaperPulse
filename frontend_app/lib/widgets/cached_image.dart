@@ -53,8 +53,6 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
 
   Future<void> _resolveImage() async {
     final wifiOnly = context.read<SettingsController>().setting.wifiOnlyImages;
-<<<<<<< HEAD
-=======
 
     // Wi-Fi 专属：非 WiFi 时不加载
     if (wifiOnly) {
@@ -66,7 +64,6 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       }
     }
 
->>>>>>> f71c03513d0e278f44b220855a048276e92d8df1
     final cacheService = context.read<ImageCacheService>();
 
     // 先尝试获取本地缓存路径（不触发下载，仅查文件）
@@ -79,26 +76,8 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         if (mounted) setState(() => _localPath = path);
       },
     );
-<<<<<<< HEAD
-
-    // 已有本地缓存文件，直接展示，无需检查网络
     if (cached != null && mounted) {
       setState(() => _localPath = cached);
-      return;
-    }
-
-    // 无本地缓存，需要走网络下载时才检查 Wi-Fi 限制
-    if (wifiOnly) {
-      final result = await Connectivity().checkConnectivity();
-      final isWifi = result.contains(ConnectivityResult.wifi);
-      if (!isWifi) {
-        if (mounted) setState(() => _blockedByWifi = true);
-        return;
-      }
-=======
-    if (cached != null && mounted) {
-      setState(() => _localPath = cached);
->>>>>>> f71c03513d0e278f44b220855a048276e92d8df1
     }
   }
 
