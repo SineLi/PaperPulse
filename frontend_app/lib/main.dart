@@ -132,7 +132,7 @@ class MyApp extends StatelessWidget {
 
         return ChangeNotifierProvider(
           create: (_) => SettingsController(SettingStorage())..load(),
-          child: Provider<AuthServices>.value(
+          child: ChangeNotifierProvider<AuthServices>.value(
             value: authServices,
             child: Provider<ArticleDatabaseIO>.value(
               value: articleDb,
