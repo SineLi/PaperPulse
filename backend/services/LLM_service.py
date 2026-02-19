@@ -150,14 +150,9 @@ class LLMService:
         """从 API 获取批处理结果"""
         batch = self.app.batches.retrieve(batch_id)
         if batch.status == "completed":
-            if batch.output_file_id:
-                return self.app.files.content(batch.output_file_id).text
-            else:
-                logger.error(f"Batch {batch_id} status is 'completed' but output_file_id is None. Clearing status for retry.")
-                self.repo.clear_batch_llm_status(batch_id)
-                return None
+            return self.app.files.content(batch.output_file_id).text
         elif batch.status in ["failed", "expired", "cancelled"]:
-            self.repo.clear_batch_llm_status(batch_id)
+            self.repo.clear_article_llm_status(batch_id)
             raise Exception(f"Batch {batch_id} ended with status: {batch.status}")
         return None # 仍在处理中
 
