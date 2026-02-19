@@ -49,7 +49,7 @@ class ArticleSummary {
         );
       }
 
-      List<String>? _list(dynamic v) {
+      List<String>? list(dynamic v) {
         if (v is List) return v.map((e) => e.toString()).toList();
         return null;
       }
@@ -58,9 +58,9 @@ class ArticleSummary {
         title: json['title']?.toString(),
         summary: json['summary']?.toString(),
         highlights: json['highlights']?.toString(),
-        innovations: _list(json['innovations']),
+        innovations: list(json['innovations']),
         maintag: json['maintag']?.toString(),
-        subtags: _list(json['subtags']),
+        subtags: list(json['subtags']),
       );
     } catch (_) {
       return ArticleSummary(

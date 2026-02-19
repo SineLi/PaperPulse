@@ -208,7 +208,7 @@ class ArticleDatabaseIO {
     final maps = await db.query(
       Article.tableArticles,
       where:
-          '${Article.colTitle} LIKE ? OR ${Article.colAbs} LIKE ? OR ${Article.colJournalName} LIKE ?',
+          '${Article.colSummary} LIKE ? OR ${Article.colTitle} LIKE ? OR ${Article.colJournalName} LIKE ?',
       whereArgs: [pattern, pattern, pattern],
       orderBy: '${Article.colId} DESC',
       limit: limit,
