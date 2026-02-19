@@ -106,7 +106,7 @@ class SettingStorage {
     return AppSetting(
       themeMode: prefs.getInt(_keyThemeMode) ?? 2,
       amoled: prefs.getBool(_keyAmoled) ?? false,
-      baseURL: prefs.getString(_keyBaseURL) ?? 'https://api.fooood.life',
+      baseURL: prefs.getString(_keyBaseURL) ?? '',
       contentFontSize: prefs.getInt(_keyContentFontSize) ?? 16,
       headerFontSize: prefs.getInt(_keyHeaderFontSize) ?? 24,
       titleFontSize: prefs.getInt(_keyTitleFontSize) ?? 28,
@@ -151,7 +151,7 @@ class SettingsController extends ChangeNotifier {
   final SettingStorage _storage;
   AppSetting _setting = AppSetting(
     themeMode: 2,
-    baseURL: 'https://api.fooood.life',
+    baseURL: '',
     amoled: false,
     contentFontSize: 16,
     headerFontSize: 24,
@@ -683,7 +683,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         controller: _baseUrlController,
                         decoration: const InputDecoration(
                           labelText: 'API Base URL',
-                          hintText: 'https://api.fooood.life',
+                          hintText: '',
                           border: OutlineInputBorder(),
                         ),
                         keyboardType: TextInputType.url,

@@ -28,10 +28,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final authStorage = AuthStorage();
-  final apiClient = ApiClient(
-    baseUrl: 'https://api.fooood.life',
-    authStorage: authStorage,
-  );
+  final apiClient = ApiClient(baseUrl: '', authStorage: authStorage);
 
   final userServices = UserServices(apiClient: apiClient);
   final authServices = AuthServices(
