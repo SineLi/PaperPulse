@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/service/image_cache_service.dart';
+import '../pages/setting_page.dart';
 
 /// 优先从本地缓存加载图片，未缓存时显示网络图片并触发后台缓存。
 class CachedArticleImage extends StatefulWidget {
@@ -29,6 +31,7 @@ class CachedArticleImage extends StatefulWidget {
 class _CachedArticleImageState extends State<CachedArticleImage> {
   String? _localPath;
   bool _networkFailed = false;
+  bool _blockedByWifi = false;
 
   @override
   void initState() {
@@ -43,22 +46,36 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         oldWidget.imageUrl != widget.imageUrl) {
       _localPath = null;
       _networkFailed = false;
+      _blockedByWifi = false;
       _resolveImage();
     }
   }
 
-  void _resolveImage() {
+  Future<void> _resolveImage() async {
+    final wifiOnly = context.read<SettingsController>().setting.wifiOnlyImages;
+
+    // Wi-Fi 专属：非 WiFi 时不加载
+    if (wifiOnly) {
+      final result = await Connectivity().checkConnectivity();
+      final isWifi = result.contains(ConnectivityResult.wifi);
+      if (!isWifi) {
+        if (mounted) setState(() => _blockedByWifi = true);
+        return;
+      }
+    }
+
     final cacheService = context.read<ImageCacheService>();
     final cached = cacheService.getCachedPath(
       articleId: widget.articleId,
       url: widget.imageUrl,
       existingCachePath: widget.cachePath,
+      wifiOnly: wifiOnly,
       onCached: (path) {
         if (mounted) setState(() => _localPath = path);
       },
     );
-    if (cached != null) {
-      _localPath = cached;
+    if (cached != null && mounted) {
+      setState(() => _localPath = cached);
     }
   }
 
@@ -66,6 +83,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     setState(() {
       _localPath = null;
       _networkFailed = false;
+      _blockedByWifi = false;
     });
     _resolveImage();
   }
@@ -84,6 +102,11 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         errorBuilder: (context, error, stackTrace) =>
             _buildPlaceholder(colorScheme, tappable: true),
       );
+    }
+
+    // 仅 Wi-Fi 模式：当前非 WiFi，展示提示占位符
+    if (_blockedByWifi) {
+      return _buildWifiPlaceholder(colorScheme);
     }
 
     // 回退到网络图片
@@ -128,6 +151,32 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       return GestureDetector(onTap: _retry, child: placeholder);
     }
     return placeholder;
+  }
+
+  Widget _buildWifiPlaceholder(ColorScheme colorScheme) {
+    return GestureDetector(
+      onTap: _retry, // 点击可尝试重新检测网络并重试
+      child: Container(
+        width: widget.width,
+        height: widget.height,
+        color: colorScheme.surfaceContainerHighest,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.wifi_off_rounded,
+              color: colorScheme.outlineVariant,
+              size: 24,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '仅 Wi-Fi',
+              style: TextStyle(fontSize: 11, color: colorScheme.outlineVariant),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildLoading(ColorScheme colorScheme, ImageChunkEvent progress) {
