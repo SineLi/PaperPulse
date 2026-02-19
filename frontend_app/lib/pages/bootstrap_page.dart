@@ -68,14 +68,28 @@ class _BootstrapPageState extends State<BootstrapPage> {
         }
 
         if (snapshot.hasError) {
-          return const LoginPage();
+          // 网络错误但本地有 token → 仍然进入主界面（离线模式）
+          return FutureBuilder<bool>(
+            future: context.read<AuthServices>().hasToken(),
+            builder: (context, tokenSnapshot) {
+              if (tokenSnapshot.connectionState != ConnectionState.done) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (tokenSnapshot.data == true) {
+                return const AppShellPage();
+              }
+              return const LoginPage();
+            },
+          );
         }
 
-        // 已登录 -> Feed；未登录 -> Login
-        final user = snapshot.data;
-        if (user == null) {
-          return const LoginPage();
-        }
+        // // 已登录 -> Feed；未登录 -> Login
+        // final user = snapshot.data;
+        // if (user == null) {
+        //   return const LoginPage();
+        // }
         return AppShellPage();
       },
     );

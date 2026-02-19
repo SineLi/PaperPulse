@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/auth/auth_services.dart';
 import '../data/models/journal.dart';
 import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';

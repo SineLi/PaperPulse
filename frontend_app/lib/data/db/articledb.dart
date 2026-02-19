@@ -233,4 +233,12 @@ class ArticleDatabaseIO {
       orderBy: '${Article.colId} DESC',
     );
   }
+
+  /// 清空所有文章数据和同步队列
+  Future<void> clearAll() async {
+    final db = await dbHelper.database;
+    await db.delete(Article.tableArticles);
+    await db.delete('sync_queue');
+    await db.delete('metadata');
+  }
 }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../api/client.dart';
 import 'auth_storage.dart';
 import '../models/user.dart';
@@ -40,6 +42,12 @@ class AuthServices {
     await _authStorage.deleteToken();
   }
 
+  /// 检查本地是否存有 token（不验证有效性）
+  Future<bool> hasToken() async {
+    final token = await _authStorage.getToken();
+    return token != null && token.isNotEmpty;
+  }
+
   Future<void> register(String username, String email, String password) async {
     final Map<String, dynamic> registerRequest = {
       "username": username,
@@ -63,6 +71,10 @@ class AuthServices {
   }
 
   Future<User?> tryGetCurrentUser() async {
+    // 本地无 token 直接返回 null
+    final hasLocalToken = await hasToken();
+    if (!hasLocalToken) return null;
+
     try {
       final user = await userServices.fetchCurrentUser();
       return user;
@@ -71,9 +83,14 @@ class AuthServices {
         await _authStorage.deleteToken();
         return null;
       }
-      throw Exception('API Error ${apierr.statusCode}: ${apierr.message}');
-    } catch (e) {
-      throw Exception('Failed to fetch current user: $e');
+      // 其他 API 错误（如 500）不删 token，rethrow 给调用方处理
+      rethrow;
+    } on SocketException {
+      // 无网络连接，不删 token，返回 null 表示无法验证
+      return null;
+    } catch (_) {
+      // 其他意外错误（DNS、超时等），不删 token
+      return null;
     }
   }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../pages/setting_page.dart';
+import 'login_required.dart';
 
 /// 加载数据的回调：返回指定分页的数据列表
 typedef ItemLoader<T> = Future<List<T>> Function(int limit, int offset);
@@ -333,12 +334,11 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         IconButton(
           icon: const Icon(Icons.settings_outlined),
           tooltip: '设置',
-          onPressed: 
-        () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const SettingPage()),
-          );
-        }
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const SettingPage()),
+            );
+          },
         ),
       );
     }
@@ -435,6 +435,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   }
 
   Widget _buildBody(ColorScheme colorScheme, TextTheme textTheme) {
+    return LoginRequired(
+      showScaffold: false,
+      child: _buildListContent(colorScheme, textTheme),
+    );
+  }
+
+  Widget _buildListContent(ColorScheme colorScheme, TextTheme textTheme) {
     // 首次加载 → 骨架屏
     if (_items.isEmpty && _isLoading) {
       return _buildSkeletonList(colorScheme);

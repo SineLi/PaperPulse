@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import './article_detail_page.dart';
+
+import '../data/auth/auth_services.dart';
+import '../data/db/articledb.dart';
 
 class AppSetting {
   final int themeMode; // '0light', '1dark', '2system'
@@ -338,20 +340,139 @@ class SettingPage extends StatelessWidget {
 
 // ---------------------------------------------------------------------------
 // 账户子页
-
-class AccountSettingsPage extends StatelessWidget {
+class AccountSettingsPage extends StatefulWidget {
   const AccountSettingsPage({super.key});
 
   @override
+  State<AccountSettingsPage> createState() => _AccountSettingsPageState();
+}
+
+class _AccountSettingsPageState extends State<AccountSettingsPage> {
+  bool _loading = true;
+  dynamic _user; // User | null
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final authServices = context.read<AuthServices>();
+    final user = await authServices.tryGetCurrentUser();
+    if (mounted)
+      setState(() {
+        _user = user;
+        _loading = false;
+      });
+  }
+
+  Future<void> _logout() async {
+    setState(() => _loading = true);
+    await context.read<AuthServices>().logout();
+    await context.read<ArticleDatabaseIO>().clearAll();
+    if (mounted)
+      setState(() {
+        _user = null;
+        _loading = false;
+      });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return PredictiveBackScope(
       child: Scaffold(
         body: CustomScrollView(
           slivers: [
             const SliverAppBar.large(title: Text('账户')),
-            const SliverFillRemaining(child: Center(child: Text('敬请期待'))),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _user != null
+                  ? _buildLoggedIn(colorScheme, textTheme)
+                  : _buildLoggedOut(colorScheme, textTheme),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoggedIn(ColorScheme colorScheme, TextTheme textTheme) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: colorScheme.primaryContainer,
+            child: Icon(
+              Icons.person_rounded,
+              size: 40,
+              color: colorScheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _user!.username,
+            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _user!.email,
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 48),
+          FilledButton.tonal(
+            onPressed: _logout,
+            style: FilledButton.styleFrom(
+              backgroundColor: colorScheme.errorContainer,
+              foregroundColor: colorScheme.onErrorContainer,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: const Text('退出登录'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoggedOut(ColorScheme colorScheme, TextTheme textTheme) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.account_circle_outlined,
+            size: 72,
+            color: colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 16),
+          Text('当前未登录', style: textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            '登录后可同步订阅、收藏等数据',
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 32),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pushNamed('/login'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: const Text('去登录'),
+          ),
+        ],
       ),
     );
   }
