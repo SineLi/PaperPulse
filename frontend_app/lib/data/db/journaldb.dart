@@ -34,7 +34,7 @@ class JournalDatabaseIO {
       Journal.tableJournals,
       limit: limit,
       offset: offset,
-      orderBy: '${Journal.colId} DESC',
+      orderBy: '${Journal.colId} ASC',
     );
     return maps.map((map) => Journal.fromMap(map)).toList();
   }
@@ -59,6 +59,26 @@ class JournalDatabaseIO {
       await db.rawQuery('SELECT COUNT(*) FROM ${Journal.tableJournals}'),
     );
     return result ?? 0;
+  }
+
+  /// 搜索期刊（按名称、缩写、出版商模糊匹配）
+  Future<List<Journal>> searchJournals(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final db = await dbHelper.database;
+    final pattern = '%$query%';
+    final maps = await db.query(
+      Journal.tableJournals,
+      where:
+          '${Journal.colName} LIKE ? OR ${Journal.colAbbreviation} LIKE ? OR ${Journal.colPublisher} LIKE ?',
+      whereArgs: [pattern, pattern, pattern],
+      orderBy: '${Journal.colId} ASC',
+      limit: limit,
+      offset: offset,
+    );
+    return maps.map((map) => Journal.fromMap(map)).toList();
   }
 
   Future<void> addJournals(List<Journal> journals) async {
