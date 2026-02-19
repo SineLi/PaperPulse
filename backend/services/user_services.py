@@ -149,7 +149,7 @@ class UserService:
                 JOIN journals j ON a.journal_id = j.id
                 JOIN user_journal_subscriptions ujs
                 ON ujs.journal_id = j.id
-                WHERE ujs.user_id = ? AND a.llm_summary IS NOT NULL
+                WHERE ujs.user_id = ?
                 ORDER BY a.date DESC
                 LIMIT ? OFFSET ?
                 """,
