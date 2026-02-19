@@ -227,7 +227,7 @@ test.py
 test.html
 
 docs/
-requirements.txt
-
+# requirements.txt
+*.db
 .VSCodeCounter/
 backend/app/index.html
