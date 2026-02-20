@@ -8,8 +8,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_LINK = "https://www.nature.com/nature/research-articles"
 
 class NatureFetcher(BaseFetcher):
-    def __init__(self, url=DEFAULT_LINK, name="Nature", journal_id=None, **kwargs):
-        super().__init__(journal_name=name, journal_id=journal_id, **kwargs)
+    def __init__(self, url=DEFAULT_LINK, name="Nature", journal_id=None, max_pages=3, **kwargs):
+        super().__init__(journal_name=name, journal_id=journal_id, max_pages=max_pages, **kwargs)
+        # Normalize the URL to the research-articles listing page.
+        # The database may store the RSS URL (e.g. ".../natfood.rss") or the
+        # journal homepage (e.g. ".../natfood"); convert both to the correct form.
+        if url.endswith('.rss'):
+            url = url[:-4] + '/research-articles'
+        elif not url.rstrip('/').endswith('/research-articles'):
+            url = url.rstrip('/') + '/research-articles'
         self.list_url = url
 
     def fetch_list(self):
