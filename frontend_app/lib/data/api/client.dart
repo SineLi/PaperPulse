@@ -30,7 +30,7 @@ class ApiClient {
   Uri _buildUri(String endpoint) {
     if (_baseUrl.isEmpty) {
       throw ApiException(
-        'API base URL is not configured. Please set it in Settings > Network.',
+        'API 基础地址未配置。请在 设置 > 网络 中设置。',
         0,
       );
     }
