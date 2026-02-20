@@ -191,7 +191,9 @@ class MyApp extends StatelessWidget {
                                   backgroundColor: amoledEnabled
                                       ? _amoledBlack
                                       : null,
-                                  surfaceTintColor: Colors.transparent,
+                                  surfaceTintColor: amoledEnabled
+                                      ? Colors.transparent
+                                      : null,
                                 ),
                               ),
                               themeMode: context
