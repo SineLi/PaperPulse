@@ -150,7 +150,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       TextButton(
                         onPressed: () =>
-                            Navigator.of(context).pushNamed('/signup'),
+                            Navigator.of(context).pushNamed('/register'),
                         child: const Text('立即注册'),
                       ),
                     ],
