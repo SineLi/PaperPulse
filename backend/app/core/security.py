@@ -1,9 +1,10 @@
+import os
 from datetime import datetime, timedelta
 import pytz
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
-SECRET_KEY = "qrp8mNUdo5r9XxbvQQuhtV+NhayyOSCSZYDHCl4wn4U="
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 

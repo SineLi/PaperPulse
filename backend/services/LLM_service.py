@@ -1,3 +1,4 @@
+import os
 import logging
 from db.article_db import ArticleRepository
 import time
@@ -10,7 +11,8 @@ from API_KEYs import LM_API_KEY
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+BASE_URL = os.getenv("LLM_BASE_URL")
+LM_API_KEY = os.getenv("LM_API_KEY")
 PROMPT = textwrap.dedent("""\
 你是一名专业学术助理，请**严格基于以下摘要原文**生成**中文**解释。**禁止任何外部知识、推断或数据补充**。
                          
