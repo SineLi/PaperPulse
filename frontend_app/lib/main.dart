@@ -22,6 +22,7 @@ import 'pages/login_page.dart';
 import 'pages/bootstrap_page.dart';
 import 'pages/app_shell_page.dart';
 import 'pages/setting_page.dart';
+import 'pages/signup_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -184,9 +185,7 @@ class MyApp extends StatelessWidget {
                                 canvasColor: amoledEnabled
                                     ? _amoledBlack
                                     : null,
-                                cardColor: amoledEnabled
-                                    ? _amoledBlack
-                                    : null,
+                                cardColor: amoledEnabled ? _amoledBlack : null,
                                 appBarTheme: AppBarTheme(
                                   backgroundColor: amoledEnabled
                                       ? _amoledBlack
@@ -203,6 +202,7 @@ class MyApp extends StatelessWidget {
                               routes: {
                                 '/feed': (context) => const AppShellPage(),
                                 '/login': (context) => const LoginPage(),
+                                '/register': (context) => const RegisterPage(),
                                 '/settings': (context) => const SettingPage(),
                               },
                             );
