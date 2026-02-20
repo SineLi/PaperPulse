@@ -1,3 +1,4 @@
+import os
 import html
 import logging
 from lxml import etree
@@ -6,8 +7,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-from API_KEYs import Elsevier_KEY
-
+Elsevier_KEY = os.getenv("Elsevier_KEY")
 DEFAULT_FEED_URL = "https://rss.sciencedirect.com/publication/science/03088146"
 API_ADDRESS = 'https://api.elsevier.com/content/article/pii/'
 
