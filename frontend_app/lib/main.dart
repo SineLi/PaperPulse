@@ -102,6 +102,22 @@ class MyApp extends StatelessWidget {
   });
 
   static const _defaultColorSeed = Colors.blue;
+  static const _amoledBlack = Color(0xFF000000);
+  static const _amoledRaised = Color(0xFF0D0D0D);
+
+  ColorScheme _withAmoledSurfaces(ColorScheme base) {
+    return base.copyWith(
+      surface: _amoledBlack,
+      surfaceDim: _amoledBlack,
+      surfaceContainerLowest: _amoledBlack,
+      surfaceContainerLow: _amoledBlack,
+      surfaceContainer: _amoledBlack,
+      surfaceContainerHigh: _amoledBlack,
+      surfaceContainerHighest: _amoledRaised,
+      surfaceBright: _amoledRaised,
+      surfaceTint: Colors.transparent,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +160,10 @@ class MyApp extends StatelessWidget {
                         value: imageCacheService,
                         child: Consumer<SettingsController>(
                           builder: (context, settingsCtrl, _) {
+                            final amoledEnabled = settingsCtrl.setting.amoled;
+                            final effectiveDarkColorScheme = amoledEnabled
+                                ? _withAmoledSurfaces(darkColorScheme)
+                                : darkColorScheme;
                             // 同步 Wi-Fi 专属下载设置到图片缓存服务
                             imageCacheService.wifiOnly =
                                 settingsCtrl.setting.wifiOnlyImages;
@@ -155,9 +175,26 @@ class MyApp extends StatelessWidget {
                                 snackBarTheme: snackBarTheme,
                               ),
                               darkTheme: ThemeData(
-                                colorScheme: darkColorScheme,
+                                colorScheme: effectiveDarkColorScheme,
                                 useMaterial3: true,
                                 snackBarTheme: snackBarTheme,
+                                scaffoldBackgroundColor: amoledEnabled
+                                    ? _amoledBlack
+                                    : null,
+                                canvasColor: amoledEnabled
+                                    ? _amoledBlack
+                                    : null,
+                                cardColor: amoledEnabled
+                                    ? _amoledBlack
+                                    : null,
+                                appBarTheme: AppBarTheme(
+                                  backgroundColor: amoledEnabled
+                                      ? _amoledBlack
+                                      : null,
+                                  surfaceTintColor: amoledEnabled
+                                      ? Colors.transparent
+                                      : null,
+                                ),
                               ),
                               themeMode: context
                                   .watch<SettingsController>()
