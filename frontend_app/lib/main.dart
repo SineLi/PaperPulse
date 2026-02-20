@@ -26,8 +26,12 @@ import 'pages/setting_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final initialSetting = await SettingStorage().load();
   final authStorage = AuthStorage();
-  final apiClient = ApiClient(baseUrl: '', authStorage: authStorage);
+  final apiClient = ApiClient(
+    baseUrl: initialSetting.baseURL,
+    authStorage: authStorage,
+  );
 
   final userServices = UserServices(apiClient: apiClient);
   final authServices = AuthServices(
@@ -72,6 +76,7 @@ Future<void> main() async {
   runApp(
     MyApp(
       authServices: authServices,
+      apiClient: apiClient,
       articleDb: articleDb,
       feedRepo: feedRepo,
       journalRepo: journalRepo,
@@ -84,6 +89,7 @@ Future<void> main() async {
 
 class MyApp extends StatelessWidget {
   final AuthServices authServices;
+  final ApiClient apiClient;
   final ArticleDatabaseIO articleDb;
   final FeedRepo feedRepo;
   final JournalRepo journalRepo;
@@ -93,6 +99,7 @@ class MyApp extends StatelessWidget {
   const MyApp({
     super.key,
     required this.authServices,
+    required this.apiClient,
     required this.articleDb,
     required this.feedRepo,
     required this.journalRepo,
@@ -164,6 +171,11 @@ class MyApp extends StatelessWidget {
                             final effectiveDarkColorScheme = amoledEnabled
                                 ? _withAmoledSurfaces(darkColorScheme)
                                 : darkColorScheme;
+                            final configuredBaseUrl =
+                                settingsCtrl.setting.baseURL.trim();
+                            if (configuredBaseUrl.isNotEmpty) {
+                              apiClient.baseUrl = configuredBaseUrl;
+                            }
                             // 同步 Wi-Fi 专属下载设置到图片缓存服务
                             imageCacheService.wifiOnly =
                                 settingsCtrl.setting.wifiOnlyImages;
@@ -184,9 +196,7 @@ class MyApp extends StatelessWidget {
                                 canvasColor: amoledEnabled
                                     ? _amoledBlack
                                     : null,
-                                cardColor: amoledEnabled
-                                    ? _amoledBlack
-                                    : null,
+                                cardColor: amoledEnabled ? _amoledBlack : null,
                                 appBarTheme: AppBarTheme(
                                   backgroundColor: amoledEnabled
                                       ? _amoledBlack
