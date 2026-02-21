@@ -12,11 +12,41 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  final String baseUrl;
+  final String _baseUrl;
+  String get baseUrl => _baseUrl;
 
   final AuthStorage _authStorage;
-  ApiClient({required this.baseUrl, required AuthStorage? authStorage})
-    : _authStorage = authStorage ?? AuthStorage();
+  ApiClient({required String baseUrl, required AuthStorage? authStorage})
+    : _baseUrl = _normalizeBaseUrl(baseUrl),
+      _authStorage = authStorage ?? AuthStorage();
+
+  static String _normalizeBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.replaceFirst(RegExp(r'/+$'), '');
+  }
+
+  Uri _buildUri(String endpoint) {
+    if (_baseUrl.isEmpty) {
+      throw ApiException(
+        'API 基础地址未配置。请在 设置 > 网络 中设置。',
+        0,
+      );
+    }
+
+    final normalizedEndpoint = endpoint.startsWith('/')
+        ? endpoint
+        : '/$endpoint';
+    final uriString = '$_baseUrl$normalizedEndpoint';
+    try {
+      return Uri.parse(uriString);
+    } on FormatException catch (e) {
+      throw ApiException(
+        'Invalid API URL "$uriString": ${e.message}',
+        0,
+      );
+    }
+  }
 
   Future<Map<String, String>> _buildHeaders() async {
     final token = await _authStorage.getToken();
@@ -32,7 +62,7 @@ class ApiClient {
   Future<Map<String, dynamic>> getJson(String endpoint) async {
     final headers = await _buildHeaders();
     final response = await http
-        .get(Uri.parse('$baseUrl$endpoint'), headers: headers)
+        .get(_buildUri(endpoint), headers: headers)
         .timeout(
           Duration(seconds: 10),
           onTimeout: () {
@@ -55,11 +85,7 @@ class ApiClient {
   ) async {
     final headers = await _buildHeaders();
     final response = await http
-        .post(
-          Uri.parse('$baseUrl$endpoint'),
-          headers: headers,
-          body: jsonEncode(data),
-        )
+        .post(_buildUri(endpoint), headers: headers, body: jsonEncode(data))
         .timeout(
           Duration(seconds: 10),
           onTimeout: () {
@@ -80,7 +106,7 @@ class ApiClient {
   Future<void> delete(String endpoint) async {
     final headers = await _buildHeaders();
     final response = await http
-        .delete(Uri.parse('$baseUrl$endpoint'), headers: headers)
+        .delete(_buildUri(endpoint), headers: headers)
         .timeout(
           Duration(seconds: 10),
           onTimeout: () {

@@ -27,8 +27,14 @@ import 'pages/signup_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final settingsController = SettingsController(SettingStorage());
+  await settingsController.load();
+
   final authStorage = AuthStorage();
-  final apiClient = ApiClient(baseUrl: '', authStorage: authStorage);
+  final apiClient = ApiClient(
+    baseUrl: settingsController.setting.baseURL,
+    authStorage: authStorage,
+  );
 
   final userServices = UserServices(apiClient: apiClient);
   final authServices = AuthServices(
@@ -70,8 +76,22 @@ Future<void> main() async {
     feedRepo: feedRepo,
   );
 
+  // Initialize wifiOnly from loaded settings, then keep in sync via listener.
+  // The listener is intentionally never removed: all three objects
+  // (settingsController, apiClient, imageCacheService) share the same
+  // application lifetime, so there is no risk of a memory leak.
+  imageCacheService.wifiOnly = settingsController.setting.wifiOnlyImages;
+  settingsController.addListener(() {
+    final url = settingsController.setting.baseURL.trim();
+    if (url.isNotEmpty) {
+      apiClient.baseUrl = url;
+    }
+    imageCacheService.wifiOnly = settingsController.setting.wifiOnlyImages;
+  });
+
   runApp(
     MyApp(
+      settingsController: settingsController,
       authServices: authServices,
       articleDb: articleDb,
       feedRepo: feedRepo,
@@ -84,6 +104,7 @@ Future<void> main() async {
 }
 
 class MyApp extends StatelessWidget {
+  final SettingsController settingsController;
   final AuthServices authServices;
   final ArticleDatabaseIO articleDb;
   final FeedRepo feedRepo;
@@ -93,6 +114,7 @@ class MyApp extends StatelessWidget {
   final ImageCacheService imageCacheService;
   const MyApp({
     super.key,
+    required this.settingsController,
     required this.authServices,
     required this.articleDb,
     required this.feedRepo,
@@ -143,8 +165,8 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
         );
 
-        return ChangeNotifierProvider(
-          create: (_) => SettingsController(SettingStorage())..load(),
+        return ChangeNotifierProvider<SettingsController>.value(
+          value: settingsController,
           child: ChangeNotifierProvider<AuthServices>.value(
             value: authServices,
             child: Provider<ArticleDatabaseIO>.value(
@@ -165,9 +187,6 @@ class MyApp extends StatelessWidget {
                             final effectiveDarkColorScheme = amoledEnabled
                                 ? _withAmoledSurfaces(darkColorScheme)
                                 : darkColorScheme;
-                            // 同步 Wi-Fi 专属下载设置到图片缓存服务
-                            imageCacheService.wifiOnly =
-                                settingsCtrl.setting.wifiOnlyImages;
                             return MaterialApp(
                               title: 'PaperPulse',
                               theme: ThemeData(
