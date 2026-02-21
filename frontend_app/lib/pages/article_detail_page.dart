@@ -31,9 +31,13 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   late int _currentIndex;
   late ArticleViewData _viewData;
   late ScrollController _scrollController;
+  late final Map<int, ArticleViewData> _viewDataCache;
+  final Set<int> _markedAsRead = <int>{};
   bool _barsVisible = true;
   double _lastScrollOffset = 0;
   late bool _isFavorite;
+  bool _suppressScrollListener = false;
+  bool _hasSwitchedArticle = false;
 
   /// 切换动画方向: 1 = 下一篇(向上滑出), -1 = 上一篇(向下滑出)
   int _slideDirection = 1;
@@ -54,7 +58,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
-    _viewData = ArticleViewData.fromArticle(widget.articles[_currentIndex]);
+    _viewDataCache = <int, ArticleViewData>{};
+    _viewData = _viewDataForIndex(_currentIndex);
     _isFavorite = _viewData.isFavorite;
     _contentKey = ValueKey(_currentIndex);
     _scrollController = ScrollController();
@@ -62,7 +67,28 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     _markAsRead();
   }
 
+  ArticleViewData _viewDataForIndex(int index) {
+    return _viewDataCache.putIfAbsent(
+      index,
+      () => ArticleViewData.fromArticle(widget.articles[index]),
+    );
+  }
+
+  void _setSwitchHint(int direction, bool visible) {
+    if (_pendingDirection == direction && _showReleaseHint == visible) {
+      return;
+    }
+    setState(() {
+      _pendingDirection = direction;
+      _showReleaseHint = visible;
+    });
+  }
+
   void _onScroll() {
+    if (_suppressScrollListener) {
+      _lastScrollOffset = _scrollController.offset;
+      return;
+    }
     final offset = _scrollController.offset;
     final delta = offset - _lastScrollOffset;
     if (delta > 8 && _barsVisible) {
@@ -76,7 +102,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   /// 监听滚动：达到阈值时振动提示并显示 hint，松手时才真正切换
   bool _onScrollNotification(ScrollNotification notification) {
     final settings = context.read<SettingsController>().setting;
-    final threshold = settings.swipeSensitivity.toDouble();
+    final threshold = settings.swipeSensitivity <= 0
+        ? _overscrollThresholdDefault
+        : settings.swipeSensitivity.toDouble();
 
     if (notification is ScrollStartNotification) {
       _pendingDirection = 0;
@@ -99,17 +127,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             _hapticFired = true;
             HapticFeedback.mediumImpact();
           }
-          if (_pendingDirection != -1) {
-            setState(() => _pendingDirection = -1);
-          }
-          if (!_showReleaseHint) {
-            setState(() => _showReleaseHint = true);
-          }
-        } else if (_showReleaseHint || _pendingDirection != 0) {
-          setState(() {
-            _showReleaseHint = false;
-            _pendingDirection = 0;
-          });
+          _setSwitchHint(-1, true);
+        } else {
+          _setSwitchHint(0, false);
           _hapticFired = false;
         }
       }
@@ -123,24 +143,13 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             _hapticFired = true;
             HapticFeedback.mediumImpact();
           }
-          if (_pendingDirection != 1) {
-            setState(() => _pendingDirection = 1);
-          }
-          if (!_showReleaseHint) {
-            setState(() => _showReleaseHint = true);
-          }
-        } else if (_showReleaseHint || _pendingDirection != 0) {
-          setState(() {
-            _showReleaseHint = false;
-            _pendingDirection = 0;
-          });
+          _setSwitchHint(1, true);
+        } else {
+          _setSwitchHint(0, false);
           _hapticFired = false;
         }
-      } else if (_showReleaseHint || _pendingDirection != 0) {
-        setState(() {
-          _showReleaseHint = false;
-          _pendingDirection = 0;
-        });
+      } else {
+        _setSwitchHint(0, false);
         _hapticFired = false;
       }
     }
@@ -160,14 +169,28 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   void _navigateTo(int index) {
-    if (index < 0 || index >= widget.articles.length) return;
+    if (index < 0 ||
+        index >= widget.articles.length ||
+        index == _currentIndex) {
+      return;
+    }
+
+    if (_scrollController.hasClients && _scrollController.offset != 0) {
+      _suppressScrollListener = true;
+      try {
+        _scrollController.jumpTo(0);
+      } finally {
+        _suppressScrollListener = false;
+      }
+    }
+
     setState(() {
+      _hasSwitchedArticle = true;
       _slideDirection = index > _currentIndex ? 1 : -1;
       _currentIndex = index;
-      _viewData = ArticleViewData.fromArticle(widget.articles[_currentIndex]);
+      _viewData = _viewDataForIndex(_currentIndex);
       _isFavorite = _viewData.isFavorite;
       _contentKey = ValueKey(_currentIndex);
-      _scrollController.jumpTo(0);
       _lastScrollOffset = 0;
       _barsVisible = true;
     });
@@ -175,8 +198,15 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   Future<void> _markAsRead() async {
+    if (_viewData.isRead || _markedAsRead.contains(_viewData.id)) return;
+    _markedAsRead.add(_viewData.id);
     final db = context.read<ArticleDatabaseIO>();
-    await db.setReadWithSync(_viewData.id, true);
+    try {
+      await db.setReadWithSync(_viewData.id, true);
+    } catch (_) {
+      _markedAsRead.remove(_viewData.id);
+      rethrow;
+    }
   }
 
   Future<void> _toggleFavorite() async {
@@ -216,6 +246,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final settings = context.watch<SettingsController>().setting;
+    final disableAnimations =
+        MediaQuery.maybeOf(context)?.accessibleNavigation ?? false;
 
     return PredictiveBackScope(
       child: Scaffold(
@@ -253,31 +285,16 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
                     // 正文 — 带上下切换动画
                     SliverToBoxAdapter(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 300),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, animation) {
-                          final isIncoming = child.key == _contentKey;
-                          final offsetBegin = isIncoming
-                              ? Offset(0, _slideDirection * 0.12)
-                              : Offset(0, -_slideDirection * 0.12);
-                          return SlideTransition(
-                            position: Tween<Offset>(
-                              begin: offsetBegin,
-                              end: Offset.zero,
-                            ).animate(animation),
-                            child: FadeTransition(
-                              opacity: animation,
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: _buildArticleContent(
-                          colorScheme,
-                          textTheme,
-                          settings,
-                          key: _contentKey,
+                      child: _buildArticleSwitchTransition(
+                        animate:
+                            !disableAnimations && _hasSwitchedArticle,
+                        child: RepaintBoundary(
+                          child: _buildArticleContent(
+                            colorScheme,
+                            textTheme,
+                            settings,
+                            key: _contentKey,
+                          ),
                         ),
                       ),
                     ),
@@ -300,7 +317,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                   child: Center(
                     child: AnimatedOpacity(
                       opacity: _showReleaseHint ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 220),
+                      duration: const Duration(milliseconds: 400),
                       curve: Curves.easeOut,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 12),
@@ -359,6 +376,31 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   // ── 文章正文内容（独立 widget 方便做 AnimatedSwitcher） ──
+  // Only animate incoming content to avoid rendering two heavy trees at once.
+  Widget _buildArticleSwitchTransition({
+    required Widget child,
+    required bool animate,
+  }) {
+    if (!animate) return child;
+
+    return TweenAnimationBuilder<double>(
+      key: _contentKey,
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) {
+        final translateY = (1 - value) * 50 * _slideDirection;
+        final opacity = 0.82 + (0.18 * value);
+        return Transform.translate(
+          offset: Offset(0, translateY),
+          child: Opacity(opacity: opacity, child: child),
+        );
+      },
+    );
+  }
+
+  // Article body content.
   Widget _buildArticleContent(
     ColorScheme colorScheme,
     TextTheme textTheme,
