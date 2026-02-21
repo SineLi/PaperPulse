@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import "package:simple_icons/simple_icons.dart";
 
 import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
+import '../data/models/user.dart';
+
+const _appName = 'PaperPulse';
+const _appVersion = '0.0.1';
+const _appBuildNumber = '2';
+const _githubRepoUrl = 'https://github.com/SineLi/PaperPulse';
 
 class AppSetting {
   final int themeMode; // '0light', '1dark', '2system'
@@ -255,21 +263,8 @@ class SettingsController extends ChangeNotifier {
 class SettingPage extends StatelessWidget {
   const SettingPage({super.key});
 
-  String _themeModeLabel(int mode) {
-    switch (mode) {
-      case 0:
-        return '浅色';
-      case 1:
-        return '深色';
-      default:
-        return '跟随系统';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsController>().setting;
-
     return PredictiveBackScope(
       child: Scaffold(
         body: CustomScrollView(
@@ -324,7 +319,7 @@ class SettingPage extends StatelessWidget {
                 ListTile(
                   leading: Icon(Icons.info_outline_rounded),
                   title: Text('关于'),
-                  subtitle: Text('PaperPulse v1.0'),
+                  subtitle: Text('$_appName v$_appVersion'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(builder: (_) => const AboutPage()),
                   ),
@@ -350,7 +345,7 @@ class AccountSettingsPage extends StatefulWidget {
 
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   bool _loading = true;
-  dynamic _user; // User | null
+  User? _user;
 
   @override
   void initState() {
@@ -359,123 +354,189 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   }
 
   Future<void> _loadUser() async {
-    final authServices = context.read<AuthServices>();
-    final user = await authServices.tryGetCurrentUser();
-    if (mounted)
-      setState(() {
-        _user = user;
-        _loading = false;
-      });
+    final previousUser = _user;
+    User? nextUser = previousUser;
+
+    try {
+      final authServices = context.read<AuthServices>();
+      nextUser = await authServices.tryGetCurrentUser();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('加载账户信息失败: $e')));
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _user = nextUser;
+      _loading = false;
+    });
+  }
+
+  Future<void> _refreshUser() async {
+    setState(() => _loading = true);
+    await _loadUser();
+  }
+
+  void _showChangePasswordPlaceholder() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('仍在开发')));
+  }
+
+  Future<void> _requestLogout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('退出登录'),
+        content: const Text('退出后将清理当前设备缓存，下次使用需要重新登录。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('继续退出'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true) return;
+    await _logout();
   }
 
   Future<void> _logout() async {
+    final previousUser = _user;
+    final authServices = context.read<AuthServices>();
+    final articleDb = context.read<ArticleDatabaseIO>();
     setState(() => _loading = true);
-    await context.read<AuthServices>().logout();
-    await context.read<ArticleDatabaseIO>().clearAll();
-    if (mounted)
+
+    try {
+      await authServices.logout();
+      await articleDb.clearAll();
+      if (!mounted) return;
       setState(() {
         _user = null;
         _loading = false;
       });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已退出登录，本地缓存已清理')));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _user = previousUser;
+        _loading = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('退出失败: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
     return PredictiveBackScope(
       child: Scaffold(
         body: CustomScrollView(
           slivers: [
             const SliverAppBar.large(title: Text('账户')),
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _user != null
-                  ? _buildLoggedIn(colorScheme, textTheme)
-                  : _buildLoggedOut(colorScheme, textTheme),
-            ),
+            if (_loading)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
+              SliverList(
+                delegate: SliverChildListDelegate(
+                  _user != null ? _buildLoggedIn() : _buildLoggedOut(),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLoggedIn(ColorScheme colorScheme, TextTheme textTheme) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircleAvatar(
-            radius: 40,
-            backgroundColor: colorScheme.primaryContainer,
-            child: Icon(
-              Icons.person_rounded,
-              size: 40,
-              color: colorScheme.onPrimaryContainer,
+  List<Widget> _buildLoggedIn() {
+    final user = _user!;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return [
+      const _SettingsSectionHeader(title: '账户信息'),
+      _SettingsGroup(
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.account_circle_outlined),
+              title: const Text('用户名'),
+              subtitle: Text(user.username),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            _user!.username,
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _user!.email,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
+            const Divider(height: 1),
+            _AccountInfoTile(
+              icon: Icons.email_outlined,
+              label: '邮箱',
+              value: user.email,
             ),
-          ),
-          const SizedBox(height: 48),
-          FilledButton.tonal(
-            onPressed: _logout,
-            style: FilledButton.styleFrom(
-              backgroundColor: colorScheme.errorContainer,
-              foregroundColor: colorScheme.onErrorContainer,
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: const Text('退出登录'),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
+      const _SettingsSectionHeader(title: '安全'),
+      ListTile(
+        leading: const Icon(Icons.password_rounded),
+        title: const Text('修改密码'),
+        subtitle: const Text('暂未开放'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: _showChangePasswordPlaceholder,
+      ),
+      const _SettingsSectionHeader(title: '会话'),
+      ListTile(
+        leading: const Icon(Icons.refresh_rounded),
+        title: const Text('刷新账户状态'),
+        onTap: _refreshUser,
+      ),
+      ListTile(
+        leading: Icon(Icons.logout_rounded, color: colorScheme.error),
+        title: Text('退出登录', style: TextStyle(color: colorScheme.error)),
+        onTap: _requestLogout,
+      ),
+      const SizedBox(height: 24),
+    ];
   }
 
-  Widget _buildLoggedOut(ColorScheme colorScheme, TextTheme textTheme) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.account_circle_outlined,
-            size: 72,
-            color: colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 16),
-          Text('当前未登录', style: textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            '登录后可同步订阅、收藏等数据',
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 32),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pushNamed('/login'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
-            child: const Text('去登录'),
-          ),
-        ],
+  List<Widget> _buildLoggedOut() {
+    return [
+      const _SettingsSectionHeader(title: '账户'),
+      const ListTile(
+        leading: Icon(Icons.account_circle_outlined),
+        title: Text('当前未登录'),
+        subtitle: Text('登录后可同步订阅与收藏。'),
       ),
-    );
+      ListTile(
+        leading: const Icon(Icons.login_rounded),
+        title: const Text('去登录'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => Navigator.of(context).pushNamed('/login'),
+      ),
+      const _SettingsSectionHeader(title: '安全'),
+      ListTile(
+        leading: const Icon(Icons.password_rounded),
+        title: const Text('修改密码'),
+        subtitle: const Text('登录后可用'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => Navigator.of(context).pushNamed('/login'),
+      ),
+      const _SettingsSectionHeader(title: '会话'),
+      ListTile(
+        leading: const Icon(Icons.refresh_rounded),
+        title: const Text('刷新状态'),
+        onTap: _refreshUser,
+      ),
+      const SizedBox(height: 24),
+    ];
   }
 }
 
@@ -655,7 +716,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     }
 
     await controller.updateBaseURL(input);
-    if (!context.mounted) return;
+    if (!mounted) return;
     FocusScope.of(context).unfocus();
     ScaffoldMessenger.of(
       context,
@@ -794,28 +855,125 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return PredictiveBackScope(
       child: Scaffold(
         body: CustomScrollView(
           slivers: [
             const SliverAppBar.large(title: Text('关于')),
             SliverFillRemaining(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SvgPicture.asset('assets/logo.svg', width: 80),
-                  SizedBox(height: 20),
-                  Text(
-                    'PaperPulse v0.0.1\nPowered by Flutter',
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 120),
-                ],
+              hasScrollBody: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                child: Column(
+                  children: [
+                    const Spacer(flex: 2),
+                    SvgPicture.asset('assets/logo.svg', width: 88),
+                    const SizedBox(height: 16),
+                    Text(
+                      _appName,
+                      style: textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'v$_appVersion+$_appBuildNumber',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(flex: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton.filledTonal(
+                          iconSize: 32,
+                          tooltip: 'GitHub',
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              const ClipboardData(text: _githubRepoUrl),
+                            );
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('GitHub 链接已复制')),
+                            );
+                          },
+                          icon: const Icon(SimpleIcons.github),
+                        ),
+                        const SizedBox(width: 32),
+                        IconButton.filledTonal(
+                          iconSize: 32,
+                          tooltip: '查看 Licenses',
+                          onPressed: () {
+                            showLicensePage(
+                              context: context,
+                              applicationName: _appName,
+                              applicationVersion:
+                                  '$_appVersion+$_appBuildNumber',
+                            );
+                          },
+                          icon: const Icon(Icons.description_outlined),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 关于/账户辅助组件
+
+class _SettingsGroup extends StatelessWidget {
+  final Widget child;
+
+  const _SettingsGroup({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colorScheme.outlineVariant),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _AccountInfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _AccountInfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      subtitle: Text(value),
     );
   }
 }
