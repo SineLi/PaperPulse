@@ -12,9 +12,8 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  String _baseUrl;
+  final String _baseUrl;
   String get baseUrl => _baseUrl;
-  set baseUrl(String value) => _baseUrl = _normalizeBaseUrl(value);
 
   final AuthStorage _authStorage;
   ApiClient({required String baseUrl, required AuthStorage? authStorage})
