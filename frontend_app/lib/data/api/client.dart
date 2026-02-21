@@ -12,12 +12,11 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  final String _baseUrl;
-  String get baseUrl => _baseUrl;
+  String baseUrl;
 
   final AuthStorage _authStorage;
   ApiClient({required String baseUrl, required AuthStorage? authStorage})
-    : _baseUrl = _normalizeBaseUrl(baseUrl),
+    : baseUrl = _normalizeBaseUrl(baseUrl),
       _authStorage = authStorage ?? AuthStorage();
 
   static String _normalizeBaseUrl(String value) {
@@ -27,24 +26,18 @@ class ApiClient {
   }
 
   Uri _buildUri(String endpoint) {
-    if (_baseUrl.isEmpty) {
-      throw ApiException(
-        'API 基础地址未配置。请在 设置 > 网络 中设置。',
-        0,
-      );
+    if (baseUrl.isEmpty) {
+      throw ApiException('API 基础地址未配置。请在 设置 > 网络 中设置。', 0);
     }
 
     final normalizedEndpoint = endpoint.startsWith('/')
         ? endpoint
         : '/$endpoint';
-    final uriString = '$_baseUrl$normalizedEndpoint';
+    final uriString = '$baseUrl$normalizedEndpoint';
     try {
       return Uri.parse(uriString);
     } on FormatException catch (e) {
-      throw ApiException(
-        'Invalid API URL "$uriString": ${e.message}',
-        0,
-      );
+      throw ApiException('Invalid API URL "$uriString": ${e.message}', 0);
     }
   }
 
