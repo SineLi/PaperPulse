@@ -37,7 +37,15 @@ class ApiClient {
     final normalizedEndpoint = endpoint.startsWith('/')
         ? endpoint
         : '/$endpoint';
-    return Uri.parse('$_baseUrl$normalizedEndpoint');
+    final uriString = '$_baseUrl$normalizedEndpoint';
+    try {
+      return Uri.parse(uriString);
+    } on FormatException catch (e) {
+      throw ApiException(
+        'Invalid API URL "$uriString": ${e.message}',
+        0,
+      );
+    }
   }
 
   Future<Map<String, String>> _buildHeaders() async {
