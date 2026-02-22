@@ -1,55 +1,42 @@
 import html
 from lxml import html as lhtml
-from utils.fetcher.Base_fetcher import BaseFetcher
+from utils.fetcher.Base_fetcher import RSSFetcher
 
-DEFAULT_LINK = "https://www.science.org/journal/science/research"
+DEFAULT_FEED_URL = "https://www.science.org/action/showFeed?type=axatoc&feed=rss&jc=science"
+UA = "FreshRSS/1.24.3 (Linux; https://freshrss.org)"
+class ScienceFetcher(RSSFetcher):
+    def __init__(self, url=DEFAULT_FEED_URL, name="Science", journal_id=None, **kwargs):
+        super().__init__(
+            journal_name=name, 
+            feed_url=url,
+            journal_id=journal_id,
+            **kwargs
+        )
 
-class ScienceFetcher(BaseFetcher):
-    def __init__(self, url=DEFAULT_LINK + "?pageSize=50", name="Science", journal_id=None, **kwargs):
+    def _parse_entry(self, entry):
+        # 优先获取 dc_title (通常是纯标题)，如果缺失则清理标准 title
+        title = entry.get('dc_title', entry.get('title', 'No Title'))
+        if title.startswith(self.journal_name) and ':' in title:
+            title = title.split(':', 1)[-1].strip()
 
-        super().__init__(journal_name=name, journal_id=journal_id, **kwargs)
-        
-        self.list_url = url
+        return {
+            'title': title,
+            'link': entry.get('link', ''),
+            'date': self._parse_date(entry),
+            'journal': self.journal_name,
+            'authors': self._extract_authors(entry),
+            'doi': entry.get('prism_doi', self._extract_doi(entry)),
+            'status': 'online'
+        }
 
-    def fetch_list(self):
-        content = self._get_playwright_content(self.list_url, selector="//*[@id=\"pb-page-content\"]/div/div[1]")
-        if not content: return []
-
-        tree = lhtml.fromstring(content)
-        article_divs = tree.xpath("//*[@id=\"pb-page-content\"]/div/div[1]/main/section/div/div[1]/div/div/div[1]/div")
-        
-        papers = []
-        for div in article_divs:
-            title_nodes = div.xpath('.//h2/a')
-            title = title_nodes[0].text_content().strip() if title_nodes else ""
-            
-            link_parts = div.xpath('.//h2/a/@href')
-            link = 'https://www.science.org' + link_parts[0] if link_parts else None
-            
-            date_nodes = div.xpath('.//time')
-            date = date_nodes[0].text_content().strip() if date_nodes else None
-
-            authors_nodes = div.xpath('.//li/span')
-            authors = [node.text_content().strip() for node in authors_nodes]
-            authors = [a for a in authors if a]
-
-            doi = None
-            if link:
-                parts = link.split('/')
-                if len(parts) > 0:
-                    doi = parts[-2] + '/' + parts[-1]
-
-            if title and link:
-                papers.append({
-                    'title': title,
-                    'link': link,
-                    'date': date,
-                    'authors': authors,
-                    'doi': doi,
-                    'journal': self.journal_name,
-                    'status': 'online'
-                })
-        return papers
+    def _extract_authors(self, entry):
+        if 'author' in entry:
+            return [a.strip() for a in entry['author'].split(',')]
+        return []
+    
+    def _extract_doi(self, entry):
+        if 'doi' in entry:
+            return entry['doi']
 
     def fetch_details(self, article):
         link = article.get('link')
