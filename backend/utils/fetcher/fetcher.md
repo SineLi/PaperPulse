@@ -3,7 +3,7 @@
 
 | **出版商** | **支持状态** | **说明** |
 |---|---|---|
-| Spring Nature | Already Supported | HTML Fetcher |
+| Spring Nature | Already Supported | RSS Fetcher |
 | Cell Press | Already Supported | HTML Fetcher |
 | AAAS | Already Supported | RSS Fetcher |
 | RSC | Newly Added | RSS Fetcher |
