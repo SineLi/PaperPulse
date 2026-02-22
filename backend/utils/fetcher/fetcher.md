@@ -5,7 +5,7 @@
 |---|---|---|
 | Spring Nature | Already Supported | HTML Fetcher |
 | Cell Press | Already Supported | HTML Fetcher |
-| AAAS | Already Supported | HTML Fetcher |
+| AAAS | Already Supported | RSS Fetcher |
 | RSC | Newly Added | RSS Fetcher |
 | ACS | Newly Added | RSS Fetcher |
 | Elsevier | Newly Added | RSS/API Fetcher |
