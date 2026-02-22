@@ -122,8 +122,10 @@ class ArticleViewData {
       final now = DateTime.now();
       final difference = now.difference(date);
 
-      if (difference.inDays < 3) {
-        return timeago.format(date, locale: 'en_short');
+      if (difference.isNegative) {
+        return DateFormat.yMMMd().format(date);
+      } else if (difference.inDays < 3) {
+        return timeago.format(date);
       } else {
         return DateFormat.yMMMd().format(date);
       }
