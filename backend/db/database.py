@@ -130,8 +130,6 @@ def init_database(db_path: str = DB_PATH):
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_ujs_journal ON user_journal_subscriptions(journal_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_uaf_article ON user_article_favourites(article_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_uar_article ON user_article_reads(article_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_nae_doi ON non_article_entries(doi)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_nae_link ON non_article_entries(link)')
 
     # 提交并关闭
     conn.commit()
