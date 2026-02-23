@@ -1,3 +1,4 @@
+﻿from threading import Lock
 import json
 import time
 import html
@@ -35,6 +36,10 @@ class BaseFetcher(ABC):
         self.service = ArticleService()
         self.user_agent = user_agent
 
+        # Per-link fetch diagnostics used by run() to classify blocked/error/unknown.
+        self._fetch_meta: dict[str, dict[str, Optional[str]]] = {}
+        self._fetch_meta_lock = Lock()
+
     @abstractmethod
     def fetch_list(self) -> List[Dict]:
         # 获取文章列表，返回包含初步信息的字典列表
@@ -42,11 +47,68 @@ class BaseFetcher(ABC):
 
     @abstractmethod
     def fetch_details(self, article: Dict) -> Dict:
-        # 获取单篇文章的详细信息（摘要、图片等）
         pass
 
-    def _get_playwright_content(self, url: str, selector: Optional[str] = None, timeout: int = 10000, wait_until: str = "domcontentloaded"):
-        # 通用的 Playwright 页面抓取工具
+    def _set_fetch_meta(self, url: str, status: str, reason: Optional[str] = None):
+        if not url:
+            return
+        with self._fetch_meta_lock:
+            self._fetch_meta[url] = {"status": status, "reason": reason}
+
+    def _pop_fetch_meta(self, url: str) -> Optional[dict[str, Optional[str]]]:
+        if not url:
+            return None
+        with self._fetch_meta_lock:
+            return self._fetch_meta.pop(url, None)
+
+    def _is_blocked_message(self, message: str) -> bool:
+        msg = (message or "").lower()
+        hints = [
+            "captcha",
+            "cloudflare",
+            "just a moment",
+            "verify you are human",
+            "access denied",
+            "forbidden",
+            "blocked",
+            "challenge",
+            "403",
+            "429",
+        ]
+        return any(h in msg for h in hints)
+
+    def _detect_block_reason(self, content: str, current_url: str = "") -> Optional[str]:
+        text = (content or "").lower()
+        page_hints = [
+            "just a moment",
+            "verify you are human",
+            "access denied",
+            "captcha",
+            "cloudflare",
+            "security check",
+            "are you a robot",
+            "bot detection",
+            "enable javascript and cookies",
+        ]
+        for hint in page_hints:
+            if hint in text:
+                return f"content:{hint}"
+
+        lower_url = (current_url or "").lower()
+        url_hints = ["cdn-cgi", "challenge", "captcha", "bot"]
+        for hint in url_hints:
+            if hint in lower_url:
+                return f"url:{hint}"
+
+        return None
+
+    def _get_playwright_content(
+        self,
+        url: str,
+        selector: Optional[str] = None,
+        timeout: int = 10000,
+        wait_until: str = "domcontentloaded",
+    ) -> str:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
             context = browser.new_context(user_agent=self.user_agent)
@@ -55,18 +117,40 @@ class BaseFetcher(ABC):
             content = ""
             for i in range(3):
                 try:
-                    page.goto(url, timeout=60000, wait_until=wait_until)
+                    page.goto(url, timeout=60000, wait_until=wait_until)  # ty:ignore[invalid-argument-type]
                     if selector:
                         page.wait_for_selector(selector, timeout=timeout)
                     else:
                         page.wait_for_timeout(2000)
                     content = page.content()
+                    block_reason = self._detect_block_reason(content, page.url)
+                    if block_reason:
+                        self._set_fetch_meta(url, "blocked", block_reason)
+                    elif content.strip():
+                        self._set_fetch_meta(url, "ok")
+                    else:
+                        self._set_fetch_meta(url, "unknown", "empty_content")
                     break
                 except Exception as e:
-                    logger.error(f"Attempt {i+1} failed for {url}: {e}")
-                    if i == 2: break
+                    logger.error(f"Attempt {i + 1} failed for {url}: {e}")
+                    status = "blocked" if self._is_blocked_message(str(e)) else "error"
+                    self._set_fetch_meta(url, status, str(e))
+                    if i == 2:
+                        break
                     time.sleep(2)
-            
+
+            # If no explicit status was set in the loop, mark unknown.
+            if url:
+                current_meta = self._pop_fetch_meta(url)
+                if current_meta is None:
+                    if content.strip():
+                        self._set_fetch_meta(url, "ok")
+                    else:
+                        self._set_fetch_meta(url, "unknown", "empty_content")
+                else:
+                    # Put it back for run() to consume.
+                    self._set_fetch_meta(url, current_meta.get("status", "unknown"), current_meta.get("reason"))  # ty:ignore[invalid-argument-type]
+
             browser.close()
             return content
 
@@ -92,12 +176,35 @@ class BaseFetcher(ABC):
             futures = {executor.submit(self.fetch_details, p): i for i, p in enumerate(papers_to_fetch)}
             for future in as_completed(futures):
                 idx = futures[future]
+                link = papers_to_fetch[idx].get("link", "")
                 try:
                     details = future.result()
                     if details:
                         papers_to_fetch[idx].update(details)
+
+                    fetch_meta = self._pop_fetch_meta(link)
+                    if fetch_meta:
+                        papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "unknown")
+                        reason = fetch_meta.get("reason")
+                        if reason:
+                            papers_to_fetch[idx]["_fetch_fail_reason"] = reason
+                    elif details:
+                        papers_to_fetch[idx]["_fetch_status"] = "ok"
+                    else:
+                        papers_to_fetch[idx]["_fetch_status"] = "unknown"
+                        papers_to_fetch[idx]["_fetch_fail_reason"] = "empty_details"
                 except Exception as e:
+                    fetch_meta = self._pop_fetch_meta(link)
+                    if fetch_meta:
+                        papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "error")
+                        papers_to_fetch[idx]["_fetch_fail_reason"] = fetch_meta.get("reason") or str(e)
+                    else:
+                        status = "blocked" if self._is_blocked_message(str(e)) else "error"
+                        papers_to_fetch[idx]["_fetch_status"] = status
+                        papers_to_fetch[idx]["_fetch_fail_reason"] = str(e)
+
                     logger.error(f"Error fetching details for {papers_to_fetch[idx].get('link')}: {e}")
+
                 if self.sleep_time > 0:
                     time.sleep(self.sleep_time)
 

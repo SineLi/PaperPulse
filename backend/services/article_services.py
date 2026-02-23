@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 import logging
 from db.database import get_db_connection
 from typing import Optional, List, Union, TypedDict
@@ -112,12 +112,31 @@ class ArticleService:
             data_to_insert = []
             no_article_entries = []
             for article in articles:
-                if not article.get('title') or not article.get('link') or not article.get('abstract'):
-                    journal_name = article.get('journal')
-                    journal_id = journal_map.get(journal_name)
+                title = article.get('title')
+                link = article.get('link')
+                abstract = article.get('abstract')
+                fetch_status = article.get('_fetch_status', 'unknown')
+                fetch_fail_reason = article.get('_fetch_fail_reason')
+                journal_name = article.get('journal')
+                journal_id = journal_map.get(journal_name)
+
+                if not title or not link:
+                    continue
+
+                if not abstract:
+                    # Only classify as non-article when fetch succeeded and still has no abstract.
+                    if fetch_status != 'ok':
+                        logger.warning(
+                            "Skip non-article classification due fetch status: title=%s, status=%s, reason=%s",
+                            title,
+                            fetch_status,
+                            fetch_fail_reason
+                        )
+                        continue
+
                     no_article_entries.append({
-                        'title': article.get('title'),
-                        'link': article.get('link'),
+                        'title': title,
+                        'link': link,
                         'date': article.get('date'),
                         'journal_id': journal_id,
                         'doi': article.get('doi')
@@ -125,13 +144,10 @@ class ArticleService:
                     continue
                 # 序列化 authors 列表为 JSON 字符串
                 authors_json = json.dumps(article.get('authors', []), ensure_ascii=False)
-                
-                journal_name = article.get('journal')
-                journal_id = journal_map.get(journal_name)
 
                 data_to_insert.append((
-                    article.get('title'),
-                    article.get('link'),
+                    title,
+                    link,
                     article.get('doi'),
                     article.get('date'),
                     journal_id,
@@ -169,6 +185,12 @@ class ArticleService:
     def insert_non_article_entry(self, entry: dict):
         if not entry.get('title') or not entry.get('link'):
             logger.warning("Non-article entry must have at least a title and a link.")
+            return
+        if entry.get('journal_id') is None:
+            logger.warning(
+                "Skip non-article insert because journal_id is missing: title=%s",
+                entry.get("title")
+            )
             return
 
         with get_db_connection() as conn:
