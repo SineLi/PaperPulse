@@ -108,6 +108,20 @@ def init_database(db_path: str = DB_PATH):
         )
     ''')
 
+    # 7.非文章条目表 (non_article_entries)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS non_article_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            link TEXT UNIQUE NOT NULL,
+            date TEXT,                    
+            journal_id INTEGER NOT NULL,              -- 期刊id
+            doi  TEXT UNIQUE,                
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (journal_id) REFERENCES journals(id)
+        )'''
+        )
+
     # 创建关键索引
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_doi ON articles(doi)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)')
@@ -116,6 +130,7 @@ def init_database(db_path: str = DB_PATH):
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_ujs_journal ON user_journal_subscriptions(journal_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_uaf_article ON user_article_favourites(article_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_uar_article ON user_article_reads(article_id)')
+
     # 提交并关闭
     conn.commit()
     conn.close()
