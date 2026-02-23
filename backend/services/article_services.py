@@ -175,10 +175,39 @@ class ArticleService:
             finally:
                 pass
 
+            # 批量插入 non_article_entries，避免在循环中频繁打开新连接和提交事务
             try:
+                non_article_data_to_insert = []
                 for entry in no_article_entries:
-                    self.insert_non_article_entry(entry)
-            except Exception as e:
+                    if not entry.get('title') or not entry.get('link'):
+                        logger.warning("Non-article entry must have at least a title and a link.")
+                        continue
+                    if entry.get('journal_id') is None:
+                        logger.warning(
+                            "Skip non-article insert because journal_id is missing: title=%s",
+                            entry.get("title")
+                        )
+                        continue
+                    non_article_data_to_insert.append((
+                        entry.get('title'),
+                        entry.get('link'),
+                        entry.get('date'),
+                        entry.get('journal_id'),
+                        entry.get('doi'),
+                    ))
+
+                if non_article_data_to_insert:
+                    cursor.executemany('''
+                        INSERT OR IGNORE INTO non_article_entries (
+                            title, link, date, journal_id, doi
+                        ) VALUES (?, ?, ?, ?, ?)
+                    ''', non_article_data_to_insert)
+                    conn.commit()
+                    logger.info(
+                        "Successfully inserted %d non-article entries.",
+                        cursor.rowcount
+                    )
+            except sqlite3.Error as e:
                 logger.error(f"Error inserting non-article entries: {e}")
 
     
