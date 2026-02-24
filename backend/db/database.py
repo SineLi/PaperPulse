@@ -53,7 +53,7 @@ def init_database(db_path: str = DB_PATH):
             link TEXT UNIQUE NOT NULL,      -- 原文链接 (DOI URL 或期刊页面)
             doi TEXT UNIQUE,                -- DOI (e.g., "10.1038/s41586-023-06204-5")
             date TEXT,                      -- 发表日期 (ISO 8601: "2023-12-24")
-            journal_id TEXT,              -- 期刊id
+            journal_id INTEGER,              -- 期刊id
             authors TEXT,                   -- JSON 格式: ["Zhang, Y.", "Li, X."]
             editor_summary TEXT,            -- 编辑摘要
             structured_abstract TEXT,        -- 结构化摘要 (JSON 或 XML)

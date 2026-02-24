@@ -286,8 +286,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                     // 正文 — 带上下切换动画
                     SliverToBoxAdapter(
                       child: _buildArticleSwitchTransition(
-                        animate:
-                            !disableAnimations && _hasSwitchedArticle,
+                        animate: !disableAnimations && _hasSwitchedArticle,
                         child: RepaintBoundary(
                           child: _buildArticleContent(
                             colorScheme,
@@ -448,6 +447,22 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             Divider(color: colorScheme.outlineVariant, height: 1),
             const SizedBox(height: 24),
 
+            // 一句话总结
+            if (_viewData.displayOneStanceSum != null &&
+                _viewData.displayOneStanceSum!.isNotEmpty)
+              _buildOneStanceSummary(colorScheme, textTheme, settings),
+
+            // 背景
+            if (_viewData.displayBackground != null &&
+                _viewData.displayBackground!.isNotEmpty)
+              _buildSection(
+                '背景',
+                _viewData.displayBackground!,
+                colorScheme,
+                textTheme,
+                settings,
+              ),
+
             // ── 摘要 / 正文 ──
             if (_viewData.displaySummary != null &&
                 _viewData.displaySummary!.isNotEmpty)
@@ -598,6 +613,44 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildOneStanceSummary(
+    ColorScheme colorScheme,
+    TextTheme textTheme,
+    AppSetting settings,
+  ) {
+    if (_viewData.displayOneStanceSum == null ||
+        _viewData.displayOneStanceSum!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: colorScheme.surfaceContainer,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _viewData.displayOneStanceSum!,
+            style: textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurface,
+              fontSize: settings.contentFontSize.toDouble(),
+              fontWeight: FontWeight.w600,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
