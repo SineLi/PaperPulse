@@ -20,6 +20,8 @@ Map<String, Color> tagColorMap = {
 
 class ArticleSummary {
   final String? title;
+  final String? oneStanceSum;
+  final String? background;
   final String? summary;
   final String? highlights;
   final List<String>? innovations;
@@ -28,6 +30,8 @@ class ArticleSummary {
 
   ArticleSummary({
     required this.title,
+    required this.oneStanceSum,
+    required this.background,
     required this.summary,
     required this.highlights,
     required this.innovations,
@@ -41,6 +45,8 @@ class ArticleSummary {
       if (json is! Map<String, dynamic>) {
         return ArticleSummary(
           title: null,
+          oneStanceSum: null,
+          background: null,
           summary: null,
           highlights: null,
           innovations: null,
@@ -56,6 +62,8 @@ class ArticleSummary {
 
       return ArticleSummary(
         title: json['title']?.toString(),
+        oneStanceSum: json['one_sentence_summary']?.toString(),
+        background: json['background']?.toString(),
         summary: json['summary']?.toString(),
         highlights: json['highlights']?.toString(),
         innovations: list(json['innovations']),
@@ -65,6 +73,8 @@ class ArticleSummary {
     } catch (_) {
       return ArticleSummary(
         title: null,
+        oneStanceSum: null,
+        background: null,
         summary: null,
         highlights: null,
         innovations: null,
@@ -110,6 +120,8 @@ class ArticleViewData {
     return (words[0][0] + words[1][0]).toUpperCase();
   }
 
+  String? get displayOneStanceSum => summary.oneStanceSum;
+  String? get displayBackground => summary.background;
   String? get displaySummary => summary.summary ?? article.abs;
   String? get displayHighlights => summary.highlights;
   List<String>? get displayInnovations => summary.innovations;
