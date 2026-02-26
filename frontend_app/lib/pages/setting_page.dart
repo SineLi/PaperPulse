@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import "package:simple_icons/simple_icons.dart";
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
@@ -914,6 +915,12 @@ class AboutPage extends StatelessWidget {
                       children: [
                         FilledButton.icon(
                           onPressed: () async {
+                            launchUrl(
+                              Uri.parse(_githubRepoUrl),
+                              mode: LaunchMode.externalApplication,
+                            );
+                          },
+                          onLongPress: () async {
                             await Clipboard.setData(
                               const ClipboardData(text: _githubRepoUrl),
                             );

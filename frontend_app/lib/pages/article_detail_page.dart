@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/models/article.dart';
 import '../data/models/article_view_data.dart';
@@ -237,6 +238,18 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     );
   }
 
+  void _openInBrowser() {
+    final doi = _viewData.article.doi;
+    if (doi.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无有效链接')));
+      return;
+    }
+    final url = 'https://doi.org/$doi';
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
@@ -280,7 +293,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                         IconButton(
                           icon: const Icon(Icons.open_in_browser_rounded),
                           tooltip: '在浏览器中打开',
-                          onPressed: _shareDoi,
+                          onPressed: _openInBrowser,
                         ),
                         const SizedBox(width: 4),
                       ],
