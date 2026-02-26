@@ -18,9 +18,15 @@ typedef ItemRefresher = Future<int> Function();
 /// 刷新成功后的提示文案生成器（传入新增数量，返回 SnackBar 文案；返回 null 则不提示）
 typedef RefreshMessageBuilder = String? Function(int count);
 
-/// 列表项构建器：传入上下文、当前项、当前索引、全部已加载数据
+/// 列表项构建器：传入上下文、当前项、当前索引、全部已加载数据，以及原地更新某项的回调
 typedef ItemWidgetBuilder<T> =
-    Widget Function(BuildContext context, T item, int index, List<T> allItems);
+    Widget Function(
+      BuildContext context,
+      T item,
+      int index,
+      List<T> allItems,
+      void Function(int index, T newItem) updateItem,
+    );
 
 /// 骨架卡片构建器
 typedef SkeletonBuilder = Widget Function(ColorScheme colorScheme);
@@ -189,6 +195,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     _searchFocusNode.requestFocus();
   }
 
+  void _updateItem(int index, T newItem) {
+    if (index < 0 || index >= _items.length) return;
+    setState(() {
+      _items[index] = newItem;
+    });
+  }
+
   void _resetAndReload() {
     setState(() {
       _currentOffset = 0;
@@ -297,22 +310,22 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
     // 筛选按钮
     if (widget.onFilter != null) {
-      // actions.add(
-      //   IconButton(
-      //     icon: Icon(
-      //       widget.filterActive
-      //           ? Icons.filter_list
-      //           : Icons.filter_list_outlined,
-      //     ),
-      //     tooltip: '筛选',
-      //     onPressed: widget.onFilter,
-      //     style: widget.filterActive
-      //         ? IconButton.styleFrom(
-      //             foregroundColor: Theme.of(context).colorScheme.primary,
-      //           )
-      //         : null,
-      //   ),
-      // );
+      actions.add(
+        IconButton(
+          icon: Icon(
+            widget.filterActive
+                ? Icons.filter_list
+                : Icons.filter_list_outlined,
+          ),
+          tooltip: '筛选',
+          onPressed: widget.onFilter,
+          style: widget.filterActive
+              ? IconButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                )
+              : null,
+        ),
+      );
     }
 
     // 搜索按钮
@@ -485,6 +498,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           _items[index],
           index,
           List.unmodifiable(_items),
+          _updateItem,
         );
       },
     );

@@ -16,11 +16,13 @@ import 'setting_page.dart';
 class ArticleDetailPage extends StatefulWidget {
   final List<Article> articles;
   final int initialIndex;
+  final void Function(int articleId)? onArticleRead;
 
   const ArticleDetailPage({
     super.key,
     required this.articles,
     required this.initialIndex,
+    this.onArticleRead,
   });
 
   @override
@@ -203,6 +205,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final db = context.read<ArticleDatabaseIO>();
     try {
       await db.setReadWithSync(_viewData.id, true);
+      widget.onArticleRead?.call(_viewData.id);
     } catch (_) {
       _markedAsRead.remove(_viewData.id);
       rethrow;
@@ -469,17 +472,6 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
               _buildSection(
                 '总结',
                 _viewData.displaySummary!,
-                colorScheme,
-                textTheme,
-                settings,
-              ),
-
-            // ── 亮点 ──
-            if (_viewData.displayHighlights != null &&
-                _viewData.displayHighlights!.isNotEmpty)
-              _buildSection(
-                '亮点',
-                _viewData.displayHighlights!,
                 colorScheme,
                 textTheme,
                 settings,

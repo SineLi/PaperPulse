@@ -15,13 +15,14 @@ class FavPage extends StatelessWidget {
 
     return ArticleListPage(
       title: '我的收藏',
-      loadArticles: (limit, offset) =>
-          feedRepo.getLocalFavoriteArticles(limit: limit, offset: offset),
+      loadArticles: (limit, offset, filter) =>
+          feedRepo.getLocalFavoriteArticles(
+            limit: limit,
+            offset: offset,
+            filter: filter,
+          ),
       searchArticles: (query, limit, offset) =>
           feedRepo.searchLocalArticles(query, limit: limit, offset: offset),
-      onFilter: () {
-        // TODO: implement filter bottom sheet
-      },
       onSettings: () {
         // TODO: implement settings
       },
@@ -29,6 +30,8 @@ class FavPage extends StatelessWidget {
         await syncService.pullStatus();
         return 0;
       },
+      loadFilterJournals: feedRepo.getFilterableJournals,
+      loadFilterTags: feedRepo.getFilterableTags,
       emptyIcon: Icons.bookmark_border_rounded,
       emptyTitle: '暂无收藏',
       emptySubtitle: '收藏的文章会出现在这里',

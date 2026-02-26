@@ -5,7 +5,13 @@ class Article {
   static const colId = 'article_id';
   static const colTitle = 'title';
   static const colAbs = 'abs';
+  static const colSumTitle = 'sum_title';
+  static const colOneSentenceSummary = 'one_sentence_summary';
+  static const colBackground = 'background';
   static const colSummary = 'summary';
+  static const colInnovations = 'innovations';
+  static const colMaintag = 'maintag';
+  static const colSubtags = 'subtags';
   static const colGAUrl = 'graphical_abstract_url';
   static const colGACachePath = 'graphical_abstract_cache_path';
   static const colPublishedDate = 'published_date';
@@ -29,6 +35,12 @@ class Article {
   final String journalName;
   final String journalAbbreviation;
   final String doi;
+  final String sumTitle;
+  final String oneSentenceSummary;
+  final String background;
+  final String innovations;
+  final String maintag;
+  final List<String> subtags;
   final String publisher;
   final bool isFavorite;
   final bool isRead;
@@ -46,6 +58,12 @@ class Article {
     required this.journalName,
     required this.journalAbbreviation,
     required this.doi,
+    required this.sumTitle,
+    required this.oneSentenceSummary,
+    required this.background,
+    required this.innovations,
+    required this.maintag,
+    required this.subtags,
     this.publisher = '',
     this.isFavorite = false,
     this.isRead = false,
@@ -74,6 +92,12 @@ class Article {
       publisher: publisher ?? this.publisher,
       isFavorite: isFavorite ?? this.isFavorite,
       isRead: isRead ?? this.isRead,
+      sumTitle: sumTitle,
+      oneSentenceSummary: oneSentenceSummary,
+      background: background,
+      innovations: innovations,
+      maintag: maintag,
+      subtags: subtags,
     );
   }
 
@@ -83,6 +107,12 @@ class Article {
       colTitle: title,
       colAbs: abs,
       colSummary: summary,
+      colSumTitle: sumTitle,
+      colOneSentenceSummary: oneSentenceSummary,
+      colBackground: background,
+      colInnovations: jsonEncode(innovations),
+      colMaintag: maintag,
+      colSubtags: jsonEncode(subtags),
       colGAUrl: graphicalAbstractUrl,
       colGACachePath: graphicalAbstractCachePath,
       colPublishedDate: publishedDate,
@@ -101,6 +131,12 @@ class Article {
       articleId: map[colId] as int,
       title: map[colTitle] as String,
       abs: map[colAbs] as String,
+      sumTitle: map[colSumTitle] as String,
+      oneSentenceSummary: map[colOneSentenceSummary] as String,
+      background: map[colBackground] as String,
+      innovations: jsonDecode(map[colInnovations] as String),
+      maintag: map[colMaintag] as String,
+      subtags: List<String>.from(jsonDecode(map[colSubtags] as String)),
       summary: map[colSummary] as String,
       graphicalAbstractUrl: map[colGAUrl] as String?,
       graphicalAbstractCachePath: map[colGACachePath] as String?,
@@ -118,11 +154,20 @@ class Article {
   }
 
   factory Article.fromJson(Map<String, dynamic> json) {
+    final llmSummaryStr = json['llm_summary'] as String;
+    final llmMap = jsonDecode(llmSummaryStr) as Map<String, dynamic>;
+
     return Article(
       articleId: json['id'] as int,
       title: json['title'] as String,
       abs: json['abstract'] as String,
-      summary: json['llm_summary'] as String,
+      summary: llmMap['summary'] as String,
+      sumTitle: llmMap['title'] as String,
+      oneSentenceSummary: llmMap['one_sentence_summary'] as String,
+      background: llmMap['background'] as String,
+      innovations: (llmMap['innovations'] as List).join('\n'),
+      maintag: llmMap['maintag'] as String,
+      subtags: List<String>.from(llmMap['subtags'] as List),
       graphicalAbstractUrl: json['graphical_abstract'] as String?,
       graphicalAbstractCachePath: null,
       publishedDate: json['date'] as String,

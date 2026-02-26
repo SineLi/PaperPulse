@@ -15,18 +15,18 @@ class FeedPage extends StatelessWidget {
 
     return ArticleListPage(
       title: '文章推送',
-      loadArticles: (limit, offset) =>
-          feedRepo.getLocalArticles(limit: limit, offset: offset),
+      loadArticles: (limit, offset, filter) => feedRepo.getLocalArticles(
+        limit: limit,
+        offset: offset,
+        filter: filter,
+      ),
       searchArticles: (query, limit, offset) =>
           feedRepo.searchLocalArticles(query, limit: limit, offset: offset),
-      onFilter: () {
-        // TODO: implement filter bottom sheet
-      },
-      onSettings: () {
-        // TODO: implement settings
-      },
+      onSettings: () {},
       onRefresh: () => feedRepo.refreshArticles(),
       onPostRefresh: () => syncService.pullStatus(),
+      loadFilterJournals: feedRepo.getFilterableJournals,
+      loadFilterTags: feedRepo.getFilterableTags,
       emptyTitle: '暂无文章',
       emptySubtitle: '下拉刷新以获取最新内容',
       emptyActionLabel: '刷新',

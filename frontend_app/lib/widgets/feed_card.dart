@@ -22,50 +22,55 @@ class FeedItemCard extends StatelessWidget {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      color: colorScheme.surfaceContainerLow,
+      color: articleViewData.isRead
+          ? colorScheme.surfaceContainerLowest.withValues(alpha: 0.6)
+          : colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── 文字内容 ──
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildMetadataRow(colorScheme, textTheme),
-                    const SizedBox(height: 8),
-                    Text(
-                      articleViewData.displayTitle ??
-                          articleViewData.article.title,
-                      maxLines: hasImage ? 3 : 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        height: 1.35,
-                        color: articleViewData.isRead
-                            ? colorScheme.onSurfaceVariant
-                            : colorScheme.onSurface,
+      child: Opacity(
+        opacity: articleViewData.isRead ? 0.75 : 1.0,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── 文字内容 ──
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildMetadataRow(colorScheme, textTheme),
+                      const SizedBox(height: 8),
+                      Text(
+                        articleViewData.displayTitle ??
+                            articleViewData.article.title,
+                        maxLines: hasImage ? 3 : 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                          color: articleViewData.isRead
+                              ? colorScheme.onSurfaceVariant
+                              : colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _buildBottomRow(colorScheme, textTheme),
-                  ],
+                      const SizedBox(height: 10),
+                      _buildBottomRow(colorScheme, textTheme),
+                    ],
+                  ),
                 ),
-              ),
 
-              // ── 缩略图 ──
-              if (hasImage) ...[
-                const SizedBox(width: 14),
-                _buildThumbnail(colorScheme),
+                // ── 缩略图 ──
+                if (hasImage) ...[
+                  const SizedBox(width: 14),
+                  _buildThumbnail(colorScheme),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

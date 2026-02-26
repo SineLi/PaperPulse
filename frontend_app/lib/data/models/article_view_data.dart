@@ -18,89 +18,23 @@ Map<String, Color> tagColorMap = {
   'Frontiers': Color(0xFF8bc53f),
 };
 
-class ArticleSummary {
-  final String? title;
-  final String? oneStanceSum;
-  final String? background;
-  final String? summary;
-  final String? highlights;
-  final List<String>? innovations;
-  final String? maintag;
-  final List<String>? subtags;
-
-  ArticleSummary({
-    required this.title,
-    required this.oneStanceSum,
-    required this.background,
-    required this.summary,
-    required this.highlights,
-    required this.innovations,
-    required this.maintag,
-    required this.subtags,
-  });
-
-  factory ArticleSummary.fromJson(String jsonStr) {
-    try {
-      final json = jsonDecode(jsonStr);
-      if (json is! Map<String, dynamic>) {
-        return ArticleSummary(
-          title: null,
-          oneStanceSum: null,
-          background: null,
-          summary: null,
-          highlights: null,
-          innovations: null,
-          maintag: null,
-          subtags: null,
-        );
-      }
-
-      List<String>? list(dynamic v) {
-        if (v is List) return v.map((e) => e.toString()).toList();
-        return null;
-      }
-
-      return ArticleSummary(
-        title: json['title']?.toString(),
-        oneStanceSum: json['one_sentence_summary']?.toString(),
-        background: json['background']?.toString(),
-        summary: json['summary']?.toString(),
-        highlights: json['highlights']?.toString(),
-        innovations: list(json['innovations']),
-        maintag: json['maintag']?.toString(),
-        subtags: list(json['subtags']),
-      );
-    } catch (_) {
-      return ArticleSummary(
-        title: null,
-        oneStanceSum: null,
-        background: null,
-        summary: null,
-        highlights: null,
-        innovations: null,
-        maintag: null,
-        subtags: null,
-      );
-    }
-  }
-}
-
 class ArticleViewData {
   final Article article;
-  final ArticleSummary summary;
 
-  ArticleViewData({required this.article, required this.summary});
+  ArticleViewData({required this.article});
 
   factory ArticleViewData.fromArticle(Article article) {
-    return ArticleViewData(
-      article: article,
-      summary: ArticleSummary.fromJson(article.summary),
-    );
+    return ArticleViewData(article: article);
   }
 
   int get id => article.articleId;
-  String? get displayTitle => summary.title ?? article.title;
+
+  // 使用 Article 中解析好的 sumTitle，如果为空则显示原标题
+  String? get displayTitle =>
+      article.sumTitle.isNotEmpty ? article.sumTitle : article.title;
+
   String? get displayJournalName => article.journalAbbreviation;
+
   String get displayJournalInitials {
     String name = article.journalAbbreviation.isNotEmpty
         ? article.journalAbbreviation
@@ -120,13 +54,18 @@ class ArticleViewData {
     return (words[0][0] + words[1][0]).toUpperCase();
   }
 
-  String? get displayOneStanceSum => summary.oneStanceSum;
-  String? get displayBackground => summary.background;
-  String? get displaySummary => summary.summary ?? article.abs;
-  String? get displayHighlights => summary.highlights;
-  List<String>? get displayInnovations => summary.innovations;
-  String? get displayMaintag => summary.maintag;
-  List<String>? get displaySubtags => summary.subtags;
+  String? get displayOneStanceSum => article.oneSentenceSummary;
+  String? get displayBackground => article.background;
+  String? get displaySummary =>
+      article.summary.isNotEmpty ? article.summary : article.abs;
+
+  // 将字符串类型的 innovations 转回列表进行展示
+  List<String>? get displayInnovations =>
+      article.innovations.isNotEmpty ? article.innovations.split('\n') : null;
+
+  String? get displayMaintag => article.maintag;
+  List<String>? get displaySubtags => article.subtags;
+
   String? get publishedDate {
     if (article.publishedDate.isEmpty) return null;
     try {
