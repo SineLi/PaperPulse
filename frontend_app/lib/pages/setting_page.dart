@@ -318,6 +318,26 @@ class SettingPage extends StatelessWidget {
                   ),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.code_outlined),
+                  title: Text('实验'),
+                  subtitle: Text('正在测试的新功能'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => Scaffold(
+                        body: CustomScrollView(
+                          slivers: [
+                            const SliverAppBar.large(title: Text('实验')),
+                            const SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Center(child: Text('暂无实验功能，敬请期待！')),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                ListTile(
                   leading: Icon(Icons.info_outline_rounded),
                   title: Text('关于'),
                   subtitle: Text('$_appName v$_appVersion'),
@@ -668,6 +688,7 @@ class ThemeSettingsPage extends StatelessWidget {
                   onBoldChanged: (b) =>
                       context.read<SettingsController>().updateTitleBold(b),
                 ),
+                SizedBox(height: 64),
               ]),
             ),
           ],
