@@ -71,7 +71,7 @@ class ArticleListPage extends StatelessWidget {
       pageSize: pageSize,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, article, index, allArticles) {
+      itemBuilder: (ctx, article, index, allArticles, updateItem) {
         return FeedItemCard(
           article: article,
           onTap: () {
@@ -80,6 +80,14 @@ class ArticleListPage extends StatelessWidget {
                 builder: (_) => ArticleDetailPage(
                   articles: allArticles,
                   initialIndex: index,
+                  onArticleRead: (articleId) {
+                    final idx = allArticles.indexWhere(
+                      (a) => a.articleId == articleId,
+                    );
+                    if (idx != -1) {
+                      updateItem(idx, allArticles[idx].copyWith(isRead: true));
+                    }
+                  },
                 ),
               ),
             );

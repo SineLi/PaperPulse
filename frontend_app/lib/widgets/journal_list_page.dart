@@ -62,7 +62,7 @@ class JournalListPage extends StatelessWidget {
       pageSize: pageSize,
       skeletonCount: 8,
       skeletonBuilder: (cs) => _JournalSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, journal, index, _) {
+      itemBuilder: (ctx, journal, index, _, __) {
         return JournalCard(
           journal: journal,
           isFollowed: isFollowed(journal.journalId),
