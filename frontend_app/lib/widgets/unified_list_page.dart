@@ -400,7 +400,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               ),
 
               // ── 刷新进度指示条 ──
-              if (_isRefreshing)
+              if (_isRefreshing || _isLoading)
                 LinearProgressIndicator(
                   minHeight: 3,
                   color: colorScheme.primary,
