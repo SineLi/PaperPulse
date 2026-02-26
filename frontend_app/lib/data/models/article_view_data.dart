@@ -59,8 +59,6 @@ class ArticleViewData {
   String? get displaySummary =>
       article.summary.isNotEmpty ? article.summary : article.abs;
 
-  String? get displayHighlights => null;
-
   // 将字符串类型的 innovations 转回列表进行展示
   List<String>? get displayInnovations =>
       article.innovations.isNotEmpty ? article.innovations.split('\n') : null;

@@ -477,17 +477,6 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 settings,
               ),
 
-            // ── 亮点 ──
-            if (_viewData.displayHighlights != null &&
-                _viewData.displayHighlights!.isNotEmpty)
-              _buildSection(
-                '亮点',
-                _viewData.displayHighlights!,
-                colorScheme,
-                textTheme,
-                settings,
-              ),
-
             // ── 创新点 ──
             if (_viewData.displayInnovations != null &&
                 _viewData.displayInnovations!.isNotEmpty)

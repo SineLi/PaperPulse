@@ -363,9 +363,7 @@ class ArticleDatabaseIO {
     }
 
     // 4. 话题标签
-    //    maintag 列直接等值匹配；subtags 列以 JSON 数组字符串形式存储（如 ["Bio","Chem"]），
-    //    使用 LIKE '%"tag"%' 模糊匹配，准确率足够且无需额外 JSON 函数。
-    //    多个 tag 之间取 OR（"命中任意一个即可"）。
+    //    maintag 列直接等值匹配
     if (filter.tags.isNotEmpty) {
       final tagClauses = filter.tags
           .map(
