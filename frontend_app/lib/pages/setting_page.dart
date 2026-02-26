@@ -866,60 +866,94 @@ class AboutPage extends StatelessWidget {
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
                 child: Column(
                   children: [
-                    const Spacer(flex: 2),
-                    SvgPicture.asset('assets/logo.svg', width: 88),
-                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: SvgPicture.asset('assets/logo.svg', width: 64),
+                    ),
+                    const SizedBox(height: 24),
                     Text(
                       _appName,
-                      style: textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      style: textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                        letterSpacing: -0.5,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'v$_appVersion+$_appBuildNumber',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondaryContainer.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: colorScheme.secondaryContainer,
+                        ),
+                      ),
+                      child: Text(
+                        'Version $_appVersion+$_appBuildNumber',
+                        style: textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                    const Spacer(flex: 3),
+                    const Spacer(flex: 2),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        IconButton.filledTonal(
-                          iconSize: 32,
-                          tooltip: 'GitHub',
+                        FilledButton.icon(
                           onPressed: () async {
                             await Clipboard.setData(
                               const ClipboardData(text: _githubRepoUrl),
                             );
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('GitHub 链接已复制')),
+                              const SnackBar(
+                                content: Text('GitHub 链接已复制'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
                             );
                           },
-                          icon: const Icon(SimpleIcons.github),
+                          icon: const Icon(SimpleIcons.github, size: 20),
+                          label: const Text('GitHub 仓库'),
                         ),
-                        const SizedBox(width: 32),
-                        IconButton.filledTonal(
-                          iconSize: 32,
-                          tooltip: '查看 Licenses',
+                        const SizedBox(width: 16),
+                        FilledButton.tonalIcon(
                           onPressed: () {
                             showLicensePage(
                               context: context,
                               applicationName: _appName,
                               applicationVersion:
                                   '$_appVersion+$_appBuildNumber',
+                              applicationIcon: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: SvgPicture.asset(
+                                  'assets/logo.svg',
+                                  width: 64,
+                                ),
+                              ),
                             );
                           },
-                          icon: const Icon(Icons.description_outlined),
+                          icon: const Icon(
+                            Icons.description_outlined,
+                            size: 20,
+                          ),
+                          label: const Text('开源许可'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const Spacer(flex: 3),
                   ],
                 ),
               ),
