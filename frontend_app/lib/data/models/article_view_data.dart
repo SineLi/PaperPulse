@@ -87,20 +87,21 @@ class ArticleSummary {
 
 class ArticleViewData {
   final Article article;
-  final ArticleSummary summary;
 
-  ArticleViewData({required this.article, required this.summary});
+  ArticleViewData({required this.article});
 
   factory ArticleViewData.fromArticle(Article article) {
-    return ArticleViewData(
-      article: article,
-      summary: ArticleSummary.fromJson(article.summary),
-    );
+    return ArticleViewData(article: article);
   }
 
   int get id => article.articleId;
-  String? get displayTitle => summary.title ?? article.title;
+
+  // 使用 Article 中解析好的 sumTitle，如果为空则显示原标题
+  String? get displayTitle =>
+      article.sumTitle.isNotEmpty ? article.sumTitle : article.title;
+
   String? get displayJournalName => article.journalAbbreviation;
+
   String get displayJournalInitials {
     String name = article.journalAbbreviation.isNotEmpty
         ? article.journalAbbreviation
@@ -120,13 +121,20 @@ class ArticleViewData {
     return (words[0][0] + words[1][0]).toUpperCase();
   }
 
-  String? get displayOneStanceSum => summary.oneStanceSum;
-  String? get displayBackground => summary.background;
-  String? get displaySummary => summary.summary ?? article.abs;
-  String? get displayHighlights => summary.highlights;
-  List<String>? get displayInnovations => summary.innovations;
-  String? get displayMaintag => summary.maintag;
-  List<String>? get displaySubtags => summary.subtags;
+  String? get displayOneStanceSum => article.oneSentenceSummary;
+  String? get displayBackground => article.background;
+  String? get displaySummary =>
+      article.summary.isNotEmpty ? article.summary : article.abs;
+
+  String? get displayHighlights => null;
+
+  // 将字符串类型的 innovations 转回列表进行展示
+  List<String>? get displayInnovations =>
+      article.innovations.isNotEmpty ? article.innovations.split('\n') : null;
+
+  String? get displayMaintag => article.maintag;
+  List<String>? get displaySubtags => article.subtags;
+
   String? get publishedDate {
     if (article.publishedDate.isEmpty) return null;
     try {

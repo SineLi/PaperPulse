@@ -21,7 +21,7 @@ class DatabaseHelper {
     );
     final db = await openDatabase(
       dbFileDir,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute(createArticlesTable);
         await db.execute(createJournalsTable);
