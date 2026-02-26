@@ -227,7 +227,7 @@ class _ArticleFilterSheetState extends State<_ArticleFilterSheet> {
           ),
           selectedColor: cs.secondaryContainer,
           backgroundColor: cs.surfaceContainerHighest,
-          side: BorderSide.none,
+          // side: BorderSide.none,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -255,7 +255,7 @@ class _ArticleFilterSheetState extends State<_ArticleFilterSheet> {
           ),
           selectedColor: cs.secondaryContainer,
           backgroundColor: cs.surfaceContainerHighest,
-          side: BorderSide.none,
+          // side: BorderSide.none,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -292,7 +292,7 @@ class _ArticleFilterSheetState extends State<_ArticleFilterSheet> {
           ),
           selectedColor: cs.secondaryContainer,
           backgroundColor: cs.surfaceContainerHighest,
-          side: BorderSide.none,
+          // side: BorderSide.none,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -329,7 +329,7 @@ class _ArticleFilterSheetState extends State<_ArticleFilterSheet> {
           ),
           selectedColor: cs.tertiaryContainer,
           backgroundColor: cs.surfaceContainerHighest,
-          side: BorderSide.none,
+          // side: BorderSide.none,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),

@@ -72,15 +72,17 @@ class _JournalPageState extends State<JournalPage> {
 
     return JournalListPage(
       title: '期刊',
-      loadJournals: (limit, offset) =>
-          journalRepo.getLocalJournals(limit: limit, offset: offset),
+      loadJournals: (limit, offset, filter) => journalRepo.getLocalJournals(
+        limit: limit,
+        offset: offset,
+        filter: filter,
+      ),
       searchJournals: (query, limit, offset) =>
           journalRepo.searchLocalJournals(query, limit: limit, offset: offset),
       isFollowed: (journalId) => _followedIds.contains(journalId),
       onFollowChanged: _handleFollowChanged,
-      onFilter: () {
-        // TODO: implement journal filter bottom sheet
-      },
+      loadFilterPublishers: journalRepo.getFilterablePublishers,
+      loadFilterCasCategories: journalRepo.getFilterableCasCategories,
       onSettings: () {
         // TODO: implement settings
       },

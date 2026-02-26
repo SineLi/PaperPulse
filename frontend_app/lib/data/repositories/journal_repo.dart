@@ -1,6 +1,7 @@
 import '../service/journal_service.dart';
 import '../db/journaldb.dart';
 import '../models/journal.dart';
+import '../models/journal_filter.dart';
 
 class JournalRepo {
   final JournalService _journalService;
@@ -15,8 +16,21 @@ class JournalRepo {
   Future<List<Journal>> getLocalJournals({
     int limit = 50,
     int offset = 0,
+    JournalFilter filter = JournalFilter.empty,
   }) async {
-    return await _journalDatabaseIO.getJournals(limit: limit, offset: offset);
+    return await _journalDatabaseIO.getJournals(
+      limit: limit,
+      offset: offset,
+      filter: filter,
+    );
+  }
+
+  Future<List<String>> getFilterablePublishers() async {
+    return await _journalDatabaseIO.getDistinctPublishers();
+  }
+
+  Future<List<String>> getFilterableCasCategories() async {
+    return await _journalDatabaseIO.getDistinctCasCategories();
   }
 
   Future<Journal?> getLocalJournalById(int journalId) async {
