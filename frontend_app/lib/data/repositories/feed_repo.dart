@@ -2,6 +2,7 @@ import '../service/feed_service.dart';
 import '../service/image_cache_service.dart';
 import '../db/articledb.dart';
 import '../models/article.dart';
+import '../models/article_filter.dart';
 import 'journal_repo.dart';
 
 class FeedRepo {
@@ -26,10 +27,12 @@ class FeedRepo {
   Future<List<Article>> getLocalArticles({
     int limit = 50,
     int offset = 0,
+    ArticleFilter filter = ArticleFilter.empty,
   }) async {
     List<Article> articles = await _articleDatabaseIO.getArticles(
       limit,
       offset,
+      filter,
     );
 
     if (_journalRepo == null) return articles;
@@ -63,10 +66,12 @@ class FeedRepo {
   Future<List<Article>> getLocalFavoriteArticles({
     int limit = 50,
     int offset = 0,
+    ArticleFilter filter = ArticleFilter.empty,
   }) async {
     List<Article> articles = await _articleDatabaseIO.getFavoriteArticles(
       limit: limit,
       offset: offset,
+      filter: filter,
     );
 
     if (_journalRepo == null) return articles;
@@ -102,6 +107,14 @@ class FeedRepo {
 
     return enrichedArticles;
   }
+
+  /// 返回当前文章库中实际出现的期刊列表，供筛选面板使用。
+  Future<List<({int id, String name, String abbr})>> getFilterableJournals() =>
+      _articleDatabaseIO.getDistinctJournalsInArticles();
+
+  /// 返回当前文章库中所有出现过的话题标签（maintag + subtags 合集）。
+  Future<List<String>> getFilterableTags() =>
+      _articleDatabaseIO.getDistinctTagsInArticles();
 
   Future<int> refreshArticles() async {
     // 使用独立的 feed 同步 ID，不受收藏单篇拉取的影响

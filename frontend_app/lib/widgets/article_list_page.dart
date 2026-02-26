@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
 
 import '../data/models/article.dart';
+import '../data/models/article_filter.dart';
 import '../pages/article_detail_page.dart';
+import 'article_filter_sheet.dart';
 import 'feed_card.dart';
 import 'unified_list_page.dart';
 
 /// 加载文章的回调：返回指定分页的文章列表
-typedef ArticleLoader = Future<List<Article>> Function(int limit, int offset);
+typedef ArticleLoader =
+    Future<List<Article>> Function(int limit, int offset, ArticleFilter filter);
 
 /// 搜索文章的回调
 typedef ArticleSearcher =
     Future<List<Article>> Function(String query, int limit, int offset);
 
 /// 文章列表页：基于 [UnifiedListPage] 的便捷封装，
-/// 内置 FeedItemCard 和文章骨架屏。
-class ArticleListPage extends StatelessWidget {
+/// 内置 FeedItemCard、文章骨架屏和筛选面板。
+class ArticleListPage extends StatefulWidget {
   final String title;
   final List<Widget>? actions;
   final ArticleLoader loadArticles;
   final ArticleSearcher? searchArticles;
-  final VoidCallback? onFilter;
-  final bool filterActive;
   final VoidCallback? onSettings;
   final Future<int> Function()? onRefresh;
   final Future<void> Function()? onPostRefresh;
@@ -31,14 +32,19 @@ class ArticleListPage extends StatelessWidget {
   final String? emptyActionLabel;
   final int pageSize;
 
+  /// 返回筛选面板可用的期刊列表（懒加载，首次打开面板时调用）
+  final Future<List<({int id, String name, String abbr})>> Function()?
+  loadFilterJournals;
+
+  /// 返回筛选面板可用的标签列表（懒加载，首次打开面板时调用）
+  final Future<List<String>> Function()? loadFilterTags;
+
   const ArticleListPage({
     super.key,
     required this.title,
     required this.loadArticles,
     this.actions,
     this.searchArticles,
-    this.onFilter,
-    this.filterActive = false,
     this.onSettings,
     this.onRefresh,
     this.onPostRefresh,
@@ -48,27 +54,68 @@ class ArticleListPage extends StatelessWidget {
     this.emptySubtitle = '下拉刷新以获取最新内容',
     this.emptyActionLabel = '刷新',
     this.pageSize = 20,
+    this.loadFilterJournals,
+    this.loadFilterTags,
   });
+
+  @override
+  State<ArticleListPage> createState() => _ArticleListPageState();
+}
+
+class _ArticleListPageState extends State<ArticleListPage> {
+  ArticleFilter _filter = ArticleFilter.empty;
+
+  // 筛选面板数据缓存，首次打开时懒加载，避免每次打开都重新查询 DB
+  List<({int id, String name, String abbr})>? _cachedJournals;
+  List<String>? _cachedTags;
+
+  Future<void> _openFilterSheet() async {
+    // 首次打开时并行加载期刊和标签数据
+    if (_cachedJournals == null || _cachedTags == null) {
+      final results = await Future.wait([
+        widget.loadFilterJournals?.call() ??
+            Future.value(<({int id, String name, String abbr})>[]),
+        widget.loadFilterTags?.call() ?? Future.value(<String>[]),
+      ]);
+      if (!mounted) return;
+      _cachedJournals =
+          results[0] as List<({int id, String name, String abbr})>;
+      _cachedTags = results[1] as List<String>;
+    }
+
+    final result = await showArticleFilterSheet(
+      context,
+      current: _filter,
+      journals: _cachedJournals!,
+      tags: _cachedTags!,
+    );
+    if (result != null && mounted) {
+      setState(() => _filter = result);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return UnifiedListPage<Article>(
-      title: title,
-      actions: actions,
-      loadItems: loadArticles,
-      searchItems: searchArticles,
+      // filter 变化时，ValueKey 不同，Flutter 会销毁旧 State 并完整重建，
+      // 从而自动触发 initState → _loadMore，实现筛选重置分页。
+      key: ValueKey(_filter),
+      title: widget.title,
+      actions: widget.actions,
+      loadItems: (limit, offset) => widget.loadArticles(limit, offset, _filter),
+      searchItems: widget.searchArticles,
       searchHint: '搜索文章标题、摘要、期刊…',
-      onFilter: onFilter,
-      filterActive: filterActive,
-      onSettings: onSettings,
-      onRefresh: onRefresh,
-      onPostRefresh: onPostRefresh,
-      refreshMessageBuilder: refreshMessageBuilder,
-      emptyIcon: emptyIcon,
-      emptyTitle: emptyTitle,
-      emptySubtitle: emptySubtitle,
-      emptyActionLabel: emptyActionLabel,
-      pageSize: pageSize,
+      onFilter: _openFilterSheet,
+      filterActive: _filter.isActive,
+      onSettings: widget.onSettings,
+      onRefresh: widget.onRefresh,
+      onPostRefresh: widget.onPostRefresh,
+      refreshMessageBuilder: widget.refreshMessageBuilder,
+      emptyIcon: widget.emptyIcon,
+      emptyTitle: widget.emptyTitle,
+      emptySubtitle: widget.emptySubtitle,
+      emptyActionLabel: widget.emptyActionLabel,
+      pageSize: widget.pageSize,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
       itemBuilder: (ctx, article, index, allArticles, updateItem) {

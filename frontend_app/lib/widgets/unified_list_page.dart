@@ -310,22 +310,22 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
     // 筛选按钮
     if (widget.onFilter != null) {
-      // actions.add(
-      //   IconButton(
-      //     icon: Icon(
-      //       widget.filterActive
-      //           ? Icons.filter_list
-      //           : Icons.filter_list_outlined,
-      //     ),
-      //     tooltip: '筛选',
-      //     onPressed: widget.onFilter,
-      //     style: widget.filterActive
-      //         ? IconButton.styleFrom(
-      //             foregroundColor: Theme.of(context).colorScheme.primary,
-      //           )
-      //         : null,
-      //   ),
-      // );
+      actions.add(
+        IconButton(
+          icon: Icon(
+            widget.filterActive
+                ? Icons.filter_list
+                : Icons.filter_list_outlined,
+          ),
+          tooltip: '筛选',
+          onPressed: widget.onFilter,
+          style: widget.filterActive
+              ? IconButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
+                )
+              : null,
+        ),
+      );
     }
 
     // 搜索按钮
