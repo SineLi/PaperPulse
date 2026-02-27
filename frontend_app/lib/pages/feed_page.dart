@@ -6,7 +6,9 @@ import '../data/service/sync_service.dart';
 import '../widgets/article_list_page.dart';
 
 class FeedPage extends StatelessWidget {
-  const FeedPage({super.key});
+  final ScrollController? scrollController;
+
+  const FeedPage({super.key, this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -15,6 +17,7 @@ class FeedPage extends StatelessWidget {
 
     return ArticleListPage(
       title: '文章推送',
+      scrollController: scrollController,
       loadArticles: (limit, offset, filter) => feedRepo.getLocalArticles(
         limit: limit,
         offset: offset,

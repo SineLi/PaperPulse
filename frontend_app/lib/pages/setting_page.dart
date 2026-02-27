@@ -30,6 +30,7 @@ class AppSetting {
   final bool swipeToChangeArticleDown;
   final int swipeSensitivity; // 50-200 px
   final bool enablePredictiveBack;
+  final bool doubleTapToTop;
 
   AppSetting({
     required this.themeMode,
@@ -45,6 +46,7 @@ class AppSetting {
     this.swipeToChangeArticleDown = true,
     this.swipeSensitivity = 120,
     this.enablePredictiveBack = true,
+    this.doubleTapToTop = true,
   });
 
   AppSetting copyWith({
@@ -61,6 +63,7 @@ class AppSetting {
     bool? swipeToChangeArticleDown,
     int? swipeSensitivity,
     bool? enablePredictiveBack,
+    bool? doubleTapToTop,
   }) {
     return AppSetting(
       themeMode: themeMode ?? this.themeMode,
@@ -78,6 +81,7 @@ class AppSetting {
           swipeToChangeArticleDown ?? this.swipeToChangeArticleDown,
       swipeSensitivity: swipeSensitivity ?? this.swipeSensitivity,
       enablePredictiveBack: enablePredictiveBack ?? this.enablePredictiveBack,
+      doubleTapToTop: doubleTapToTop ?? this.doubleTapToTop,
     );
   }
 
@@ -110,6 +114,7 @@ class SettingStorage {
   static const String _keySwipeSensitivity = 'settings.swipeSensitivity';
   static const String _keyEnablePredictiveBack =
       'settings.enablePredictiveBack';
+  static const String _keyDoubleTapToTop = 'settings.doubleTapToTop';
   Future<AppSetting> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AppSetting(
@@ -127,6 +132,7 @@ class SettingStorage {
           prefs.getBool(_keySwipeToChangeArticleDown) ?? true,
       swipeSensitivity: prefs.getInt(_keySwipeSensitivity) ?? 140,
       enablePredictiveBack: prefs.getBool(_keyEnablePredictiveBack) ?? true,
+      doubleTapToTop: prefs.getBool(_keyDoubleTapToTop) ?? true,
     );
   }
 
@@ -151,6 +157,7 @@ class SettingStorage {
     );
     await prefs.setInt(_keySwipeSensitivity, setting.swipeSensitivity);
     await prefs.setBool(_keyEnablePredictiveBack, setting.enablePredictiveBack);
+    await prefs.setBool(_keyDoubleTapToTop, setting.doubleTapToTop);
   }
 }
 
@@ -252,6 +259,12 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> updateEnablePredictiveBack(bool enabled) async {
     _setting = _setting.copyWith(enablePredictiveBack: enabled);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
+
+  Future<void> updateDoubleTapToTop(bool enabled) async {
+    _setting = _setting.copyWith(doubleTapToTop: enabled);
     await _storage.save(_setting);
     notifyListeners();
   }
@@ -861,6 +874,16 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
                       .read<SettingsController>()
                       .updateEnablePredictiveBack(v),
                 ),
+                const _SettingsSectionHeader(title: '导航'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.vertical_align_top_rounded),
+                  title: const Text('双击导航栏回到顶部'),
+                  subtitle: const Text('在主页双击底部导航栏的当前标签页，可以快速滚动到页面顶部'),
+                  value: settings.doubleTapToTop,
+                  onChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateDoubleTapToTop(v),
+                ),
               ]),
             ),
           ],
@@ -915,7 +938,9 @@ class AboutPage extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: colorScheme.secondaryContainer.withOpacity(0.5),
+                        color: colorScheme.secondaryContainer.withValues(
+                          alpha: 0.5,
+                        ),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: colorScheme.secondaryContainer,

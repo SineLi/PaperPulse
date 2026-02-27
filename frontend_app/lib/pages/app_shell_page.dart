@@ -5,6 +5,7 @@ import '../data/auth/auth_services.dart';
 import 'fav_page.dart';
 import 'feed_page.dart';
 import 'journal_page.dart';
+import 'setting_page.dart';
 
 class AppShellPage extends StatefulWidget {
   // final String username;
@@ -16,6 +17,54 @@ class AppShellPage extends StatefulWidget {
 
 class _AppShellPageState extends State<AppShellPage> {
   int _currentIndex = 2; // Default to Feed
+
+  // 为每个 Tab 维护一个独立的 ScrollController
+  final List<ScrollController> _scrollControllers = [
+    ScrollController(),
+    ScrollController(),
+    ScrollController(),
+  ];
+
+  // 记录上次点击导航栏的时间，用于判断双击
+  DateTime? _lastTapTime;
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _handleNavTap(int index) {
+    final settings = context.read<SettingsController>().setting;
+
+    if (_currentIndex == index) {
+      // 如果点击的是当前选中的 Tab，检查是否是双击
+      if (settings.doubleTapToTop) {
+        final now = DateTime.now();
+        if (_lastTapTime != null &&
+            now.difference(_lastTapTime!) < const Duration(milliseconds: 300)) {
+          // 触发双击回到顶部
+          final controller = _scrollControllers[index];
+          if (controller.hasClients) {
+            controller.animateTo(
+              0,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+            );
+          }
+          _lastTapTime = null; // 重置时间
+          return;
+        }
+        _lastTapTime = now;
+      }
+    } else {
+      // 切换 Tab
+      setState(() => _currentIndex = index);
+      _lastTapTime = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +98,11 @@ class _AppShellPageState extends State<AppShellPage> {
         // and re-fetch data (which is now empty), clearing old cached content.
         final shellKey = ValueKey('AppShell-${hasToken ? "Auth" : "Guest"}');
 
-        final pages = [const JournalPage(), const FavPage(), const FeedPage()];
+        final pages = [
+          JournalPage(scrollController: _scrollControllers[0]),
+          FavPage(scrollController: _scrollControllers[1]),
+          FeedPage(scrollController: _scrollControllers[2]),
+        ];
 
         return Scaffold(
           key: shellKey,
@@ -58,9 +111,7 @@ class _AppShellPageState extends State<AppShellPage> {
             height: 64,
             selectedIndex: _currentIndex,
             labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-            onDestinationSelected: (index) {
-              setState(() => _currentIndex = index);
-            },
+            onDestinationSelected: _handleNavTap,
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.book_outlined),
@@ -81,44 +132,6 @@ class _AppShellPageState extends State<AppShellPage> {
           ),
         );
       },
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  const _PlaceholderTab({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 56, color: colorScheme.primary),
-            const SizedBox(height: 12),
-            Text(title, style: textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

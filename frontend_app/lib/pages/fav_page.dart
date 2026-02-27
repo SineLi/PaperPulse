@@ -6,7 +6,9 @@ import '../data/service/sync_service.dart';
 import '../widgets/article_list_page.dart';
 
 class FavPage extends StatelessWidget {
-  const FavPage({super.key});
+  final ScrollController? scrollController;
+
+  const FavPage({super.key, this.scrollController});
 
   @override
   Widget build(BuildContext context) {
@@ -15,6 +17,7 @@ class FavPage extends StatelessWidget {
 
     return ArticleListPage(
       title: '我的收藏',
+      scrollController: scrollController,
       loadArticles: (limit, offset, filter) =>
           feedRepo.getLocalFavoriteArticles(
             limit: limit,

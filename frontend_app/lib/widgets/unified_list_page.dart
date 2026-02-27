@@ -101,6 +101,9 @@ class UnifiedListPage<T> extends StatefulWidget {
   /// 每页加载数量
   final int pageSize;
 
+  /// 暴露 ScrollController 给外部使用（可选）
+  final ScrollController? scrollController;
+
   const UnifiedListPage({
     super.key,
     required this.title,
@@ -122,6 +125,7 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.emptySubtitle = '下拉刷新以获取最新内容',
     this.emptyActionLabel,
     this.pageSize = 20,
+    this.scrollController,
   });
 
   @override
@@ -129,7 +133,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 }
 
 class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _isRefreshing = false;
@@ -146,6 +150,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void initState() {
     super.initState();
+    _scrollController = widget.scrollController ?? ScrollController();
     _loadMore();
   }
 
@@ -291,7 +296,9 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    if (widget.scrollController == null) {
+      _scrollController.dispose();
+    }
     _searchController.dispose();
     _searchFocusNode.dispose();
     _debounce?.cancel();
