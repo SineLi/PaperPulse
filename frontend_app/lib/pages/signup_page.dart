@@ -14,6 +14,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _verificationCodeController =
+      TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
@@ -125,6 +127,34 @@ class _RegisterPageState extends State<RegisterPage> {
                         );
                         if (!emailRegex.hasMatch(value.trim())) {
                           return '请输入有效的邮箱地址';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _verificationCodeController,
+                      decoration: _inputDecoration(
+                        label: '验证码',
+                        prefixIcon: Icons.security_outlined,
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.only(right: 4.0),
+                          child: TextButton(
+                            onPressed: () {
+                              // TODO: 实现发送验证码逻辑
+                            },
+                            child: const Text('获取验证码'),
+                          ),
+                        ),
+                      ),
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return '验证码不能为空';
+                        }
+                        if (value.trim().length != 6) {
+                          return '请输入6位数字验证码';
                         }
                         return null;
                       },
@@ -285,6 +315,7 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _usernameController.dispose();
     _emailController.dispose();
+    _verificationCodeController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
