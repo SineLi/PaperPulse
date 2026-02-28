@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
 import '../data/models/user.dart';
+import '../widgets/policy_dialog.dart';
 
 const _appName = 'PaperPulse';
 const _appVersion = '0.0.1';
@@ -972,10 +973,7 @@ class AboutPage extends StatelessWidget {
                             );
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('GitHub 链接已复制'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
+                              const SnackBar(content: Text('GitHub 链接已复制')),
                             );
                           },
                           icon: const Icon(SimpleIcons.github, size: 20),
@@ -1003,6 +1001,41 @@ class AboutPage extends StatelessWidget {
                             size: 20,
                           ),
                           label: const Text('开源许可'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () {
+                            showPolicyDialog(
+                              context,
+                              title: '用户协议',
+                              content: userAgreementContent,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.description_outlined,
+                            size: 20,
+                          ),
+                          label: const Text('用户协议'),
+                        ),
+                        const SizedBox(width: 16),
+                        FilledButton.tonalIcon(
+                          onPressed: () {
+                            showPolicyDialog(
+                              context,
+                              title: '隐私政策',
+                              content: privacyPolicyContent,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.privacy_tip_outlined,
+                            size: 20,
+                          ),
+                          label: const Text('隐私政策'),
                         ),
                       ],
                     ),
