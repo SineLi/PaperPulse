@@ -337,17 +337,7 @@ class SettingPage extends StatelessWidget {
                   subtitle: Text('正在测试的新功能'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => Scaffold(
-                        body: CustomScrollView(
-                          slivers: [
-                            const SliverAppBar.large(title: Text('实验')),
-                            const SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(child: Text('暂无实验功能，敬请期待！')),
-                            ),
-                          ],
-                        ),
-                      ),
+                      builder: (_) => const ExperimentalPage(),
                     ),
                   ),
                 ),
@@ -982,16 +972,21 @@ class AboutPage extends StatelessWidget {
                         const SizedBox(width: 16),
                         FilledButton.tonalIcon(
                           onPressed: () {
-                            showLicensePage(
-                              context: context,
-                              applicationName: _appName,
-                              applicationVersion:
-                                  '$_appVersion+$_appBuildNumber',
-                              applicationIcon: Padding(
-                                padding: const EdgeInsets.all(24.0),
-                                child: SvgPicture.asset(
-                                  'assets/logo.svg',
-                                  width: 64,
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => PredictiveBackScope(
+                                  child: LicensePage(
+                                    applicationName: _appName,
+                                    applicationVersion:
+                                        '$_appVersion+$_appBuildNumber',
+                                    applicationIcon: Padding(
+                                      padding: const EdgeInsets.all(24.0),
+                                      child: SvgPicture.asset(
+                                        'assets/logo.svg',
+                                        width: 64,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             );
@@ -1204,6 +1199,28 @@ class _FontSizeRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 实验
+class ExperimentalPage extends StatelessWidget {
+  const ExperimentalPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('实验功能')),
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: Text('暂无实验功能，敬请期待！')),
+            ),
+          ],
+        ),
       ),
     );
   }
