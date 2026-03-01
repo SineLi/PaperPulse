@@ -407,7 +407,8 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               ),
 
               // ── 刷新进度指示条 ──
-              if (_isRefreshing || _isLoading)
+              // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
+              if (_isRefreshing || (_isLoading && _items.isNotEmpty))
                 LinearProgressIndicator(
                   minHeight: 3,
                   color: colorScheme.primary,
@@ -473,6 +474,14 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         _isSearchMode &&
         _searchQuery.isNotEmpty) {
       return _buildSearchEmpty(colorScheme, textTheme);
+    }
+
+    // 筛选激活但无结果（非搜索模式）
+    if (_items.isEmpty &&
+        !_isLoading &&
+        !_isSearchMode &&
+        widget.filterActive) {
+      return _buildFilterEmpty(colorScheme, textTheme);
     }
 
     // 空状态
@@ -557,6 +566,51 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant.withValues(alpha: .7),
               ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('清除搜索'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 筛选无结果 ──
+  Widget _buildFilterEmpty(ColorScheme colorScheme, TextTheme textTheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_list_off_rounded,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '当前筛选条件下无结果',
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '尝试调整或清除筛选条件',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: .7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: widget.onFilter,
+              icon: const Icon(Icons.filter_list_rounded),
+              label: const Text('调整筛选'),
             ),
           ],
         ),
