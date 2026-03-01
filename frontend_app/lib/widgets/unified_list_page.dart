@@ -103,6 +103,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 
   /// 暴露 ScrollController 给外部使用（可选）
   final ScrollController? scrollController;
+  final bool autoRefreshOnInit;
 
   const UnifiedListPage({
     super.key,
@@ -126,6 +127,7 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.emptyActionLabel,
     this.pageSize = 20,
     this.scrollController,
+    this.autoRefreshOnInit = false,
   });
 
   @override
@@ -152,6 +154,12 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     super.initState();
     _scrollController = widget.scrollController ?? ScrollController();
     _loadMore();
+    if (widget.autoRefreshOnInit && widget.onRefresh != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_refresh());
+      });
+    }
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
@@ -268,10 +276,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         _currentOffset = 0;
         _items.clear();
         _hasMore = true;
-        _isRefreshing = false;
       });
 
       await _loadMore();
+
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
 
       if (widget.onPostRefresh != null) {
         await widget.onPostRefresh!();

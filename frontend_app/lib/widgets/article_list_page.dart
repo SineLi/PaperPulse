@@ -32,6 +32,7 @@ class ArticleListPage extends StatefulWidget {
   final String? emptyActionLabel;
   final int pageSize;
   final ScrollController? scrollController;
+  final bool autoRefreshOnInit;
 
   /// 返回筛选面板可用的期刊列表（懒加载，首次打开面板时调用）
   final Future<List<({int id, String name, String abbr})>> Function()?
@@ -56,6 +57,7 @@ class ArticleListPage extends StatefulWidget {
     this.emptyActionLabel = '刷新',
     this.pageSize = 20,
     this.scrollController,
+    this.autoRefreshOnInit = false,
     this.loadFilterJournals,
     this.loadFilterTags,
   });
@@ -119,6 +121,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
       emptyActionLabel: widget.emptyActionLabel,
       pageSize: widget.pageSize,
       scrollController: widget.scrollController,
+      autoRefreshOnInit: widget.autoRefreshOnInit,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
       itemBuilder: (ctx, article, index, allArticles, updateItem) {

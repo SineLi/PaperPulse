@@ -28,6 +28,7 @@ class FeedPage extends StatelessWidget {
       onSettings: () {},
       onRefresh: () => feedRepo.refreshArticles(),
       onPostRefresh: () => syncService.pullStatus(),
+      autoRefreshOnInit: true,
       loadFilterJournals: feedRepo.getFilterableJournals,
       loadFilterTags: feedRepo.getFilterableTags,
       emptyTitle: '暂无文章',
