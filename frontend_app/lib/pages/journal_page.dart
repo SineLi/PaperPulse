@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../data/auth/auth_services.dart';
 import '../data/models/journal.dart';
 import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';
 import '../widgets/journal_list_page.dart';
 
 class JournalPage extends StatefulWidget {
-  const JournalPage({super.key});
+  final ScrollController? scrollController;
+
+  const JournalPage({super.key, this.scrollController});
 
   @override
   State<JournalPage> createState() => _JournalPageState();
@@ -72,6 +73,7 @@ class _JournalPageState extends State<JournalPage> {
 
     return JournalListPage(
       title: '期刊',
+      scrollController: widget.scrollController,
       loadJournals: (limit, offset, filter) => journalRepo.getLocalJournals(
         limit: limit,
         offset: offset,

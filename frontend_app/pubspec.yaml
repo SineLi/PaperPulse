@@ -49,6 +49,7 @@ dependencies:
   flutter_svg: ^2.2.3
   connectivity_plus: ^7.0.0
   simple_icons: ^14.6.1
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

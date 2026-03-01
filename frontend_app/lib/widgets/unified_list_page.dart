@@ -101,6 +101,10 @@ class UnifiedListPage<T> extends StatefulWidget {
   /// 每页加载数量
   final int pageSize;
 
+  /// 暴露 ScrollController 给外部使用（可选）
+  final ScrollController? scrollController;
+  final bool autoRefreshOnInit;
+
   const UnifiedListPage({
     super.key,
     required this.title,
@@ -122,6 +126,8 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.emptySubtitle = '下拉刷新以获取最新内容',
     this.emptyActionLabel,
     this.pageSize = 20,
+    this.scrollController,
+    this.autoRefreshOnInit = false,
   });
 
   @override
@@ -129,7 +135,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 }
 
 class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
-  final ScrollController _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _isRefreshing = false;
@@ -146,7 +152,14 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void initState() {
     super.initState();
+    _scrollController = widget.scrollController ?? ScrollController();
     _loadMore();
+    if (widget.autoRefreshOnInit && widget.onRefresh != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_refresh());
+      });
+    }
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
@@ -263,10 +276,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         _currentOffset = 0;
         _items.clear();
         _hasMore = true;
-        _isRefreshing = false;
       });
 
       await _loadMore();
+
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
 
       if (widget.onPostRefresh != null) {
         await widget.onPostRefresh!();
@@ -291,7 +307,9 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    if (widget.scrollController == null) {
+      _scrollController.dispose();
+    }
     _searchController.dispose();
     _searchFocusNode.dispose();
     _debounce?.cancel();
@@ -400,7 +418,8 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               ),
 
               // ── 刷新进度指示条 ──
-              if (_isRefreshing)
+              // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
+              if (_isRefreshing || (_isLoading && _items.isNotEmpty))
                 LinearProgressIndicator(
                   minHeight: 3,
                   color: colorScheme.primary,
@@ -466,6 +485,14 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         _isSearchMode &&
         _searchQuery.isNotEmpty) {
       return _buildSearchEmpty(colorScheme, textTheme);
+    }
+
+    // 筛选激活但无结果（非搜索模式）
+    if (_items.isEmpty &&
+        !_isLoading &&
+        !_isSearchMode &&
+        widget.filterActive) {
+      return _buildFilterEmpty(colorScheme, textTheme);
     }
 
     // 空状态
@@ -550,6 +577,51 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant.withValues(alpha: .7),
               ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('清除搜索'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 筛选无结果 ──
+  Widget _buildFilterEmpty(ColorScheme colorScheme, TextTheme textTheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_list_off_rounded,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: .5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '当前筛选条件下无结果',
+              style: textTheme.titleMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '尝试调整或清除筛选条件',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: .7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.tonalIcon(
+              onPressed: widget.onFilter,
+              icon: const Icon(Icons.filter_list_rounded),
+              label: const Text('调整筛选'),
             ),
           ],
         ),

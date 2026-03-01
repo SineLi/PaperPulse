@@ -30,6 +30,7 @@ class JournalListPage extends StatefulWidget {
   final String emptyTitle;
   final String emptySubtitle;
   final int pageSize;
+  final ScrollController? scrollController;
 
   const JournalListPage({
     super.key,
@@ -46,6 +47,7 @@ class JournalListPage extends StatefulWidget {
     this.emptyTitle = '暂无期刊',
     this.emptySubtitle = '期刊数据加载中…',
     this.pageSize = 30,
+    this.scrollController,
   });
 
   @override
@@ -100,9 +102,10 @@ class _JournalListPageState extends State<JournalListPage> {
       emptyTitle: widget.emptyTitle,
       emptySubtitle: widget.emptySubtitle,
       pageSize: widget.pageSize,
+      scrollController: widget.scrollController,
       skeletonCount: 8,
       skeletonBuilder: (cs) => _JournalSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, journal, index, _, __) {
+      itemBuilder: (ctx, journal, index, _1, _2) {
         return JournalCard(
           journal: journal,
           isFollowed: widget.isFollowed(journal.journalId),

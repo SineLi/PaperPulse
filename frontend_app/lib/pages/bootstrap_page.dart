@@ -46,11 +46,18 @@ class _BootstrapPageState extends State<BootstrapPage> {
   ) async {
     final user = await authServices.tryGetCurrentUser();
     if (user != null) {
-      await journalRepo.syncJournalsEmpty();
-      await userRepo.syncSubscribedJournalIds();
-      await syncService.flush();
-      await syncService.pullStatus();
-      await feedRepo.refreshArticles();
+      // 异步执行刷新操作，不阻塞启动
+      Future(() async {
+        try {
+          await journalRepo.syncJournalsEmpty();
+          await userRepo.syncSubscribedJournalIds();
+          await syncService.flush();
+          await syncService.pullStatus();
+          await feedRepo.refreshArticles();
+        } catch (e) {
+          debugPrint('Background sync failed: $e');
+        }
+      });
     }
     return user;
   }
@@ -85,11 +92,6 @@ class _BootstrapPageState extends State<BootstrapPage> {
           );
         }
 
-        // // 已登录 -> Feed；未登录 -> Login
-        // final user = snapshot.data;
-        // if (user == null) {
-        //   return const LoginPage();
-        // }
         return AppShellPage();
       },
     );

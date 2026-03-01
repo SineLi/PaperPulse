@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import "package:simple_icons/simple_icons.dart";
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
 import '../data/models/user.dart';
+import '../widgets/policy_dialog.dart';
 
 const _appName = 'PaperPulse';
 const _appVersion = '0.0.1';
@@ -29,6 +31,7 @@ class AppSetting {
   final bool swipeToChangeArticleDown;
   final int swipeSensitivity; // 50-200 px
   final bool enablePredictiveBack;
+  final bool doubleTapToTop;
 
   AppSetting({
     required this.themeMode,
@@ -44,6 +47,7 @@ class AppSetting {
     this.swipeToChangeArticleDown = true,
     this.swipeSensitivity = 120,
     this.enablePredictiveBack = true,
+    this.doubleTapToTop = true,
   });
 
   AppSetting copyWith({
@@ -60,6 +64,7 @@ class AppSetting {
     bool? swipeToChangeArticleDown,
     int? swipeSensitivity,
     bool? enablePredictiveBack,
+    bool? doubleTapToTop,
   }) {
     return AppSetting(
       themeMode: themeMode ?? this.themeMode,
@@ -77,6 +82,7 @@ class AppSetting {
           swipeToChangeArticleDown ?? this.swipeToChangeArticleDown,
       swipeSensitivity: swipeSensitivity ?? this.swipeSensitivity,
       enablePredictiveBack: enablePredictiveBack ?? this.enablePredictiveBack,
+      doubleTapToTop: doubleTapToTop ?? this.doubleTapToTop,
     );
   }
 
@@ -109,6 +115,7 @@ class SettingStorage {
   static const String _keySwipeSensitivity = 'settings.swipeSensitivity';
   static const String _keyEnablePredictiveBack =
       'settings.enablePredictiveBack';
+  static const String _keyDoubleTapToTop = 'settings.doubleTapToTop';
   Future<AppSetting> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AppSetting(
@@ -126,6 +133,7 @@ class SettingStorage {
           prefs.getBool(_keySwipeToChangeArticleDown) ?? true,
       swipeSensitivity: prefs.getInt(_keySwipeSensitivity) ?? 140,
       enablePredictiveBack: prefs.getBool(_keyEnablePredictiveBack) ?? true,
+      doubleTapToTop: prefs.getBool(_keyDoubleTapToTop) ?? true,
     );
   }
 
@@ -150,6 +158,7 @@ class SettingStorage {
     );
     await prefs.setInt(_keySwipeSensitivity, setting.swipeSensitivity);
     await prefs.setBool(_keyEnablePredictiveBack, setting.enablePredictiveBack);
+    await prefs.setBool(_keyDoubleTapToTop, setting.doubleTapToTop);
   }
 }
 
@@ -254,6 +263,12 @@ class SettingsController extends ChangeNotifier {
     await _storage.save(_setting);
     notifyListeners();
   }
+
+  Future<void> updateDoubleTapToTop(bool enabled) async {
+    _setting = _setting.copyWith(doubleTapToTop: enabled);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +328,16 @@ class SettingPage extends StatelessWidget {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const OperationSettingsPage(),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.code_outlined),
+                  title: Text('实验'),
+                  subtitle: Text('正在测试的新功能'),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ExperimentalPage(),
                     ),
                   ),
                 ),
@@ -667,6 +692,7 @@ class ThemeSettingsPage extends StatelessWidget {
                   onBoldChanged: (b) =>
                       context.read<SettingsController>().updateTitleBold(b),
                 ),
+                SizedBox(height: 64),
               ]),
             ),
           ],
@@ -839,6 +865,16 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
                       .read<SettingsController>()
                       .updateEnablePredictiveBack(v),
                 ),
+                const _SettingsSectionHeader(title: '导航'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.vertical_align_top_rounded),
+                  title: const Text('双击导航栏回到顶部'),
+                  subtitle: const Text('在主页双击底部导航栏的当前标签页，可以快速滚动到页面顶部'),
+                  value: settings.doubleTapToTop,
+                  onChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateDoubleTapToTop(v),
+                ),
               ]),
             ),
           ],
@@ -866,33 +902,62 @@ class AboutPage extends StatelessWidget {
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
                 child: Column(
                   children: [
-                    const Spacer(flex: 2),
-                    SvgPicture.asset('assets/logo.svg', width: 88),
-                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: SvgPicture.asset('assets/logo.svg', width: 64),
+                    ),
+                    const SizedBox(height: 24),
                     Text(
                       _appName,
-                      style: textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      style: textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                        letterSpacing: -0.5,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'v$_appVersion+$_appBuildNumber',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.secondaryContainer.withValues(
+                          alpha: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: colorScheme.secondaryContainer,
+                        ),
+                      ),
+                      child: Text(
+                        'Version $_appVersion+$_appBuildNumber',
+                        style: textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                    const Spacer(flex: 3),
+                    const Spacer(flex: 2),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        IconButton.filledTonal(
-                          iconSize: 32,
-                          tooltip: 'GitHub',
+                        FilledButton.icon(
                           onPressed: () async {
+                            launchUrl(
+                              Uri.parse(_githubRepoUrl),
+                              mode: LaunchMode.externalApplication,
+                            );
+                          },
+                          onLongPress: () async {
                             await Clipboard.setData(
                               const ClipboardData(text: _githubRepoUrl),
                             );
@@ -901,25 +966,75 @@ class AboutPage extends StatelessWidget {
                               const SnackBar(content: Text('GitHub 链接已复制')),
                             );
                           },
-                          icon: const Icon(SimpleIcons.github),
+                          icon: const Icon(SimpleIcons.github, size: 20),
+                          label: const Text('GitHub 仓库'),
                         ),
-                        const SizedBox(width: 32),
-                        IconButton.filledTonal(
-                          iconSize: 32,
-                          tooltip: '查看 Licenses',
+                        const SizedBox(width: 16),
+                        FilledButton.tonalIcon(
                           onPressed: () {
-                            showLicensePage(
-                              context: context,
-                              applicationName: _appName,
-                              applicationVersion:
-                                  '$_appVersion+$_appBuildNumber',
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => PredictiveBackScope(
+                                  child: LicensePage(
+                                    applicationName: _appName,
+                                    applicationVersion:
+                                        '$_appVersion+$_appBuildNumber',
+                                    applicationIcon: Padding(
+                                      padding: const EdgeInsets.all(24.0),
+                                      child: SvgPicture.asset(
+                                        'assets/logo.svg',
+                                        width: 64,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             );
                           },
-                          icon: const Icon(Icons.description_outlined),
+                          icon: const Icon(
+                            Icons.description_outlined,
+                            size: 20,
+                          ),
+                          label: const Text('开源许可'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () {
+                            showPolicyDialog(
+                              context,
+                              title: '用户协议',
+                              content: userAgreementContent,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.description_outlined,
+                            size: 20,
+                          ),
+                          label: const Text('用户协议'),
+                        ),
+                        const SizedBox(width: 16),
+                        FilledButton.tonalIcon(
+                          onPressed: () {
+                            showPolicyDialog(
+                              context,
+                              title: '隐私政策',
+                              content: privacyPolicyContent,
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.privacy_tip_outlined,
+                            size: 20,
+                          ),
+                          label: const Text('隐私政策'),
+                        ),
+                      ],
+                    ),
+                    const Spacer(flex: 3),
                   ],
                 ),
               ),
@@ -1084,6 +1199,28 @@ class _FontSizeRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 实验
+class ExperimentalPage extends StatelessWidget {
+  const ExperimentalPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return PredictiveBackScope(
+      child: Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            const SliverAppBar.large(title: Text('实验功能')),
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: Text('暂无实验功能，敬请期待！')),
+            ),
+          ],
+        ),
       ),
     );
   }

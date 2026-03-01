@@ -6,7 +6,7 @@ import '../data/models/article_view_data.dart';
 class JournalCard extends StatefulWidget {
   final Journal journal;
   final bool isFollowed;
-  final ValueChanged<bool>? onFollowChanged;
+  final Future<void> Function(bool)? onFollowChanged;
 
   const JournalCard({
     super.key,
@@ -56,7 +56,19 @@ class _JournalCardState extends State<JournalCard>
     if (_followLoading || widget.onFollowChanged == null) return;
     setState(() => _followLoading = true);
     try {
-      widget.onFollowChanged!(!widget.isFollowed);
+      await widget.onFollowChanged!(!widget.isFollowed);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              !widget.isFollowed
+                  ? '已关注 ${widget.journal.name}'
+                  : '已取消关注 ${widget.journal.name}',
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _followLoading = false);
     }
