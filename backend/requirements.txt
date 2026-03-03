@@ -26,7 +26,7 @@ openai==2.15.0
 jsonlines==4.0.0
 
 
-# Postgres
+# DB
 sqlalchemy>=2.0
 alembic>=1.13
 psycopg[binary]>=3.1

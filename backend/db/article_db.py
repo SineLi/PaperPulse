@@ -1,74 +1,89 @@
+from sqlalchemy import text
 from db.database import get_db_connection
 
+
 class ArticleRepository:
-    def get_pending_articles(self, limit=None):
-        """获取等待处理的文章"""
+    def get_pending_articles(self, limit: int | None = None) -> tuple[list[dict], list[int]]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
             if limit is not None:
-                cursor.execute(
-                    "SELECT id, abstract, editor_summary, structured_abstract FROM articles WHERE llm_summary IS NULL AND llm_status IS NULL LIMIT ?",
-                    (limit,)
-                )
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT id, abstract, editor_summary, structured_abstract
+                        FROM articles
+                        WHERE llm_summary IS NULL AND llm_status IS NULL
+                        LIMIT :limit
+                        """
+                    ),
+                    {"limit": limit},
+                ).mappings().all()
             else:
-                cursor.execute(
-                    "SELECT id, abstract, editor_summary, structured_abstract FROM articles WHERE llm_summary IS NULL AND llm_status IS NULL"
-                )
-            rows = cursor.fetchall()
-            ids = [row['id'] for row in rows]
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT id, abstract, editor_summary, structured_abstract
+                        FROM articles
+                        WHERE llm_summary IS NULL AND llm_status IS NULL
+                        """
+                    )
+                ).mappings().all()
+
+            rows = [dict(r) for r in rows]
+            ids = [r["id"] for r in rows]
             return rows, ids
 
-    def mark_articles_as_submitted(self, article_ids, batch_id):
-        """标记文章为已提交状态"""
+    def mark_articles_as_submitted(self, article_ids: list[int], batch_id: str) -> None:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executemany(
-                "UPDATE articles SET llm_status = ? WHERE id = ?",
-                [(batch_id, aid) for aid in article_ids]
+            conn.execute(
+                text("UPDATE articles SET llm_status = :batch WHERE id = :id"),
+                [{"batch": batch_id, "id": int(aid)} for aid in article_ids],
             )
-            conn.commit()
 
-    def clear_article_llm_status(self, article_id):
-        """清除文章的 LLM 状态（用于重试）"""
+    def clear_article_llm_status(self, article_id: int) -> None:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE articles SET llm_status = NULL , llm_summary = NULL WHERE id = ?",
-                (article_id,)
+            conn.execute(
+                text(
+                    "UPDATE articles SET llm_status = NULL, llm_summary = NULL WHERE id = :id"),
+                {"id": int(article_id)},
             )
-            conn.commit()
 
-    def clear_batch_llm_status(self, batch_id):
-        """清除指定 batch 的所有文章状态（用于重试）"""
+    def clear_batch_llm_status(self, batch_id:str) -> None:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE articles SET llm_status = NULL, llm_summary = NULL WHERE llm_status = ?",
-                (batch_id,)
+            conn.execute(
+                text(
+                    "UPDATE articles SET llm_status = NULL, llm_summary = NULL WHERE llm_status = :b"),
+                {"b": batch_id},
             )
-            conn.commit()
 
-
-    def update_article_summaries(self, updates):
-        """批量更新文章摘要和状态"""
+    def update_article_summaries(self, updates: list[tuple[str, str, int]]) -> None:
         # updates = [(summary, status, id), ...]
+        payload = [{"summary": s, "status": st,
+                    "id": int(i)} for (s, st, i) in updates]
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executemany(
-                """
-                UPDATE articles 
-                SET llm_summary = ?, processed_at = CURRENT_TIMESTAMP, llm_status = ? 
-                WHERE id = ?
-                """,
-                updates
+            conn.execute(
+                text(
+                    """
+                    UPDATE articles
+                    SET llm_summary = :summary,
+                        processed_at = now(),
+                        llm_status = :status
+                    WHERE id = :id
+                    """
+                ),
+                payload,
             )
-            conn.commit()
 
-    def get_active_batch_ids(self):
-        """获取所有未完成的 batch id"""
+    def get_active_batch_ids(self) -> list[str]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT DISTINCT llm_status FROM articles WHERE llm_summary IS NULL AND llm_status IS NOT NULL AND llm_status != 'processed'"
-            )
-            return [row['llm_status'] for row in cursor.fetchall()]
+            ids = conn.execute(
+                text(
+                    """
+                    SELECT DISTINCT llm_status
+                    FROM articles
+                    WHERE llm_summary IS NULL
+                      AND llm_status IS NOT NULL
+                      AND llm_status != 'processed'
+                    """
+                )
+            ).scalars().all()
+            return list(ids)

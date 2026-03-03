@@ -1,5 +1,6 @@
 import logging
 from db.database import get_db_connection
+from sqlalchemy import text
 
 from utils.fetcher.AAAS_fetcher import ScienceFetcher
 from utils.fetcher.ACS_fetcher import ACSFetcher
@@ -35,20 +36,22 @@ def run_enabled_fetchers():
     logger.info("Starting run_enabled_fetchers...")
     
     with get_db_connection() as conn:
-        cursor = conn.cursor()
-        # 获取所有启用了抓取的期刊
-        cursor.execute("""
-            SELECT id, name, publisher, rss_url, official_url 
-            FROM journals 
-            WHERE crawler_enabled = 1
-        """)
-        active_journals = cursor.fetchall()
+        active_journals = conn.execute(
+            text(
+                """
+                SELECT id, name, publisher, rss_url, official_url
+                FROM journals
+                WHERE crawler_enabled = TRUE
+                """
+            )
+        ).mappings().all()
 
     if not active_journals:
         logger.info("No active journals found with crawler_enabled=1.")
         return
 
     for journal in active_journals:
+        journal = dict(journal)
         # 使用字典访问（因为使用了 Row factory）
         j_id = journal['id']
         j_name = journal['name']
@@ -64,6 +67,10 @@ def run_enabled_fetchers():
 
         # 查找匹配的抓取器类
         fetcher_class = PUBLISHER_FETCHER_MAP.get(j_publisher)
+
+        if not fetcher_class:
+            logger.warning(f"No fetcher found for publisher: {j_publisher}. Skipping {j_name}.")
+            continue
 
         try:
             # 实例化抓取器 (已将所有 fetcher 更新为支持 url 和 name 参数)
