@@ -35,12 +35,33 @@ class UserService:
 
             return {"id": int(user_id), "username": username, "email": email}
 
-    def login(self, username: str, password: str) -> dict:
+    def login(self, login_identifier: str, password: str) -> dict:
+        login_identifier = login_identifier.strip()
+        is_email_login = "@" in login_identifier
+
         with get_db_connection() as conn:
-            row = conn.execute(
-                text("SELECT id, username, email, password_hash FROM users WHERE username = :u"),
-                {"u": username},
-            ).mappings().first()
+            if is_email_login:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT id, username, email, password_hash
+                        FROM users
+                        WHERE lower(email) = lower(:login)
+                        """
+                    ),
+                    {"login": login_identifier},
+                ).mappings().first()
+            else:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT id, username, email, password_hash
+                        FROM users
+                        WHERE username = :login
+                        """
+                    ),
+                    {"login": login_identifier},
+                ).mappings().first()
 
             if not row or not verify_password(password, row["password_hash"]):
                 raise ValueError("Invalid credentials")

@@ -30,7 +30,7 @@ def _normalize_retry_after(ttl: int) -> int | None:
 @router.post("/login")
 def login(req: LoginRequest):
     try:
-        user = user_service.login(req.username, req.password)
+        user = user_service.login(req.username.strip(), req.password)
         access_token = create_access_token({"sub": str(user["id"])})
         return {"access_token": access_token, "token_type": "bearer"}
     except ValueError as e:
