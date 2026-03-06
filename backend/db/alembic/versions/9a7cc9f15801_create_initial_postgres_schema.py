@@ -26,10 +26,6 @@ def upgrade():
         sa.Column("role", sa.Integer(), nullable=False,
                   server_default=sa.text("1")),
         sa.Column("password_hash", sa.Text(), nullable=False),
-        sa.Column("email_verified", sa.Boolean(), nullable=False,
-                  server_default=sa.text("false")),
-        sa.Column("email_verified_at", sa.TIMESTAMP(
-            timezone=True), nullable=True),
         sa.Column("created_at", sa.TIMESTAMP(timezone=True),
                   nullable=False, server_default=sa.text("now()")),
     )
