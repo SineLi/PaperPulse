@@ -80,13 +80,64 @@ class RedisClient:
 
     def incr(self, key: str, amount: int = 1, ttl: int | None = None) -> int | None:
         try:
-            
-            result = int(self.client.incr(self._key(key), amount))      # ty:ignore[invalid-argument-type]
-            if ttl is not None:
-                self.expire(key, ttl)
-            return result
+            return self._incr_value(key, amount=amount, ttl=ttl)
         except redis.RedisError:
             return None
+
+    def get_value_or_raise(self, key: str) -> str | None:
+        try:
+            value = self.client.get(self._key(key))
+            if value is not None:
+                return str(value)
+            return None
+        except redis.RedisError as exc:
+            raise RuntimeError("Failed to read from Redis") from exc
+
+    def set_value_or_raise(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
+        try:
+            key = self._key(key)
+            return bool(self.client.set(key, value, ex=ex, nx=nx))
+        except redis.RedisError as exc:
+            raise RuntimeError("Failed to write to Redis") from exc
+
+    def delete_value_or_raise(self, key: str) -> bool:
+        try:
+            return bool(self.client.delete(self._key(key)))
+        except redis.RedisError as exc:
+            raise RuntimeError("Failed to delete from Redis") from exc
+
+    def ttl_or_raise(self, key: str) -> int:
+        try:
+            return int(self.client.ttl(self._key(key)))     # ty:ignore[invalid-argument-type]
+        except redis.RedisError as exc:
+            raise RuntimeError("Failed to read TTL from Redis") from exc
+
+    def incr_or_raise(self, key: str, amount: int = 1, ttl: int | None = None) -> int:
+        try:
+            return self._incr_value(key, amount=amount, ttl=ttl)
+        except redis.RedisError as exc:
+            raise RuntimeError("Failed to increment Redis counter") from exc
+
+    def _incr_value(self, key: str, amount: int = 1, ttl: int | None = None) -> int:
+        redis_key = self._key(key)
+        if ttl is None:
+            return int(self.client.incr(redis_key, amount))      # ty:ignore[invalid-argument-type]
+
+        # Keep the original TTL once the counter is created.
+        result = self.client.eval(
+            """
+            local current = redis.call('INCRBY', KEYS[1], ARGV[1])
+            if redis.call('TTL', KEYS[1]) == -1 then
+                redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
+            end
+            return current
+            """,
+            1,
+            redis_key,
+            amount,
+            ttl,
+        )
+        return int(result)  # ty:ignore[invalid-argument-type]
 
 
 _client: RedisClient | None = None
