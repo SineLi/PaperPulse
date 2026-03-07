@@ -15,7 +15,7 @@ def send_verification_email(to_email: str, code: str) -> None:
     SMTP_KEY = os.getenv("SMTP_KEY")
     SOURCE_EMAIL = os.getenv("SOURCE_EMAIL", SMTP_USERNAME)
 
-    if not all([SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_KEY]):
+    if not all([SMTP_SERVER, SMTP_USERNAME, SMTP_KEY]):
         logger.error("SMTP configuration is incomplete. Please check environment variables.")
         raise RuntimeError("SMTP configuration is incomplete")
     
