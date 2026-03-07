@@ -1,10 +1,19 @@
 import secrets
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from jose.exceptions import JWTError
 
-from app.core.security import create_access_token
-from app.schemas.auth import LoginRequest, RegisterRequest, SendCodeRequest
+from app.core.auth_dependency import get_current_token_payload
+from app.core.security import (
+    consume_refresh_token,
+    create_access_token,
+    create_refresh_token,
+    parse_refresh_token,
+    revoke_refresh_session,
+    store_refresh_token,
+)
+from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, SendCodeRequest, TokenResponse
 from services.mail_service import send_verification_email
 from services.user_services import UserService
 from utils.redis_client import get_client
@@ -27,20 +36,59 @@ def _normalize_retry_after(ttl: int) -> int | None:
     return ttl if ttl >= 0 else None
 
 
-@router.post("/login")
+def _issue_tokens(user_id: int, session_id: str | None = None) -> TokenResponse:
+    if session_id is None:
+        session_id = secrets.token_urlsafe(32)
+    access_token = create_access_token(user_id, session_id)
+    refresh_token = create_refresh_token(session_id)
+    store_refresh_token(session_id, user_id, refresh_token)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest):
     try:
         user = user_service.login(req.username.strip(), req.password)
-        access_token = create_access_token({"sub": str(user["id"])})
-        return {"access_token": access_token, "token_type": "bearer"}
+        return _issue_tokens(user["id"])
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable") from exc
 
 
-@router.post("/register")
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(req: RefreshRequest):
+    try:
+        session_id = parse_refresh_token(req.refresh_token)
+        next_refresh_token = create_refresh_token(session_id)
+        user_id, _ = consume_refresh_token(req.refresh_token, next_refresh_token=next_refresh_token)
+        access_token = create_access_token(user_id, session_id)
+        return TokenResponse(access_token=access_token, refresh_token=next_refresh_token)
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid refresh token") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable") from exc
+
+
+@router.post("/logout")
+def logout(payload: dict = Depends(get_current_token_payload)):
+    session_id = payload.get("session_id")
+    if session_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    try:
+        revoke_refresh_session(session_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable") from exc
+
+    return {"message": "Logged out"}
+
+
+@router.post("/register", response_model=TokenResponse)
 def register(req: RegisterRequest):
     redis_client = get_client()
 
+    username = req.username.strip()
     email = req.email.lower().strip()
     code_key = f"vr_code:{email}"
     fail_key = f"vr_fail:{email}"
@@ -68,15 +116,17 @@ def register(req: RegisterRequest):
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
     try:
-        user = user_service.register(req.username, email, req.password)
+        user = user_service.register(username, email, req.password)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     redis_client.delete_value(code_key)
     redis_client.delete_value(fail_key)
 
-    access_token = create_access_token({"sub": str(user["id"])})
-    return {"access_token": access_token, "token_type": "bearer"}
+    try:
+        return _issue_tokens(user["id"])
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable") from exc
 
 
 @router.post("/send_verification_code")
