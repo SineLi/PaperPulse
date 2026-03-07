@@ -19,7 +19,6 @@ def send_verification_email(to_email: str, code: str) -> None:
         logger.error("SMTP configuration is incomplete. Please check environment variables.")
         raise RuntimeError("SMTP configuration is incomplete")
     
-    msg = MIMEMultipart()
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "您的PaperPulse验证码"
     msg["From"] = str(SOURCE_EMAIL)
