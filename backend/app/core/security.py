@@ -1,12 +1,13 @@
 import json
 import os
+import hashlib
+import hmac
 from datetime import datetime, timedelta
 
 import pytz
 import redis
 import secrets
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from utils.redis_client import get_client
 
@@ -15,8 +16,6 @@ ACCESS_TOKEN_TYPE = "access"
 ACCESS_TOKEN_EXPIRE_SECONDS = 3600  # 1 hour
 REFRESH_TOKEN_EXPIRE_SECONDS = 7 * 24 * 3600  # 7 days
 JWT_SECRET = os.getenv("JWT_SECRET")
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _get_jwt_secret() -> str:
@@ -57,7 +56,7 @@ def parse_refresh_token(refresh_token: str) -> str:
 
 
 def hash_refresh_token(refresh_token: str) -> str:
-    return pwd_context.hash(refresh_token)
+    return hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
 
 
 def store_refresh_token(session_id: str, user_id: int, refresh_token: str) -> None:
@@ -124,7 +123,7 @@ def verify_refresh_token(refresh_token: str) -> tuple[int, str]:
     if not stored_hashed_token or not user_id:
         raise JWTError("Invalid refresh session")
 
-    if not pwd_context.verify(refresh_token, stored_hashed_token):
+    if not hmac.compare_digest(hash_refresh_token(refresh_token), str(stored_hashed_token)):
         raise JWTError("Invalid refresh token")
 
     return int(user_id), session_id
@@ -155,7 +154,7 @@ def consume_refresh_token(refresh_token: str, next_refresh_token: str | None = N
             if not stored_hashed_token or not user_id:
                 raise JWTError("Invalid refresh session")
 
-            if not pwd_context.verify(refresh_token, stored_hashed_token):
+            if not hmac.compare_digest(hash_refresh_token(refresh_token), str(stored_hashed_token)):
                 raise JWTError("Invalid refresh token")
 
             pipe.multi()
