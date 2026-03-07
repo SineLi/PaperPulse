@@ -1,6 +1,11 @@
+import logging
+
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from db.database import get_db_connection
 from utils.auth import hash_password, verify_password
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -16,22 +21,25 @@ class UserService:
         hashed_pw = hash_password(password)
 
         with get_db_connection() as conn:
-            
-            if conn.execute(text("SELECT 1 FROM users WHERE username = :u"), {"u": username}).first():
-                raise ValueError("Username already exists")
-            if conn.execute(text("SELECT 1 FROM users WHERE email = :e"), {"e": email}).first():
-                raise ValueError("Email already registered")
-
-            user_id = conn.execute(
-                text(
-                    """
-                    INSERT INTO users (username, email, password_hash)
-                    VALUES (:username, :email, :password_hash)
-                    RETURNING id
-                    """
-                ),
-                {"username": username, "email": email, "password_hash": hashed_pw},
-            ).scalar_one()
+            try:
+                user_id = conn.execute(
+                    text(
+                        """
+                        INSERT INTO users (username, email, password_hash)
+                        VALUES (:username, :email, :password_hash)
+                        RETURNING id
+                        """
+                    ),
+                    {"username": username, "email": email, "password_hash": hashed_pw},
+                ).scalar_one()
+            except IntegrityError as exc:
+                constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+                if constraint == "users_username_key":
+                    raise ValueError("Username already exists") from exc
+                if constraint == "users_email_key":
+                    raise ValueError("Email already registered") from exc
+                logger.error("Unexpected IntegrityError during user registration (constraint=%r)", constraint, exc_info=exc)
+                raise
 
             return {"id": int(user_id), "username": username, "email": email}
 
