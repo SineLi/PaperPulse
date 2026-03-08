@@ -12,8 +12,7 @@ import '../data/models/user.dart';
 import '../widgets/policy_dialog.dart';
 
 const _appName = 'PaperPulse';
-const _appVersion = '0.0.1';
-const _appBuildNumber = '2';
+const _appVersion = '0.0.2';
 const _githubRepoUrl = 'https://github.com/SineLi/PaperPulse';
 
 class AppSetting {
@@ -938,7 +937,7 @@ class AboutPage extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        'Version $_appVersion+$_appBuildNumber',
+                        'Version $_appVersion',
                         style: textTheme.labelMedium?.copyWith(
                           color: colorScheme.onSecondaryContainer,
                           fontWeight: FontWeight.w600,
@@ -977,8 +976,7 @@ class AboutPage extends StatelessWidget {
                                 builder: (_) => PredictiveBackScope(
                                   child: LicensePage(
                                     applicationName: _appName,
-                                    applicationVersion:
-                                        '$_appVersion+$_appBuildNumber',
+                                    applicationVersion: '$_appVersion',
                                     applicationIcon: Padding(
                                       padding: const EdgeInsets.all(24.0),
                                       child: SvgPicture.asset(

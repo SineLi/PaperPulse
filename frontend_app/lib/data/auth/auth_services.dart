@@ -58,9 +58,13 @@ class AuthServices extends ChangeNotifier {
       _isLoggedIn = true;
       notifyListeners();
     } on ApiException catch (e) {
-      throw _mapAuthException(e, fallbackMessage: 'Login failed');
+      throw _mapAuthException(e, fallbackMessage: '登录失败，请稍后重试');
+    } on AuthActionException {
+      rethrow;
     } catch (e) {
-      throw AuthActionException('Login failed: $e');
+      throw AuthActionException(
+        _toUserFriendlyMessage(e.toString(), fallbackMessage: '登录失败，请稍后重试'),
+      );
     }
   }
 
@@ -94,10 +98,17 @@ class AuthServices extends ChangeNotifier {
     } on ApiException catch (e) {
       throw _mapAuthException(
         e,
-        fallbackMessage: 'Failed to send verification code',
+        fallbackMessage: '验证码发送失败，请稍后重试',
       );
+    } on AuthActionException {
+      rethrow;
     } catch (e) {
-      throw AuthActionException('Failed to send verification code: $e');
+      throw AuthActionException(
+        _toUserFriendlyMessage(
+          e.toString(),
+          fallbackMessage: '验证码发送失败，请稍后重试',
+        ),
+      );
     }
   }
 
@@ -120,9 +131,13 @@ class AuthServices extends ChangeNotifier {
       );
       await _storeTokens(response);
     } on ApiException catch (e) {
-      throw _mapAuthException(e, fallbackMessage: 'Registration failed');
+      throw _mapAuthException(e, fallbackMessage: '注册失败，请稍后重试');
+    } on AuthActionException {
+      rethrow;
     } catch (e) {
-      throw AuthActionException('Registration failed: $e');
+      throw AuthActionException(
+        _toUserFriendlyMessage(e.toString(), fallbackMessage: '注册失败，请稍后重试'),
+      );
     }
   }
 
@@ -182,16 +197,20 @@ class AuthServices extends ChangeNotifier {
     final detail = _extractErrorDetail(error.message);
 
     if (detail is String && detail.isNotEmpty) {
-      return AuthActionException(detail);
+      return AuthActionException(
+        _toUserFriendlyMessage(detail, fallbackMessage: fallbackMessage),
+      );
     }
 
     if (detail is Map<String, dynamic>) {
       final msg = detail['msg'];
       final retryAfterSeconds = _parseRetryAfter(detail['retry_after']);
       if (msg is String && msg.isNotEmpty) {
-        final message = retryAfterSeconds == null
-            ? msg
-            : '$msg. Retry after ${retryAfterSeconds}s.';
+        final message = _toUserFriendlyMessage(
+          msg,
+          fallbackMessage: fallbackMessage,
+          retryAfterSeconds: retryAfterSeconds,
+        );
         return AuthActionException(
           message,
           retryAfterSeconds: retryAfterSeconds,
@@ -199,7 +218,9 @@ class AuthServices extends ChangeNotifier {
       }
     }
 
-    return AuthActionException('$fallbackMessage: ${error.message}');
+    return AuthActionException(
+      _toUserFriendlyMessage(error.message, fallbackMessage: fallbackMessage),
+    );
   }
 
   dynamic _extractErrorDetail(String message) {
@@ -233,15 +254,94 @@ class AuthServices extends ChangeNotifier {
     return null;
   }
 
+  String _toUserFriendlyMessage(
+    String rawMessage, {
+    required String fallbackMessage,
+    int? retryAfterSeconds,
+  }) {
+    final normalized = rawMessage.replaceAll('Exception: ', '').trim();
+    final lower = normalized.toLowerCase();
+
+    if (lower.contains('invalid credentials')) {
+      return '用户名或密码错误';
+    }
+    if (lower.contains('username already exists')) {
+      return '用户名已存在，请更换后重试';
+    }
+    if (lower.contains('email already registered')) {
+      return '该邮箱已被注册，请直接登录或更换邮箱';
+    }
+    if (lower.contains('verification code expired or not found')) {
+      return '验证码已过期或不存在，请重新获取';
+    }
+    if (lower.contains('invalid verification code')) {
+      return '验证码错误，请重新输入';
+    }
+    if (lower.contains('too many failed attempts')) {
+      return retryAfterSeconds == null
+          ? '验证码错误次数过多，请稍后再试'
+          : '验证码错误次数过多，请在 ${retryAfterSeconds} 秒后重试';
+    }
+    if (lower.contains('too many requests')) {
+      return retryAfterSeconds == null
+          ? '请求过于频繁，请稍后再试'
+          : '请求过于频繁，请在 ${retryAfterSeconds} 秒后重试';
+    }
+    if (lower.contains('daily limit reached')) {
+      return retryAfterSeconds == null
+          ? '今日验证码发送次数已达上限，请稍后再试'
+          : '今日验证码发送次数已达上限，请在 ${retryAfterSeconds} 秒后重试';
+    }
+    if (lower.contains('verification email delivery failed')) {
+      return '验证码邮件发送失败，请稍后重试';
+    }
+    if (lower.contains('verification service unavailable')) {
+      return '验证码服务暂不可用，请稍后重试';
+    }
+    if (lower.contains('authentication service unavailable')) {
+      return '认证服务暂不可用，请稍后重试';
+    }
+    if (lower.contains('session expired or revoked') ||
+        lower.contains('invalid or expired token') ||
+        lower.contains('invalid refresh token')) {
+      return '登录状态已失效，请重新登录';
+    }
+    if (lower.contains('invalid token payload')) {
+      return '登录状态异常，请重新登录';
+    }
+    if (lower.contains('api base url is not configured')) {
+      return '接口地址未配置，请在设置中检查服务器地址';
+    }
+    if (lower.contains('invalid api url')) {
+      return '接口地址无效，请在设置中检查服务器地址';
+    }
+    if (lower.contains('timed out')) {
+      return '请求超时，请检查网络后重试';
+    }
+    if (lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('connection refused') ||
+        lower.contains('network is unreachable')) {
+      return '网络连接失败，请检查网络或服务器地址';
+    }
+    if (lower.contains('access token not found in response') ||
+        lower.contains('refresh token not found in response') ||
+        lower.contains('invalid refresh response payload')) {
+      return '服务器返回异常，请稍后重试';
+    }
+
+    return fallbackMessage;
+  }
+
   Future<void> _storeTokens(Map<String, dynamic> response) async {
     final accessToken = response['access_token'];
     final refreshToken = response['refresh_token'];
 
     if (accessToken is! String || accessToken.isEmpty) {
-      throw AuthActionException('Access token not found in response');
+      throw const AuthActionException('服务器返回异常，请稍后重试');
     }
     if (refreshToken is! String || refreshToken.isEmpty) {
-      throw AuthActionException('Refresh token not found in response');
+      throw const AuthActionException('服务器返回异常，请稍后重试');
     }
 
     await _authStorage.saveTokens(

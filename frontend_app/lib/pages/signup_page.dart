@@ -378,7 +378,7 @@ class _RegisterPageState extends State<RegisterPage> {
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      final message = e.toString().replaceAll('Exception: ', '');
+      final message = e is AuthActionException ? e.message : '注册失败，请稍后重试';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('注册失败: $message')));
@@ -418,7 +418,8 @@ class _RegisterPageState extends State<RegisterPage> {
         _startSendCodeCooldown(e.retryAfterSeconds!);
       }
 
-      final message = e.toString().replaceAll('Exception: ', '');
+      final message =
+          e is AuthActionException ? e.message : '验证码发送失败，请稍后重试';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
