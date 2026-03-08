@@ -16,6 +16,8 @@ class JournalService {
           .map((journalJson) => Journal.fromJson(journalJson))
           .toList();
       return journals;
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Failed to fetch journals: $e');
     }

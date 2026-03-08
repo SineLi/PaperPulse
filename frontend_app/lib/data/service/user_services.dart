@@ -12,6 +12,8 @@ class UserServices {
       final items = (response)['items'] as List<dynamic>;
       final journalIds = items.map((item) => item as int).toList();
       return journalIds;
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Failed to fetch subscribed journal IDs: $e');
     }
@@ -28,7 +30,7 @@ class UserServices {
       if (apierr.statusCode == 404) {
         throw Exception('Journal with ID $journalId not found');
       }
-      throw Exception('API Error ${apierr.statusCode}: ${apierr.message}');
+      rethrow;
     } catch (e) {
       throw Exception('Failed to follow journal $journalId: $e');
     }
@@ -41,7 +43,7 @@ class UserServices {
       if (apierr.statusCode == 404) {
         throw Exception('Journal with ID $journalId not found');
       }
-      throw Exception('API Error ${apierr.statusCode}: ${apierr.message}');
+      rethrow;
     } catch (e) {
       throw Exception('Failed to unfollow journal $journalId: $e');
     }
@@ -51,6 +53,8 @@ class UserServices {
     try {
       final response = await _apiClient.getJson('/users/me');
       return User.fromJson(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Failed to fetch current user: $e');
     }

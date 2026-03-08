@@ -16,6 +16,8 @@ class FeedService {
           .map((articleJson) => Article.fromJson(articleJson))
           .toList();
       return articles;
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Failed to fetch articles: $e');
     }

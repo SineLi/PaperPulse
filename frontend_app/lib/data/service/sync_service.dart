@@ -49,7 +49,7 @@ class SyncService {
           }
         }
       } else {
-        throw Exception('Failed to sync read actions: $e');
+        rethrow;
       }
     }
 
@@ -73,7 +73,7 @@ class SyncService {
           processedIds.add(id);
           continue;
         }
-        throw Exception('Failed to sync favorite/unfavorite actions: $e');
+        rethrow;
       }
     }
 
@@ -96,7 +96,7 @@ class SyncService {
           if (e.statusCode == 404) {
             continue;
           } else {
-            throw Exception('Failed to fetch article $toFav: $e');
+            rethrow;
           }
         }
       }
