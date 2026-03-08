@@ -54,14 +54,9 @@ class AuthServices extends ChangeNotifier {
     };
     try {
       final response = await _apiClient.postJson('/auth/login', loginRequest);
-      final token = response['access_token'];
-      if (token != null) {
-        await _authStorage.saveToken(token);
-        _isLoggedIn = true;
-        notifyListeners();
-      } else {
-        throw Exception('Token not found in response');
-      }
+      await _storeTokens(response);
+      _isLoggedIn = true;
+      notifyListeners();
     } on ApiException catch (e) {
       throw _mapAuthException(e, fallbackMessage: 'Login failed');
     } catch (e) {
@@ -70,6 +65,11 @@ class AuthServices extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    try {
+      await _apiClient.postJson('/auth/logout', {});
+    } catch (_) {
+      // Ignore remote logout failures and clear local session regardless.
+    }
     await _authStorage.deleteToken();
     _isLoggedIn = false;
     notifyListeners();
@@ -77,8 +77,13 @@ class AuthServices extends ChangeNotifier {
 
   /// 检查本地是否存有 token（不验证有效性）
   Future<bool> hasToken() async {
-    final token = await _authStorage.getToken();
-    return token != null && token.isNotEmpty;
+    final accessToken = await _authStorage.getToken();
+    if (accessToken != null && accessToken.isNotEmpty) {
+      return true;
+    }
+
+    final refreshToken = await _authStorage.getRefreshToken();
+    return refreshToken != null && refreshToken.isNotEmpty;
   }
 
   Future<void> sendVerificationCode({required String email}) async {
@@ -113,12 +118,7 @@ class AuthServices extends ChangeNotifier {
         '/auth/register',
         registerRequest,
       );
-      final token = response['access_token'];
-      if (token != null) {
-        await _authStorage.saveToken(token);
-      } else {
-        throw Exception('Token not found in response');
-      }
+      await _storeTokens(response);
     } on ApiException catch (e) {
       throw _mapAuthException(e, fallbackMessage: 'Registration failed');
     } catch (e) {
@@ -165,6 +165,11 @@ class AuthServices extends ChangeNotifier {
       // 无网络连接，不删 token，返回 null 表示无法验证
       return null;
     } catch (_) {
+      final hasLocalToken = await hasToken();
+      if (!hasLocalToken && _isLoggedIn) {
+        _isLoggedIn = false;
+        notifyListeners();
+      }
       // 其他意外错误（DNS、超时等），不删 token
       return null;
     }
@@ -226,5 +231,22 @@ class AuthServices extends ChangeNotifier {
       return int.tryParse(value);
     }
     return null;
+  }
+
+  Future<void> _storeTokens(Map<String, dynamic> response) async {
+    final accessToken = response['access_token'];
+    final refreshToken = response['refresh_token'];
+
+    if (accessToken is! String || accessToken.isEmpty) {
+      throw AuthActionException('Access token not found in response');
+    }
+    if (refreshToken is! String || refreshToken.isEmpty) {
+      throw AuthActionException('Refresh token not found in response');
+    }
+
+    await _authStorage.saveTokens(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    );
   }
 }
