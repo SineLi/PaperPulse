@@ -1,10 +1,12 @@
-import sqlite3
 import logging
-from db.database import get_db_connection
-from typing import Optional, List, Union, TypedDict
 import json
+from typing import Optional, List, Union, TypedDict
+
+from sqlalchemy import text
+from db.database import get_db_connection
 
 logger = logging.getLogger(__name__)
+
 
 class Article(TypedDict):
     title: str
@@ -17,72 +19,58 @@ class Article(TypedDict):
     structured_abstract: Optional[str]
     abstract: Optional[str]
     graphical_abstract: Optional[str]
-    status: str  
+    status: str
+
 
 class ArticleService:
-    def article_filter(self,articles: List[dict]) -> List[dict]:
-
+    def article_filter(self, articles: List[dict]) -> List[dict]:
         if not articles:
             return []
 
-        titles = [a.get('title') for a in articles if a.get('title')]
-        links = [a.get('link') for a in articles if a.get('link')]
-        dois = [a.get('doi') for a in articles if a.get('doi')]
+        titles = [a.get("title") for a in articles if a.get("title")]
+        links = [a.get("link") for a in articles if a.get("link")]
+        dois = [a.get("doi") for a in articles if a.get("doi")]
 
-        existing_titles = set()
-        existing_links = set()
-        existing_dois = set()
+        existing_titles: set[str] = set()
+        existing_links: set[str] = set()
+        existing_dois: set[str] = set()
 
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-
             if titles:
-                # 处理 title 中的特殊字符或空值已经在列表生成式中过滤
-                placeholders = ','.join(['?'] * len(titles))
-                try:
-                    cursor.execute(f"SELECT title FROM articles WHERE title IN ({placeholders})", titles)
-                    existing_titles.update(row[0] for row in cursor.fetchall())
-                    cursor.execute(f"SELECT title FROM non_article_entries WHERE title IN ({placeholders})", titles)
-                    existing_titles.update(row[0] for row in cursor.fetchall())
-                except sqlite3.OperationalError as e:
-                    logger.error(f"Error querying titles: {e}")
+                existing_titles.update(
+                    conn.execute(text("SELECT title FROM articles WHERE title = ANY(:v)"), {"v": titles}).scalars().all()
+                )
+                existing_titles.update(
+                    conn.execute(text("SELECT title FROM non_article_entries WHERE title = ANY(:v)"), {"v": titles}).scalars().all()
+                )
 
             if links:
-                placeholders = ','.join(['?'] * len(links))
-                try:
-                    cursor.execute(f"SELECT link FROM articles WHERE link IN ({placeholders})", links)
-                    existing_links.update(row[0] for row in cursor.fetchall())
-                    cursor.execute(f"SELECT link FROM non_article_entries WHERE link IN ({placeholders})", links)
-                    existing_links.update(row[0] for row in cursor.fetchall())
-                except sqlite3.OperationalError as e:
-                    logger.error(f"Error querying links: {e}")
+                existing_links.update(
+                    conn.execute(text("SELECT link FROM articles WHERE link = ANY(:v)"), {"v": links}).scalars().all()
+                )
+                existing_links.update(
+                    conn.execute(text("SELECT link FROM non_article_entries WHERE link = ANY(:v)"), {"v": links}).scalars().all()
+                )
 
             if dois:
-                placeholders = ','.join(['?'] * len(dois))
-                try:
-                    cursor.execute(f"SELECT doi FROM articles WHERE doi IN ({placeholders})", dois)
-                    existing_dois.update(row[0] for row in cursor.fetchall())
-                    cursor.execute(f"SELECT doi FROM non_article_entries WHERE doi IN ({placeholders})", dois)
-                    existing_dois.update(row[0] for row in cursor.fetchall())
-                except sqlite3.OperationalError as e:
-                    logger.error(f"Error querying dois: {e}")
-                
+                existing_dois.update(
+                    conn.execute(text("SELECT doi FROM articles WHERE doi = ANY(:v)"), {"v": dois}).scalars().all()
+                )
+                existing_dois.update(
+                    conn.execute(text("SELECT doi FROM non_article_entries WHERE doi = ANY(:v)"), {"v": dois}).scalars().all()
+                )
 
-        # 3. 过滤文章
         new_articles = []
         for article in articles:
-            title = article.get('title')
-            link = article.get('link')
-            doi = article.get('doi')
+            title = article.get("title")
+            link = article.get("link")
+            doi = article.get("doi")
 
-            # 如果标题或链接已存在，则跳过
             if (doi and doi in existing_dois) or (title and title in existing_titles) or (link and link in existing_links):
                 continue
-            
             new_articles.append(article)
 
         return new_articles
-
 
     def insert_articles(self, articles: Union[List[dict], str]):
         if not articles:
@@ -92,156 +80,124 @@ class ArticleService:
             try:
                 articles = json.loads(articles)
             except json.JSONDecodeError as e:
-                logger.error(f"Error decoding JSON in insert_articles: {e}")
+                logger.error("Error decoding JSON in insert_articles: %s", e)
                 return
 
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            journal_names = list({article.get('journal') for article in articles if article.get('journal')})
-            journal_map = {}
-            if journal_names:
-                placeholders = ','.join(['?'] * len(journal_names))
-                try:
-                    cursor.execute(f"SELECT name, id FROM journals WHERE name IN ({placeholders})", journal_names)
-                    journal_map = {row[0]: row[1] for row in cursor.fetchall()}
-                except sqlite3.Error as e:
-                    logger.error(f"Error querying journal IDs: {e}")
+            journal_names = list({a.get("journal") for a in articles if a.get("journal")})
+            journal_map: dict[str, int] = {}
 
-            # 准备插入的数据
-            data_to_insert = []
-            no_article_entries = []
-            for article in articles:
-                title = article.get('title')
-                link = article.get('link')
-                abstract = article.get('abstract')
-                fetch_status = article.get('_fetch_status', 'unknown')
-                fetch_fail_reason = article.get('_fetch_fail_reason')
-                journal_name = article.get('journal')
-                journal_id = journal_map.get(journal_name)
+            if journal_names:
+                rows = conn.execute(
+                    text("SELECT name, id FROM journals WHERE name = ANY(:names)"),
+                    {"names": journal_names},
+                ).mappings().all()
+                journal_map = {r["name"]: int(r["id"]) for r in rows}
+
+            data_to_insert: list[dict] = []
+            non_article_rows: list[dict] = []
+
+            for a in articles:
+                title = a.get("title")
+                link = a.get("link")
+                abstract = a.get("abstract")
+                fetch_status = a.get("_fetch_status", "unknown")
+                fetch_fail_reason = a.get("_fetch_fail_reason")
+                journal_id = journal_map.get(a.get("journal") or "")
 
                 if not title or not link:
                     continue
 
                 if not abstract:
-                    # Only classify as non-article when fetch succeeded and still has no abstract.
-                    if fetch_status != 'ok':
+                    if fetch_status != "ok":
                         logger.warning(
                             "Skip non-article classification due fetch status: title=%s, status=%s, reason=%s",
                             title,
                             fetch_status,
-                            fetch_fail_reason
+                            fetch_fail_reason,
                         )
                         continue
 
-                    no_article_entries.append({
-                        'title': title,
-                        'link': link,
-                        'date': article.get('date'),
-                        'journal_id': journal_id,
-                        'doi': article.get('doi')
-                    })
-                    continue
-                # 序列化 authors 列表为 JSON 字符串
-                authors_json = json.dumps(article.get('authors', []), ensure_ascii=False)
-
-                data_to_insert.append((
-                    title,
-                    link,
-                    article.get('doi'),
-                    article.get('date'),
-                    journal_id,
-                    authors_json,
-                    article.get('editor_summary'),
-                    article.get('structured_abstract'),
-                    article.get('abstract'),
-                    article.get('graphical_abstract'),
-                    article.get('status', 'pending')
-                ))
-
-            # 批量插入
-            try:
-                # 使用 INSERT OR IGNORE 忽略重复项，避免因 DOI/Link 重复报错
-                cursor.executemany('''
-                    INSERT OR IGNORE INTO articles (
-                        title, link, doi, date, journal_id, authors, 
-                        editor_summary, structured_abstract, abstract, graphical_abstract, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', data_to_insert)
-                conn.commit()
-                logger.info(f"Successfully inserted {cursor.rowcount} articles.")
-            except sqlite3.Error as e:
-                logger.error(f"Error inserting articles: {e}")
-            finally:
-                pass
-
-            # 批量插入 non_article_entries，避免在循环中频繁打开新连接和提交事务
-            try:
-                non_article_data_to_insert = []
-                for entry in no_article_entries:
-                    if not entry.get('title') or not entry.get('link'):
-                        logger.warning("Non-article entry must have at least a title and a link.")
+                    if journal_id is None:
                         continue
-                    if entry.get('journal_id') is None:
-                        logger.warning(
-                            "Skip non-article insert because journal_id is missing: title=%s",
-                            entry.get("title")
-                        )
-                        continue
-                    non_article_data_to_insert.append((
-                        entry.get('title'),
-                        entry.get('link'),
-                        entry.get('date'),
-                        entry.get('journal_id'),
-                        entry.get('doi'),
-                    ))
 
-                if non_article_data_to_insert:
-                    cursor.executemany('''
-                        INSERT OR IGNORE INTO non_article_entries (
-                            title, link, date, journal_id, doi
-                        ) VALUES (?, ?, ?, ?, ?)
-                    ''', non_article_data_to_insert)
-                    conn.commit()
-                    logger.info(
-                        "Successfully inserted %d non-article entries.",
-                        cursor.rowcount
+                    non_article_rows.append(
+                        {
+                            "title": title,
+                            "link": link,
+                            "date": a.get("date"),
+                            "journal_id": journal_id,
+                            "doi": a.get("doi"),
+                        }
                     )
-            except sqlite3.Error as e:
-                logger.error(f"Error inserting non-article entries: {e}")
+                    continue
 
-    
+                authors_json = json.dumps(a.get("authors", []), ensure_ascii=False)
+
+                data_to_insert.append(
+                    {
+                        "title": title,
+                        "link": link,
+                        "doi": a.get("doi"),
+                        "date": a.get("date"),
+                        "journal_id": journal_id,
+                        "authors": authors_json,
+                        "editor_summary": a.get("editor_summary"),
+                        "structured_abstract": a.get("structured_abstract"),
+                        "abstract": a.get("abstract"),
+                        "graphical_abstract": a.get("graphical_abstract"),
+                        "status": a.get("status", "pending"),
+                    }
+                )
+
+            if data_to_insert:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO articles (
+                          title, link, doi, date, journal_id, authors,
+                          editor_summary, structured_abstract, abstract, graphical_abstract, status
+                        )
+                        VALUES (
+                          :title, :link, :doi, :date, :journal_id, :authors,
+                          :editor_summary, :structured_abstract, :abstract, :graphical_abstract, :status
+                        )
+                        ON CONFLICT DO NOTHING
+                        """
+                    ),
+                    data_to_insert,
+                )
+
+            if non_article_rows:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO non_article_entries (title, link, date, journal_id, doi)
+                        VALUES (:title, :link, :date, :journal_id, :doi)
+                        ON CONFLICT DO NOTHING
+                        """
+                    ),
+                    non_article_rows,
+                )
+
     def insert_non_article_entry(self, entry: dict):
-        if not entry.get('title') or not entry.get('link'):
-            logger.warning("Non-article entry must have at least a title and a link.")
-            return
-        if entry.get('journal_id') is None:
-            logger.warning(
-                "Skip non-article insert because journal_id is missing: title=%s",
-                entry.get("title")
-            )
+        if not entry.get("title") or not entry.get("link") or entry.get("journal_id") is None:
             return
 
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute('''
-                    INSERT OR IGNORE INTO non_article_entries (
-                        title, link, date, journal_id, doi
-                    ) VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    entry.get('title'),
-                    entry.get('link'),
-                    entry.get('date'),
-                    entry.get('journal_id'),
-                    entry.get('doi')
-                ))
-                conn.commit()
-                if cursor.rowcount == 1:
-                    logger.info("Inserted non-article entry: %s", entry.get("title"))
-                else:
-                    logger.info("Skipped non-article entry (duplicate/constraint): %s", entry.get("title"))
-            except sqlite3.Error as e:
-                logger.error(f"Error inserting non-article entry: {e}")
-            finally:
-                pass
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO non_article_entries (title, link, date, journal_id, doi)
+                    VALUES (:title, :link, :date, :journal_id, :doi)
+                    ON CONFLICT DO NOTHING
+                    """
+                ),
+                {
+                    "title": entry.get("title"),
+                    "link": entry.get("link"),
+                    "date": entry.get("date"),
+                    "journal_id": entry.get("journal_id"),
+                    "doi": entry.get("doi"),
+                },
+            )

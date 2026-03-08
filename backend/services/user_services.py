@@ -1,268 +1,277 @@
-import sqlite3
+import logging
+
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from db.database import get_db_connection
 from utils.auth import hash_password, verify_password
+
+logger = logging.getLogger(__name__)
+
 
 class UserService:
     def get_user_by_id(self, user_id: int) -> dict | None:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, username, email FROM users WHERE id = ?",
-                (user_id,)
-            )
-            user = cursor.fetchone()
-            if user:
-                return {
-                    "id": user["id"],
-                    "username": user["username"],
-                    "email": user["email"],
-                }
-            return None
-
+            row = conn.execute(
+                text("SELECT id, username, email FROM users WHERE id = :id"),
+                {"id": user_id},
+            ).mappings().first()
+            return dict(row) if row else None
 
     def register(self, username: str, email: str, password: str) -> dict:
         hashed_pw = hash_password(password)
-        
+
         with get_db_connection() as conn:
-            cursor = conn.cursor()
             try:
-                cursor.execute(
-                    "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-                    (username, email, hashed_pw)
-                )
-                user_id = cursor.lastrowid
-                return {"id": user_id, "username": username, "email": email}
-            except sqlite3.IntegrityError as e:
-                if "username" in str(e):
-                    raise ValueError("Username already exists")
-                if "email" in str(e):
-                    raise ValueError("Email already registered")
-                raise e
+                user_id = conn.execute(
+                    text(
+                        """
+                        INSERT INTO users (username, email, password_hash)
+                        VALUES (:username, :email, :password_hash)
+                        RETURNING id
+                        """
+                    ),
+                    {"username": username, "email": email, "password_hash": hashed_pw},
+                ).scalar_one()
+            except IntegrityError as exc:
+                constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+                if constraint == "users_username_key":
+                    raise ValueError("Username already exists") from exc
+                if constraint == "users_email_key":
+                    raise ValueError("Email already registered") from exc
+                logger.error("Unexpected IntegrityError during user registration (constraint=%r)", constraint, exc_info=exc)
+                raise
 
-    def login(self, username: str, password: str) -> dict:
+            return {"id": int(user_id), "username": username, "email": email}
+
+    def login(self, login_identifier: str, password: str) -> dict:
+        login_identifier = login_identifier.strip()
+        is_email_login = "@" in login_identifier
+
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, username, email, password_hash FROM users WHERE username = ?",
-                (username,)
-            )
-            user = cursor.fetchone()
-            if not user or not verify_password(password, user["password_hash"]):
-                raise ValueError("Invalid credentials")
-            return {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"],
-            }
+            if is_email_login:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT id, username, email, password_hash
+                        FROM users
+                        WHERE lower(email) = lower(:login)
+                        """
+                    ),
+                    {"login": login_identifier},
+                ).mappings().first()
+            else:
+                row = conn.execute(
+                    text(
+                        """
+                        SELECT id, username, email, password_hash
+                        FROM users
+                        WHERE username = :login
+                        """
+                    ),
+                    {"login": login_identifier},
+                ).mappings().first()
 
-        
+            if not row or not verify_password(password, row["password_hash"]):
+                raise ValueError("Invalid credentials")
+
+            return {"id": int(row["id"]), "username": row["username"], "email": row["email"]}
+
     def get_available_journals(self, limit: int = 50, offset: int = 0) -> list[dict]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, name, sci, if, if5, CASUp, CASBase, publisher, abbreviation FROM journals WHERE official_url IS NOT NULL OR rss_url IS NOT NULL LIMIT ? OFFSET ?", 
-                (limit, offset))
-            journals = cursor.fetchall()
-            return [dict(journal) for journal in journals]
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                      id, name, sci, "if", if5, casup, casbase, publisher, abbreviation
+                    FROM journals
+                    WHERE official_url IS NOT NULL OR rss_url IS NOT NULL
+                    ORDER BY id ASC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                {"limit": limit, "offset": offset},
+            ).mappings().all()
+            return [dict(r) for r in rows]
 
     def get_followed_journals(self, user_id: int) -> list[int]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT j.id
-                FROM journals j
-                JOIN user_journal_subscriptions ujs ON j.id = ujs.journal_id
-                WHERE ujs.user_id = ?
-                """,
-                (user_id,)
-            )
-            rows = cursor.fetchall()
-            return [int(r[0]) for r in rows]
+            ids = conn.execute(
+                text(
+                    """
+                    SELECT j.id
+                    FROM journals j
+                    JOIN user_journal_subscriptions ujs ON j.id = ujs.journal_id
+                    WHERE ujs.user_id = :uid
+                    """
+                ),
+                {"uid": user_id},
+            ).scalars().all()
+            return [int(x) for x in ids]
 
     def follow_journal(self, user_id: int, journal_id: int) -> bool:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                # 1. 插入订阅记录
-                cursor.execute(
-                    "INSERT INTO user_journal_subscriptions (user_id, journal_id) VALUES (?, ?)",
-                    (user_id, journal_id)
-                )
-                
-                # 2. 激活该期刊的爬虫开关
-                cursor.execute(
-                    "UPDATE journals SET crawler_enabled = 1 WHERE id = ?",
-                    (journal_id,)
-                )
-                conn.commit()
-                return True
-            except sqlite3.IntegrityError as e:
-                if "FOREIGN KEY constraint failed" in str(e):
-                    raise ValueError("Journal not found")
+            # journal 必须存在（用于区分“已关注”和“期刊不存在”）
+            if not conn.execute(text("SELECT 1 FROM journals WHERE id = :jid"), {"jid": journal_id}).first():
+                raise ValueError("Journal not found")
+
+            inserted = conn.execute(
+                text(
+                    """
+                    INSERT INTO user_journal_subscriptions (user_id, journal_id)
+                    VALUES (:uid, :jid)
+                    ON CONFLICT DO NOTHING
+                    RETURNING id
+                    """
+                ),
+                {"uid": user_id, "jid": journal_id},
+            ).scalar()
+
+            if inserted is None:
                 return False  # 已关注
+
+            # 只要有用户关注，就启用爬虫
+            conn.execute(
+                text("UPDATE journals SET crawler_enabled = TRUE WHERE id = :jid"),
+                {"jid": journal_id},
+            )
+            return True
 
     def unfollow_journal(self, user_id: int, journal_id: int) -> bool:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            # 1. 删除订阅记录
-            cursor.execute(
-                "DELETE FROM user_journal_subscriptions WHERE user_id = ? AND journal_id = ?",
-                (user_id, journal_id)
+            res = conn.execute(
+                text(
+                    """
+                    DELETE FROM user_journal_subscriptions
+                    WHERE user_id = :uid AND journal_id = :jid
+                    """
+                ),
+                {"uid": user_id, "jid": journal_id},
             )
-            
-            if cursor.rowcount > 0:
-                # 2. 检查是否还有其他用户订阅该期刊
-                cursor.execute(
-                    "SELECT COUNT(*) FROM user_journal_subscriptions WHERE journal_id = ?",
-                    (journal_id,)
+
+            if (res.rowcount or 0) <= 0:
+                return False
+
+            count = conn.execute(
+                text("SELECT COUNT(*) FROM user_journal_subscriptions WHERE journal_id = :jid"),
+                {"jid": journal_id},
+            ).scalar_one()
+
+            if int(count) == 0:
+                # 没有用户关注了，禁用爬虫
+                conn.execute(
+                    text("UPDATE journals SET crawler_enabled = FALSE WHERE id = :jid"),
+                    {"jid": journal_id},
                 )
-                count = cursor.fetchone()[0]
-                
-                # 3. 如果没人订阅了，关闭爬虫开关
-                if count == 0:
-                    cursor.execute(
-                        "UPDATE journals SET crawler_enabled = 0 WHERE id = ?",
-                        (journal_id,)
-                    )
-                return True
-            return False
-        
+            return True
+
     def get_articles_feed(self, user_id: int, limit: int = 200, offset: int = 0) -> list[dict]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT
-                a.id,
-                a.title,
-                a.abstract,
-                a.graphical_abstract,
-                a.date,
-                a.doi,
-                a.llm_summary,
-                j.id   AS journal_id,
-                j.name AS journal_name,
-                j.abbreviation
-                FROM articles a
-                JOIN journals j ON a.journal_id = j.id
-                JOIN user_journal_subscriptions ujs
-                ON ujs.journal_id = j.id
-                WHERE ujs.user_id = ? AND a.llm_summary IS NOT NULL
-                ORDER BY a.id DESC
-                LIMIT ? OFFSET ?
-                """,
-                (user_id, limit, offset)
-            )
-            articles = cursor.fetchall()
-            return [dict(article) for article in articles]
-        
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT
+                      a.id, a.title, a.abstract, a.graphical_abstract, a.date, a.doi, a.llm_summary,
+                      j.id AS journal_id, j.name AS journal_name, j.abbreviation
+                    FROM articles a
+                    JOIN journals j ON a.journal_id = j.id
+                    JOIN user_journal_subscriptions ujs ON ujs.journal_id = j.id
+                    WHERE ujs.user_id = :uid AND a.llm_summary IS NOT NULL
+                    ORDER BY a.id DESC
+                    LIMIT :limit OFFSET :offset
+                    """
+                ),
+                {"uid": user_id, "limit": limit, "offset": offset},
+            ).mappings().all()
+            return [dict(r) for r in rows]
+
     def get_article_by_id(self, article_id: int) -> dict | None:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT
-                a.id,
-                a.title,
-                a.abstract,
-                a.graphical_abstract,
-                a.date,
-                a.doi,
-                a.llm_summary,
-                j.id   AS journal_id,
-                j.name AS journal_name,
-                j.abbreviation
-                FROM articles a
-                JOIN journals j ON a.journal_id = j.id
-                WHERE a.id = ?
-                """,
-                (article_id,)
-            )
-            article = cursor.fetchone()
-            if article:
-                return dict(article)
-            return None
+            row = conn.execute(
+                text(
+                    """
+                    SELECT
+                      a.id, a.title, a.abstract, a.graphical_abstract, a.date, a.doi, a.llm_summary,
+                      j.id AS journal_id, j.name AS journal_name, j.abbreviation
+                    FROM articles a
+                    JOIN journals j ON a.journal_id = j.id
+                    WHERE a.id = :aid
+                    """
+                ),
+                {"aid": article_id},
+            ).mappings().first()
+            return dict(row) if row else None
 
     def mark_as_read(self, user_id: int, article_ids: list[int]) -> bool:
         if not article_ids:
             return True
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                # 为了区分“文章不存在”和“重复标记”，我们不再使用 INSERT OR IGNORE
-                # 而是分两步：1. 检查所有文章 ID 是否有效（外键约束也会在写入时检查）
-                # 2. 执行批量插入
-                
-                # 检查这些文章是否存在
-                placeholders = ', '.join(['?'] * len(article_ids))
-                cursor.execute(f"SELECT COUNT(*) FROM articles WHERE id IN ({placeholders})", article_ids)
-                if cursor.fetchone()[0] < len(set(article_ids)):
-                    raise ValueError("One or more article IDs do not exist")
 
-                cursor.executemany(
-                    "INSERT OR IGNORE INTO user_article_reads (user_id, article_id) VALUES (?, ?)",
-                    [(user_id, aid) for aid in article_ids]
-                )
-                conn.commit()
-                return True
-            except sqlite3.IntegrityError as e:
-                # 虽然用了 OR IGNORE，但如果外键检查生效且失败，依然可能抛出异常
-                if "FOREIGN KEY constraint failed" in str(e):
-                    raise ValueError("One or more article IDs or User ID do not exist")
-                return False
-            
+        ids = list(dict.fromkeys(int(x) for x in article_ids))  # 去重但保序
+        with get_db_connection() as conn:
+            count = conn.execute(
+                text("SELECT COUNT(*) FROM articles WHERE id = ANY(:ids)"),
+                {"ids": ids},
+            ).scalar_one()
+
+            if int(count) < len(ids):
+                raise ValueError("One or more article IDs do not exist")
+
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO user_article_reads (user_id, article_id)
+                    SELECT :uid, x
+                    FROM unnest(:ids::int[]) AS x
+                    ON CONFLICT DO NOTHING
+                    """
+                ),
+                {"uid": user_id, "ids": ids},
+            )
+            return True
+
     def add_favorite(self, user_id: int, article_id: int) -> bool:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                cursor.execute(
-                    "INSERT INTO user_article_favourites (user_id, article_id) VALUES (?, ?)",
-                    (user_id, article_id)
-                )
-                conn.commit()
-                return True
-            except sqlite3.IntegrityError as e:
-                if "FOREIGN KEY constraint failed" in str(e):
-                    # 区分：文章不存在
-                    raise ValueError("Article not found")
-                return False  # 已收藏
-            
+            if not conn.execute(text("SELECT 1 FROM articles WHERE id = :aid"), {"aid": article_id}).first():
+                raise ValueError("Article not found")
+
+            inserted = conn.execute(
+                text(
+                    """
+                    INSERT INTO user_article_favourites (user_id, article_id)
+                    VALUES (:uid, :aid)
+                    ON CONFLICT DO NOTHING
+                    RETURNING id
+                    """
+                ),
+                {"uid": user_id, "aid": article_id},
+            ).scalar()
+
+            return inserted is not None
+
     def del_favorite(self, user_id: int, article_id: int) -> bool:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM user_article_favourites WHERE user_id = ? AND article_id = ?",
-                (user_id, article_id)
+            res = conn.execute(
+                text(
+                    """
+                    DELETE FROM user_article_favourites
+                    WHERE user_id = :uid AND article_id = :aid
+                    """
+                ),
+                {"uid": user_id, "aid": article_id},
             )
-            conn.commit()
-            return cursor.rowcount > 0
-        
+            return (res.rowcount or 0) > 0
+
     def get_favorite_articles(self, user_id: int) -> list[int]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT article_id
-                FROM user_article_favourites
-                WHERE user_id = ?
-                """,
-                (user_id,)
-            )
-            rows = cursor.fetchall()
-            return [int(r[0]) for r in rows]
-        
+            ids = conn.execute(
+                text("SELECT article_id FROM user_article_favourites WHERE user_id = :uid"),
+                {"uid": user_id},
+            ).scalars().all()
+            return [int(x) for x in ids]
+
     def get_read_articles(self, user_id: int) -> list[int]:
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT article_id
-                FROM user_article_reads
-                WHERE user_id = ?
-                """,
-                (user_id,)
-            )
-            rows = cursor.fetchall()
-            return [int(r[0]) for r in rows]
+            ids = conn.execute(
+                text("SELECT article_id FROM user_article_reads WHERE user_id = :uid"),
+                {"uid": user_id},
+            ).scalars().all()
+            return [int(x) for x in ids]
