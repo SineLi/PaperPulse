@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +14,9 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  static final RegExp _emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+  static const int _sendCodeCooldownSeconds = 60;
+
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -22,8 +27,11 @@ class _RegisterPageState extends State<RegisterPage> {
       TextEditingController();
 
   bool _isLoading = false;
+  bool _isSendingVerificationCode = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  int _remainingSendCodeSeconds = 0;
+  Timer? _sendCodeTimer;
 
   InputDecoration _inputDecoration({
     required String label,
@@ -141,10 +149,19 @@ class _RegisterPageState extends State<RegisterPage> {
                         suffixIcon: Padding(
                           padding: const EdgeInsets.only(right: 4.0),
                           child: TextButton(
-                            onPressed: () {
-                              // TODO: 实现发送验证码逻辑
-                            },
-                            child: const Text('获取验证码'),
+                            onPressed:
+                                _isLoading ||
+                                    _isSendingVerificationCode ||
+                                    _remainingSendCodeSeconds > 0
+                                ? null
+                                : _handleSendVerificationCode,
+                            child: Text(
+                              _isSendingVerificationCode
+                                  ? '...'
+                                  : _remainingSendCodeSeconds > 0
+                                  ? '${_remainingSendCodeSeconds}s'
+                                  : '发送',
+                            ),
                           ),
                         ),
                       ),
@@ -341,6 +358,7 @@ class _RegisterPageState extends State<RegisterPage> {
     final authServices = context.read<AuthServices>();
     final username = _usernameController.text.trim();
     final email = _emailController.text.trim();
+    final verificationCode = _verificationCodeController.text.trim();
     final password = _passwordController.text;
 
     try {
@@ -351,7 +369,7 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
 
-      await authServices.register(username, email, password);
+      await authServices.register(username, email, password, verificationCode);
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -373,8 +391,72 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  Future<void> _handleSendVerificationCode() async {
+    final email = _emailController.text.trim();
+    if (!_emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入有效的邮箱地址')));
+      return;
+    }
+
+    setState(() {
+      _isSendingVerificationCode = true;
+    });
+
+    try {
+      await context.read<AuthServices>().sendVerificationCode(email: email);
+      if (!mounted) return;
+      _startSendCodeCooldown(_sendCodeCooldownSeconds);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('验证码已发送，请查收邮箱')));
+    } catch (e) {
+      if (!mounted) return;
+
+      if (e is AuthActionException && e.retryAfterSeconds != null) {
+        _startSendCodeCooldown(e.retryAfterSeconds!);
+      }
+
+      final message = e.toString().replaceAll('Exception: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingVerificationCode = false;
+        });
+      }
+    }
+  }
+
+  void _startSendCodeCooldown(int seconds) {
+    _sendCodeTimer?.cancel();
+    setState(() {
+      _remainingSendCodeSeconds = seconds;
+    });
+
+    _sendCodeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _remainingSendCodeSeconds <= 1) {
+        timer.cancel();
+        if (mounted) {
+          setState(() {
+            _remainingSendCodeSeconds = 0;
+          });
+        }
+        return;
+      }
+
+      setState(() {
+        _remainingSendCodeSeconds -= 1;
+      });
+    });
+  }
+
   @override
   void dispose() {
+    _sendCodeTimer?.cancel();
     _usernameController.dispose();
     _emailController.dispose();
     _verificationCodeController.dispose();
