@@ -18,7 +18,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:latest
+    image: redis:8.6
     container_name: paperpulse_redis
     restart: unless-stopped
     ports:
