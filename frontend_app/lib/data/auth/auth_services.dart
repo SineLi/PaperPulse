@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,16 @@ import '../api/client.dart';
 import 'auth_storage.dart';
 import '../models/user.dart';
 import '../service/user_services.dart';
+
+class AuthActionException implements Exception {
+  final String message;
+  final int? retryAfterSeconds;
+
+  const AuthActionException(this.message, {this.retryAfterSeconds});
+
+  @override
+  String toString() => message;
+}
 
 class AuthServices extends ChangeNotifier {
   final ApiClient _apiClient;
@@ -51,8 +62,10 @@ class AuthServices extends ChangeNotifier {
       } else {
         throw Exception('Token not found in response');
       }
+    } on ApiException catch (e) {
+      throw _mapAuthException(e, fallbackMessage: 'Login failed');
     } catch (e) {
-      throw Exception('Login failed: $e');
+      throw AuthActionException('Login failed: $e');
     }
   }
 
@@ -68,11 +81,32 @@ class AuthServices extends ChangeNotifier {
     return token != null && token.isNotEmpty;
   }
 
-  Future<void> register(String username, String email, String password) async {
+  Future<void> sendVerificationCode({required String email}) async {
+    try {
+      await _apiClient.postJson('/auth/send_verification_code', {
+        "email": email,
+      });
+    } on ApiException catch (e) {
+      throw _mapAuthException(
+        e,
+        fallbackMessage: 'Failed to send verification code',
+      );
+    } catch (e) {
+      throw AuthActionException('Failed to send verification code: $e');
+    }
+  }
+
+  Future<void> register(
+    String username,
+    String email,
+    String password,
+    String verificationCode,
+  ) async {
     final Map<String, dynamic> registerRequest = {
       "username": username,
       "email": email,
       "password": password,
+      "verification_code": verificationCode,
     };
     try {
       final response = await _apiClient.postJson(
@@ -85,8 +119,10 @@ class AuthServices extends ChangeNotifier {
       } else {
         throw Exception('Token not found in response');
       }
+    } on ApiException catch (e) {
+      throw _mapAuthException(e, fallbackMessage: 'Registration failed');
     } catch (e) {
-      throw Exception('Registration failed: $e');
+      throw AuthActionException('Registration failed: $e');
     }
   }
 
@@ -132,5 +168,63 @@ class AuthServices extends ChangeNotifier {
       // 其他意外错误（DNS、超时等），不删 token
       return null;
     }
+  }
+
+  AuthActionException _mapAuthException(
+    ApiException error, {
+    required String fallbackMessage,
+  }) {
+    final detail = _extractErrorDetail(error.message);
+
+    if (detail is String && detail.isNotEmpty) {
+      return AuthActionException(detail);
+    }
+
+    if (detail is Map<String, dynamic>) {
+      final msg = detail['msg'];
+      final retryAfterSeconds = _parseRetryAfter(detail['retry_after']);
+      if (msg is String && msg.isNotEmpty) {
+        final message = retryAfterSeconds == null
+            ? msg
+            : '$msg. Retry after ${retryAfterSeconds}s.';
+        return AuthActionException(
+          message,
+          retryAfterSeconds: retryAfterSeconds,
+        );
+      }
+    }
+
+    return AuthActionException('$fallbackMessage: ${error.message}');
+  }
+
+  dynamic _extractErrorDetail(String message) {
+    final jsonStart = message.indexOf('{');
+    if (jsonStart < 0) {
+      return null;
+    }
+
+    try {
+      final payload = jsonDecode(message.substring(jsonStart));
+      if (payload is Map<String, dynamic>) {
+        return payload['detail'];
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
+
+  int? _parseRetryAfter(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is double) {
+      return value.round();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
   }
 }
