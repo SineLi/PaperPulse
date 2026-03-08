@@ -59,6 +59,8 @@ class AuthServices extends ChangeNotifier {
       notifyListeners();
     } on ApiException catch (e) {
       throw _mapAuthException(e, fallbackMessage: '登录失败，请稍后重试');
+    } on AuthActionException {
+      rethrow;
     } catch (e) {
       throw AuthActionException(
         _toUserFriendlyMessage(e.toString(), fallbackMessage: '登录失败，请稍后重试'),
@@ -98,6 +100,8 @@ class AuthServices extends ChangeNotifier {
         e,
         fallbackMessage: '验证码发送失败，请稍后重试',
       );
+    } on AuthActionException {
+      rethrow;
     } catch (e) {
       throw AuthActionException(
         _toUserFriendlyMessage(
@@ -128,6 +132,8 @@ class AuthServices extends ChangeNotifier {
       await _storeTokens(response);
     } on ApiException catch (e) {
       throw _mapAuthException(e, fallbackMessage: '注册失败，请稍后重试');
+    } on AuthActionException {
+      rethrow;
     } catch (e) {
       throw AuthActionException(
         _toUserFriendlyMessage(e.toString(), fallbackMessage: '注册失败，请稍后重试'),
