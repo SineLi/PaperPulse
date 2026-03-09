@@ -220,7 +220,7 @@ class UserService:
                     """
                     INSERT INTO user_article_reads (user_id, article_id)
                     SELECT :uid, x
-                    FROM unnest(:ids::int[]) AS x
+                    FROM unnest(CAST(:ids AS int[])) AS x
                     ON CONFLICT DO NOTHING
                     """
                 ),
