@@ -96,18 +96,12 @@ class AuthServices extends ChangeNotifier {
         "email": email,
       });
     } on ApiException catch (e) {
-      throw _mapAuthException(
-        e,
-        fallbackMessage: '验证码发送失败，请稍后重试',
-      );
+      throw _mapAuthException(e, fallbackMessage: '验证码发送失败，请稍后重试');
     } on AuthActionException {
       rethrow;
     } catch (e) {
       throw AuthActionException(
-        _toUserFriendlyMessage(
-          e.toString(),
-          fallbackMessage: '验证码发送失败，请稍后重试',
-        ),
+        _toUserFriendlyMessage(e.toString(), fallbackMessage: '验证码发送失败，请稍后重试'),
       );
     }
   }
@@ -153,10 +147,6 @@ class AuthServices extends ChangeNotifier {
     } else {
       if (!_isLoggedIn) {
         _isLoggedIn = true;
-        // Don't notify here if we are just verifying.
-        // But if state was false, we should correct it.
-        // notifyListeners(); // Wait, this might cause rebuild loop if called from build.
-        // Better to just update internal state without notify if possible, or notify carefully.
       }
     }
 

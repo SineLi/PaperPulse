@@ -290,7 +290,6 @@ class SettingPage extends StatelessWidget {
                   leading: const Icon(Icons.account_circle_outlined),
                   title: const Text('账户'),
                   subtitle: Text('账户信息，登录状态'),
-                  // trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const AccountSettingsPage(),
@@ -301,7 +300,6 @@ class SettingPage extends StatelessWidget {
                   leading: const Icon(Icons.palette_outlined),
                   title: const Text('外观'),
                   subtitle: Text('颜色，字体'),
-                  // trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const ThemeSettingsPage(),
@@ -312,7 +310,6 @@ class SettingPage extends StatelessWidget {
                   leading: const Icon(Icons.public_rounded),
                   title: const Text('网络'),
                   subtitle: Text('后端接口，图片下载'),
-                  // trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const NetworkSettingsPage(),
@@ -323,7 +320,6 @@ class SettingPage extends StatelessWidget {
                   leading: const Icon(Icons.gesture_outlined),
                   title: const Text('操作'),
                   subtitle: Text('手势，动画'),
-                  // trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const OperationSettingsPage(),

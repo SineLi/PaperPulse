@@ -85,9 +85,7 @@ class _JournalPageState extends State<JournalPage> {
       onFollowChanged: _handleFollowChanged,
       loadFilterPublishers: journalRepo.getFilterablePublishers,
       loadFilterCasCategories: journalRepo.getFilterableCasCategories,
-      onSettings: () {
-        // TODO: implement settings
-      },
+      onSettings: () {},
       emptyIcon: Icons.book_outlined,
       emptyTitle: '暂无期刊',
       emptySubtitle: '期刊数据尚未同步',

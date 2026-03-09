@@ -2,15 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import 'package:url_launcher/url_launcher.dart';
-
 import '../data/auth/auth_services.dart';
 import '../data/repositories/feed_repo.dart';
 import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';
 import '../data/service/sync_service.dart';
 import '../widgets/policy_dialog.dart';
-import 'app_shell_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
