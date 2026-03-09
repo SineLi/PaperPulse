@@ -53,6 +53,8 @@ def start_background_scheduler() -> BackgroundScheduler:
     """
     scheduler = BackgroundScheduler()
     _add_jobs(scheduler)
+    # Run one cycle immediately, mirroring start_blocking_scheduler behavior.
+    cycle_job()
     scheduler.start()
     logger.info("Background scheduler started.")
     return scheduler
