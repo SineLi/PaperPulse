@@ -153,6 +153,37 @@ def check_db():
             probe_engine.dispose()
 
 
+def init_db():
+    """Run Alembic migrations to bring the database schema up to date.
+
+    Safe to call on every startup — Alembic is idempotent and skips
+    already-applied revisions.  If the database is brand-new (no tables
+    yet) this creates the full schema; if it is already current it is a
+    near-instant no-op.
+    """
+    import os
+    from alembic.config import Config
+    from alembic import command
+    from alembic.util.exc import CommandError
+
+    ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
+    if not os.path.isfile(ini_path):
+        logger.error("alembic.ini not found at %s — cannot run migrations.", ini_path)
+        sys.exit(1)
+
+    logger.info("Running database migrations (alembic upgrade head)…")
+    try:
+        cfg = Config(ini_path)
+        command.upgrade(cfg, "head")
+        logger.info("Database schema is up to date.")
+    except CommandError as e:
+        logger.error("Alembic migration failed: %s", e)
+        sys.exit(1)
+    except Exception as e:
+        logger.error("Unexpected error during database migration: %s", e)
+        sys.exit(1)
+
+
 # ── Banner ───────────────────────────────────────────────────────────────────
 
 def print_banner(host: str, port: int, scheduler_enabled: bool):
@@ -211,17 +242,20 @@ def main():
     # 3. Probe database connectivity
     check_db()
 
-    # 4. Optionally start background scheduler
+    # 4. Initialize / migrate schema
+    init_db()
+
+    # 5. Optionally start background scheduler
     bg_scheduler = None
     if not args.no_scheduler:
         from scheduler import start_background_scheduler
 
         bg_scheduler = start_background_scheduler()
 
-    # 5. Show banner
+    # 6. Show banner
     print_banner(args.host, args.port, scheduler_enabled=(bg_scheduler is not None))
 
-    # 6. Run uvicorn (blocks until shutdown)
+    # 7. Run uvicorn (blocks until shutdown)
     try:
         uvicorn.run(
             "app.main:app",
