@@ -1,50 +1,136 @@
-# Backend (FastAPI)
+# Backend
 
-本目录是 `PaperPulse` 的后端服务，包含：
+本目录是 PaperPulse 的后端服务，包含 API、期刊抓取器、LLM 摘要任务和定时调度。
 
-- REST API（FastAPI）
-- 文章抓取器（Fetcher，按出版社/期刊适配）
-- LLM 摘要批处理与轮询更新
-- 定时任务调度（APScheduler）
+## 组成
 
-## 1. 环境要求
+- FastAPI API
+- PostgreSQL 数据访问
+- Redis 会话与验证码状态
+- APScheduler 定时任务
+- 多个期刊抓取器
+- 基于 OpenAI 兼容接口的批量摘要任务
+
+## 环境要求
 
 - Python 3.10+
+- PostgreSQL
+- Redis
 
-## 2. 安装依赖
+部分抓取器依赖 Playwright，首次安装后可能还需要执行:
 
 ```powershell
-python -m pip install -r requirements.txt
 playwright install chromium
 ```
 
-## 3. 初始化数据库
-
-后端使用 SQLite，数据库文件路径固定为 `backend/db/advNewsFeed.db`（见 `db/database.py`）。
-
-首次运行前先建表：
+## 安装依赖
 
 ```powershell
 cd backend
-python -c "from db.database import init_database; init_database()"
+python -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
-## 4. 启动 API 服务
+## 环境变量
+
+`run.py` 会自动加载同目录下的 `.env` 文件。 你可以复制 `.env.example` 并修改其中的值来配置环境。
+
+必需变量:
+
+```env
+DATABASE_URL=postgresql+psycopg://paperpulse:paperpulse@127.0.0.1:5432/paperpulse
+REDIS_URL=redis://127.0.0.1:6379/0
+JWT_SECRET=replace-with-a-random-secret
+```
+
+可选变量:
+
+```env
+LLM_BASE_URL=https://your-openai-compatible-endpoint
+LM_API_KEY=your-llm-key
+Elsevier_KEY=your-elsevier-key
+SMTP_SERVER=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-user
+SMTP_KEY=your-smtp-password
+SOURCE_EMAIL=donotreply@example.com
+CORS_ORIGINS=https://app.example.com,https://admin.example.com
+```
+
+说明:
+
+- 缺少 `LM_API_KEY` 或 `Elsevier_KEY` 时，部分摘要/抓取能力会受限
+- 缺少 SMTP 配置时，验证码邮件无法发送
+- 当前代码里虽然读取了 `CORS_ORIGINS`，但还没有接入白名单逻辑，发布前需要补齐
+
+## 本地依赖服务
+
+仓库提供了 PostgreSQL 和 Redis 的本地 compose 配置:
 
 ```powershell
 cd backend
-fastapi dev app/main.py
+docker compose up -d postgres redis
 ```
 
-启动后可访问：
+默认 compose 参数:
 
-- 健康检查：`GET /`
-- OpenAPI 文档：`http://127.0.0.1:8000/docs`
+- PostgreSQL: `paperpulse/paperpulse`, 端口 `5432`
+- Redis: 端口 `6379`
 
-## 5. 主要接口
+## 启动方式
 
-- `POST /auth/register`
+### 1. 推荐：使用docker compose
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+docker compose up -d --build
+```
+注意：启动前请在 `.env` 文件中配置好环境变量。
+
+### 2. 直接运行统一入口
+
+```powershell
+cd backend
+python run.py
+```
+
+默认行为:
+
+- 加载 `.env`
+- 检查必需环境变量
+- 探测 PostgreSQL 连通性
+- 执行 `alembic upgrade head`
+- 启动 Redis 依赖的 FastAPI 应用
+- 启动后台调度器
+
+可选参数:
+
+```powershell
+python run.py --host 127.0.0.1 --port 9000
+python run.py --no-scheduler
+```
+
+文档地址:
+
+- OpenAPI: `http://127.0.0.1:8000/docs`
+- 健康检查: `GET /`
+- Redis 状态: `GET /status/redis`
+
+## API 概览
+
+公开接口:
+
 - `POST /auth/login`
+- `POST /auth/register`
+- `POST /auth/send_verification_code`
+- `POST /auth/refresh`
+- `GET /`
+
+鉴权接口:
+
+- `POST /auth/logout`
 - `GET /users/me`
 - `GET /users/me/journals`
 - `GET /journals/`
@@ -53,90 +139,65 @@ fastapi dev app/main.py
 - `GET /articles/feed`
 - `GET /articles/{article_id}`
 - `POST /articles/read`
-- `GET /articles/favorites`
 - `GET /articles/read`
+- `GET /articles/favorites`
 - `POST /articles/{article_id}/favorite`
 - `DELETE /articles/{article_id}/favorite`
 
-除 `/auth/*` 和 `/` 外，接口默认要求 `Authorization: Bearer <token>`。
+除 `/auth/*` 和 `/` 外，其余业务接口都要求 `Authorization: Bearer <access_token>`。
 
-## 6. 抓取与摘要调度
+## 数据与业务行为
 
-如果你希望在客户端里看到持续更新的论文流，通常需要同时运行两件事：
+- `run.py` 会在每次启动时执行 Alembic 迁移
+- 用户关注期刊时，会将对应期刊的 `crawler_enabled` 置为 `TRUE`
+- 最后一个用户取消关注后，会把 `crawler_enabled` 置回 `FALSE`
+- 文章流只返回 `llm_summary IS NOT NULL` 的文章
+- 令牌体系为 `access token + refresh token`
+- refresh token 会存到 Redis，中途清 Redis 会导致会话失效
 
-- API 服务：对外提供登录、订阅、文章流等接口（见第 4 节）。
-- 调度器：负责抓取新文章并生成/更新摘要（本节）。
+## 调度与摘要
 
-运行调度器：
+默认调度逻辑在 `scheduler.py` 中:
 
-```powershell
-cd backend
-python scheduler.py
-```
+- 进程启动时立即执行一轮任务
+- 之后每小时整点执行一轮
 
-建议在另一个终端窗口运行调度器（保持 API 服务仍在运行）。调度日志会写入 `backend/scheduler.log`，便于排查抓取/摘要是否正常执行。
+单轮任务顺序:
 
-调度器行为：
+1. 检查并拉取已完成的 LLM 批处理结果
+2. 抓取当前启用期刊的新文章
+3. 提交新的摘要批处理任务
 
-- 立即执行一次完整周期（检查批处理状态 -> 抓取新文章 -> 提交新批处理）
-- 之后每小时整点执行一次
+## 期刊数据说明
 
-抓取器启用逻辑：
+后端不会自动导入完整的期刊主数据。要让前端“期刊列表”可用，`journals` 表里至少需要有可抓取的期刊记录，并满足以下条件之一:
 
-- 用户关注期刊后会将 `journals.crawler_enabled` 置为 `1`
-- 取消关注且无人关注时置回 `0`
+- `rss_url` 非空
+- `official_url` 非空
 
-### 6.1 数据准备（期刊列表）
+否则:
 
-当前仓库没有内置期刊种子数据导入脚本，所以首次运行时你需要确保 `journals` 表里有数据，并且至少满足以下条件之一：
+- `GET /journals/` 会返回空列表
+- 调度器也没有抓取入口
 
-- `rss_url` 不为空，或
-- `official_url` 不为空
+## 常见问题
 
-否则：
+### 启动时报 `DATABASE_URL is not set`
 
-- `GET /journals/` 不会返回任何可订阅期刊（后端会过滤掉 `rss_url` 和 `official_url` 都为空的期刊）。
-- 调度器也无法抓取文章（抓取时需要用 `rss_url` 或 `official_url` 作为入口）。
+先配置 `DATABASE_URL`，再执行 `python run.py`。
 
-### 6.2 为什么文章流为空
+### 启动时报 Redis 初始化失败
 
-文章流（`GET /articles/feed`）为空通常由以下原因导致：
+检查 `REDIS_URL` 是否正确，并确认 Redis 已经启动。
 
-- 你还没有订阅任何期刊（需要在客户端关注期刊，或通过接口写入 `user_journal_subscriptions`）。
-- 数据库里有文章，但 `llm_summary` 仍为空：当前实现只会返回 `llm_summary IS NOT NULL` 的文章。摘要生成依赖调度器 + LLM 配置，可能需要等待一段时间。
+### 登录后没有文章
 
-## 7. API 密钥文件（可选但建议）
+通常有三种原因:
 
-仓库代码中以下模块依赖 `backend/API_KEYs.py`：
+- 还没有关注任何期刊
+- `journals` 表里没有可抓取的数据
+- 新文章还没完成摘要生成
 
-- `services/LLM_service.py`（`LM_API_KEY`）
-- `utils/fetcher/Elsevier_fetcher.py`（`Elsevier_KEY`）
+### 验证码邮件发不出去
 
-建议手动创建 `backend/API_KEYs.py`：
-
-```python
-Elsevier_KEY = "your_elsevier_key"
-LM_API_KEY = "your_llm_api_key"
-```
-
-如果你只运行 API（不跑 `scheduler.py`），通常不需要这两个密钥。
-
-## 8. 注意事项
-
-- 当前 CORS 为全开放（`allow_origins=["*"]`），仅适合开发环境。
-- JWT `SECRET_KEY` 当前写在代码中（`app/core/security.py`），生产环境建议改为环境变量。
-- 仓库未附带期刊种子导入脚本；如果 `journals` 表为空，客户端将无可订阅期刊。
-
-## 9. 常见问题
-
-`sqlite3.OperationalError: no such table ...`
-
-- 先执行数据库初始化命令（第 3 节）。
-
-`No active journals found with crawler_enabled=1`
-
-- 说明还没有用户订阅期刊，或 `journals` 表没有可抓取数据。
-
-登录后看不到文章
-
-- 文章流查询只返回 `llm_summary IS NOT NULL` 的数据；需要抓取并完成摘要处理后才会出现。
+检查 `SMTP_SERVER`、`SMTP_USERNAME`、`SMTP_KEY` 和 `SOURCE_EMAIL`。

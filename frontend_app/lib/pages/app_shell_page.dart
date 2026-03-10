@@ -8,7 +8,6 @@ import 'journal_page.dart';
 import 'setting_page.dart';
 
 class AppShellPage extends StatefulWidget {
-  // final String username;
   const AppShellPage({super.key});
 
   @override
@@ -68,34 +67,13 @@ class _AppShellPageState extends State<AppShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to AuthServices changes (login/logout)
-    // This ensures the shell rebuilds when auth state changes
     context.watch<AuthServices>();
-
-    // We can use a key that changes when auth state changes to force
-    // refreshing the children states (like FeedPage's article list).
-    // However, since we don't have a simple "auth version" property,
-    // we can rely on the fact that `UnifiedListPage` (inside these pages)
-    // will now re-check auth status because it's being rebuilt.
-    //
-    // But UnifiedListPage is likely checking auth via Provider in its own build method.
-    // If the pages are kept alive by IndexedStack, their build method might NOT run
-    // if only the parent rebuilds but passes same widget instances?
-    // No, `pages` is recreated here. `FeedPage()` != `const FeedPage()` (unless verify const).
-    // `FeedPage` is not const here. So new widget instance.
-    // Flutter element update: if widget type same and key same, update render object.
-    // State is kept.
-    // So `FeedPage` state is kept.
-    // We need to force state reset on logout.
 
     return FutureBuilder<bool>(
       future: context.read<AuthServices>().hasToken(),
       builder: (context, snapshot) {
         final hasToken = snapshot.data ?? false;
 
-        // Use a key derived from auth state to force state destruction on logout/login.
-        // This ensures that when user logs out, the pages (Feed, etc.) are recreated
-        // and re-fetch data (which is now empty), clearing old cached content.
         final shellKey = ValueKey('AppShell-${hasToken ? "Auth" : "Guest"}');
 
         final pages = [

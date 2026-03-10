@@ -4,11 +4,12 @@ services:
     container_name: paperpulse_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-paperpulse}
-      POSTGRES_USER: ${POSTGRES_USER:-paperpulse}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paperpulse}
+      POSTGRES_DB: paperpulse
+      POSTGRES_USER: paperpulse
+      POSTGRES_PASSWORD: paperpulse
+      POSTGRES_PORT: "5432"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
       - paperpulse_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,13 +17,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - paperpulse_network
 
   redis:
     image: redis:8.6
     container_name: paperpulse_redis
     restart: unless-stopped
+    environment:
+      REDIS_PORT: "6379"
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "6379:6379"
     volumes:
       - paperpulse_redisdata:/data
     command: ["redis-server", "--appendonly", "yes"]
@@ -31,6 +36,31 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - paperpulse_network
+
+  backend:
+    image: sineli/paperpulse:1.0
+    container_name: paperpulse_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://paperpulse:paperpulse@postgres:5432/paperpulse
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - paperpulse_network
+
+networks:
+  paperpulse_network:
+    driver: bridge
 
 volumes:
   paperpulse_pgdata:
