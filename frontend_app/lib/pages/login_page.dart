@@ -255,11 +255,15 @@ class _LoginPageState extends State<LoginPage> {
 
       // 后台异步完成同步，journals 就绪后触发主页刷新
       Future(() async {
-        await journalRepo.syncJournalsEmpty();
-        await userRepo.syncSubscribedJournalIds();
-        await syncService.flush();
-        await syncService.pullStatus();
-        await feedRepo.refreshArticles();
+        try {
+          await journalRepo.syncJournalsEmpty();
+          await userRepo.syncSubscribedJournalIds();
+          await syncService.flush();
+          await syncService.pullStatus();
+          await feedRepo.refreshArticles();
+        } catch (e) {
+          debugPrint('Background sync after login failed: $e');
+        }
       });
     } catch (e) {
       if (!mounted) return;
