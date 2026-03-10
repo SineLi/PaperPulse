@@ -227,55 +227,47 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
-    setState(() {
-      _isLoading = true;
-    });
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('用户名和密码不能为空')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
 
     final authServices = context.read<AuthServices>();
     final journalRepo = context.read<JournalRepo>();
     final userRepo = context.read<UserRepo>();
     final feedRepo = context.read<FeedRepo>();
     final syncService = context.read<SyncService>();
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text;
 
     try {
-      if (username.isEmpty || password.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('用户名和密码不能为空')));
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
       await authServices.login(username: username, password: password);
-      final currentUser = await authServices.tryGetCurrentUser();
-      await journalRepo.syncJournalsEmpty();
-      await userRepo.syncSubscribedJournalIds();
-      await syncService.flush();
-      await syncService.pullStatus();
-      await feedRepo.refreshArticles();
+      await authServices.tryGetCurrentUser();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('登录成功')));
-
-      // Clear navigation stack and go to AppShellPage (Feed)
+      // 登录成功，立即进入主界面
       Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
+
+      // 后台异步完成同步，journals 就绪后触发主页刷新
+      Future(() async {
+        await journalRepo.syncJournalsEmpty();
+        await userRepo.syncSubscribedJournalIds();
+        await syncService.flush();
+        await syncService.pullStatus();
+        await feedRepo.refreshArticles();
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('登录失败: $e')));
+      setState(() => _isLoading = false);
     }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   @override
