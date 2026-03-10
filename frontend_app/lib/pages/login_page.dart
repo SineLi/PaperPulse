@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -254,13 +256,22 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
 
       // 后台异步完成同步，journals 就绪后触发主页刷新
-      Future(() async {
-        await journalRepo.syncJournalsEmpty();
-        await userRepo.syncSubscribedJournalIds();
-        await syncService.flush();
-        await syncService.pullStatus();
-        await feedRepo.refreshArticles();
-      });
+      unawaited(Future(() async {
+        try {
+          if (!authServices.isLoggedIn) return;
+          await journalRepo.syncJournalsEmpty();
+          if (!authServices.isLoggedIn) return;
+          await userRepo.syncSubscribedJournalIds();
+          if (!authServices.isLoggedIn) return;
+          await syncService.flush();
+          if (!authServices.isLoggedIn) return;
+          await syncService.pullStatus();
+          if (!authServices.isLoggedIn) return;
+          await feedRepo.refreshArticles();
+        } catch (e, stackTrace) {
+          debugPrint('后台同步失败: $e\n$stackTrace');
+        }
+      }));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
