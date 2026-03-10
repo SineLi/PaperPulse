@@ -5,13 +5,12 @@ from app.routers import auth, journals, users, articles, status
 
 from fastapi.responses import FileResponse
 
-from utils.redis_client import init_client
-
 import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_client()
+    # Redis client is already initialised by run.py (check_redis).
+    # Nothing else to set up; just yield for the app lifetime.
     yield
 
 app = FastAPI(lifespan=lifespan)

@@ -53,9 +53,10 @@ def start_background_scheduler() -> BackgroundScheduler:
     """
     scheduler = BackgroundScheduler()
     _add_jobs(scheduler)
-    # Run one cycle immediately, mirroring start_blocking_scheduler behavior.
-    cycle_job()
     scheduler.start()
+    # Schedule one immediate run in the background thread so it does NOT
+    # block the main thread (uvicorn startup).
+    scheduler.add_job(cycle_job, id='initial_cycle', name='Initial cycle on startup')
     logger.info("Background scheduler started.")
     return scheduler
 

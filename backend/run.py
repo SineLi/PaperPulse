@@ -153,6 +153,27 @@ def check_db():
             probe_engine.dispose()
 
 
+def check_redis():
+    """Probe Redis connectivity and initialise the global Redis client.
+
+    Exits the process if Redis is unreachable so problems surface at
+    startup rather than at the first request.
+    """
+    from utils.redis_client import init_client
+
+    redis_url = os.getenv("REDIS_URL", "")
+    logger.info("Probing Redis: %s", redis_url)
+    try:
+        init_client()
+        logger.info("Redis connection OK.")
+    except RuntimeError as e:
+        logger.error("Redis probe failed: %s", e)
+        sys.exit(1)
+    except Exception as e:
+        logger.error("Unexpected error probing Redis: %s", e)
+        sys.exit(1)
+
+
 def init_db():
     """Run Alembic migrations to bring the database schema up to date.
 
@@ -242,20 +263,23 @@ def main():
     # 3. Probe database connectivity
     check_db()
 
-    # 4. Initialize / migrate schema
+    # 4. Probe Redis connectivity & initialise client
+    check_redis()
+
+    # 5. Initialize / migrate schema
     init_db()
 
-    # 5. Optionally start background scheduler
+    # 6. Optionally start background scheduler
     bg_scheduler = None
     if not args.no_scheduler:
         from scheduler import start_background_scheduler
 
         bg_scheduler = start_background_scheduler()
 
-    # 6. Show banner
+    # 7. Show banner
     print_banner(args.host, args.port, scheduler_enabled=(bg_scheduler is not None))
 
-    # 7. Run uvicorn (blocks until shutdown)
+    # 8. Run uvicorn (blocks until shutdown)
     try:
         uvicorn.run(
             "app.main:app",
