@@ -40,10 +40,7 @@ services:
       - paperpulse_network
 
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: paperpulse-backend:local
+    image: sineli/paperpulse:1.0
     container_name: paperpulse_backend
     restart: unless-stopped
     depends_on:

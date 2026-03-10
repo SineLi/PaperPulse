@@ -1,99 +1,153 @@
-﻿<center>
-<img src="assets/logo.png" width="100" alt="PaperPulse Logo" />
-<h2>PaperPulse</h2>
-</center>
-
-> 自动追踪目标期刊最新论文总结，像刷帖子一样刷论文.
-
-
-
-<p>
-  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-App-02569B?logo=flutter&logoColor=white" />
-  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white" />
-  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-Local%20Data-003B57?logo=sqlite&logoColor=white" />
-  <img alt="Android" src="https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white" />
-  <img alt="LLM" src="https://img.shields.io/badge/LLM-Structured%20Summary-6C4DFF" />
-<a href="https://wakatime.com/badge/user/b415f305-24f8-432e-8d25-a46c15eba566/project/f7d2db16-f7c5-4782-aaf4-d651d7eb7458"><img src="https://wakatime.com/badge/user/b415f305-24f8-432e-8d25-a46c15eba566/project/f7d2db16-f7c5-4782-aaf4-d651d7eb7458.svg" alt="wakatime"></a>
+<p align="center">
+  <img src="assets/logo.png" width="108" alt="PaperPulse Logo" />
 </p>
 
-## 这是什么
+<h1 align="center">PaperPulse</h1>
 
-PaperPulse 会把你关注期刊的最新论文汇总到一个信息流中。你可以先读结构化中文总结，再决定是否精读原文，从而减少每天检索和筛选文献的时间。
+<p align="center">
+  刷论文，像刷资讯一样简单
+</p>
 
-## 最快开始使用
+<p align="center">
+  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.38.7-02569B?logo=flutter&logoColor=white" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.128.0-009688?logo=fastapi&logoColor=white" />
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" />
+  <img alt="Redis" src="https://img.shields.io/badge/Redis-8.6-DC382D?logo=redis&logoColor=white" />
+  <img alt="LLM Summary" src="https://img.shields.io/badge/LLM-Qwen-5B4DFF" />
+  <img alt="Waka Time" src="https://wakatime.com/badge/user/b415f305-24f8-432e-8d25-a46c15eba566/project/f7d2db16-f7c5-4782-aaf4-d651d7eb7458.svg" />
+</p>
 
-### 1) 启动后端服务
+PaperPulse 是一款面向科研用户的论文追踪与阅读应用。
 
-在项目根目录执行（Windows PowerShell）：
+它会把你关注期刊的新论文整理成像信息流一样的阅读体验，并优先提供结构化中文摘要，帮助你更快判断这篇文章值不值得深入阅读。
+
+## 你可以用它做什么
+
+- 关注自己关心的期刊
+- 在首页持续查看最新论文更新
+- 先读中文结构化摘要，再决定是否打开原文
+- 收藏重要文章，随时回看
+
+## 适合谁
+
+- 想高效追踪论文更新的研究生
+- 需要持续关注多个期刊的科研工作者
+- 不想每天手动刷官网、RSS 和数据库的用户
+- 希望先快速理解论文，再决定是否精读的人
+
+## 核心体验
+
+### 像刷资讯一样刷论文
+
+不再是一次次打开期刊官网、搜索数据库、手动筛选标题。  
+PaperPulse 会把关注期刊的新内容汇总到一个统一的信息流里，让"跟进论文"这件事更接近日常阅读应用的体验。
+
+### 先看懂，再决定要不要读全文
+
+每篇文章优先展示结构化中文摘要，包括核心内容、背景、亮点和关键信息。  
+你可以先快速判断价值，再进入 DOI 或原文链接继续阅读。
+
+### 让高频关注变得可持续
+
+收藏、已读、本地缓存和同步机制都围绕"长期追踪"设计。  
+不是只看一篇，而是帮助你长期维护自己的期刊关注清单和阅读节奏。
+
+## 工作原理
+
+后端定时抓取你订阅期刊的 RSS 源，自动爬取文章摘要并存储在数据库中。同时将新文章批量推送至 Qwen LLM 进行智能推理，生成结构化的中文总结。用户端则像刷信息流一样浏览经过 LLM 处理的优质内容，无需手动筛选。
+
+
+## 功能亮点
+
+- 期刊关注
+- 最新论文信息流
+- 中文结构化摘要
+- 文章收藏
+
+## 界面预览
+
+![](assets/screenshots/pages.png)
+
+## 为什么做这个项目
+
+很多科研用户真正缺的不是“获取论文的渠道”，而是更轻量、更连续、更适合日常使用的阅读入口。
+
+PaperPulse 想解决的是这几个常见问题：
+
+- 期刊分散，更新难跟
+- 新论文太多，难以快速判断优先级
+- 阅读和收藏状态容易丢失
+- 每次都要重复搜索、重复筛选
+
+它希望把“追论文”从低效、重复的机械工作，变成更顺手、更连贯的日常体验。
+### 跨学科探索，拓展视野
+
+即使你不是某个领域的专家，PaperPulse 的 AI 摘要也能帮你理解论文的核心价值。我们将复杂的学术内容转化为结构化、易懂的中文总结，让你能够：
+
+- 快速掌握陌生领域论文的核心思想
+- 发现不同学科间的有趣联系
+- 在感兴趣的范围外也能获得启发
+- 通过多学科阅读拓展知识广度
+
+
+## 当前项目状态
+
+目前仓库提供的是可自行部署和运行的版本，包含：
+
+- 后端服务
+- Flutter 客户端
+- 本地缓存与同步逻辑
+- 期刊抓取与摘要生成流程
+
+如果你是普通用户，可以关注后续提供现成安装包。  
+如果你具备基础开发环境，也可以自行部署体验。
+
+## 最快速体验（Docker 后端 + Release 安装包）
+
+面向非开发者的最快体验路径：
+
+1. 用 `docker compose` 启动后端（无需本地安装 Python）。
+2. 从本项目 Release 下载前端安装包（例如 Android 的 APK），安装后在设置里填入后端地址即可使用。
+
+### 1) 启动后端（Docker）
+
+前置条件：已安装 Docker Desktop（或等效 Docker 环境）。
 
 ```powershell
 cd backend
-python -m venv .venv
-.\.venv\Scripts\activate
-python -m pip install -r requirements.txt
-python -c "from db.database import init_database; init_database()"
-fastapi dev app/main.py
+Copy-Item .env.example .env
+docker compose up -d --build
 ```
 
-启动成功后，可在浏览器打开 `http://127.0.0.1:8000/docs` 查看接口页面。
+启动后端后可用这些地址自检：
 
-### 2) 配置 App 的 API 地址
+- `http://127.0.0.1:8000/`（健康检查）
+- `http://127.0.0.1:8000/docs`（接口文档）
 
-在app设置-网络设置中输入正确的API地址，或直接在 `frontend_app/lib/main.dart` 中修改 `ApiClient` 的 `baseUrl`：
+### 2) 安装前端（Release）
 
-```dart
-final apiClient = ApiClient(
-  baseUrl: 'http://127.0.0.1:8000',
-  ...
-);
-```
+1. 到本项目的 Release 页面下载对应平台的安装包。
+2. 安装并打开 App。
+3. **进入 `设置 -> 网络`，填写 API Base URL。**
 
-如果你是桌面调试或真机联调，请替换为后端的实际地址（例如 `http://127.0.0.1:8000`）。
+常见本地地址：
 
-注意：Android 默认禁用 `http` 明文请求，本地联调如果使用 `http`，需要允许 cleartext（见 `frontend_app/README.md`）。
+- Windows 本机后端：`http://127.0.0.1:8000`
+- Android 模拟器访问宿主机：`http://10.0.2.2:8000`
 
-### 3) 运行 App
+## 想自己运行
 
-```powershell
-cd frontend_app
-flutter pub get
-flutter run
-```
+如果你想本地部署体验：
 
-登录后先在“期刊”页关注期刊，再回首页下拉刷新即可看到内容流。
+- 后端说明见 `backend/README.md`
+- 前端说明见 `frontend_app/README.md`
 
-## 截图展示
+## 目录说明
 
-| 首页 Feed | 期刊订阅 |
-|---|---|
-|![](assets/screenshots/feed_page.jpg)|![](assets/screenshots/journal_page.jpg)|
+- `backend/`: API、抓取器、摘要任务、调度服务
+- `frontend_app/`: Flutter 客户端
+- `assets/`: Logo、说明图和截图资源
 
-| 文章详情 | 收藏 |
-|---|---|
-|![](assets/screenshots/article_page.jpg)|![](assets/screenshots/fav_page.jpg)|
+## 说明
 
-
-## 常见问题
-
-**登录后看不到内容怎么办？**  
-通常是还没有订阅期刊，或当前没有新内容。先去“期刊”页关注期刊，再回首页刷新。
-
-当期刊被首次订阅时后端会尝试抓取最新论文并交给LLM生成总结，请等待一段时间后重新刷新。
-
-**离线时收藏和已读会丢吗？**  
-不会。操作会先保存在本地，恢复网络后会自动同步。
-
-**普通用户可以直接下载安装吗？**  
-当前仓库主要以源码形式提供；如果你是开发者，可以按下方文档自行运行。
-
-## 开发文档入口
-
-前端说明见 `frontend_app/README.md`，后端说明见 `backend/README.md`。
-## TODO
-
-- [ ] 后端运行容器化部署
-- [ ] 完善后端用户功能（密码重置等）
-- [ ] 完善前端已读标记和离线功能
-- [ ] 完善前端文章数据库
-- [ ] 前端筛选功能
-- [ ] 前端设置页用户功能完善
+本项目仍在持续迭代中，功能和界面会继续优化。  
