@@ -8,7 +8,6 @@ import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';
 import '../data/service/sync_service.dart';
 import 'app_shell_page.dart';
-import 'login_page.dart';
 
 class BootstrapPage extends StatefulWidget {
   const BootstrapPage({super.key});
@@ -44,22 +43,27 @@ class _BootstrapPageState extends State<BootstrapPage> {
     FeedRepo feedRepo,
     SyncService syncService,
   ) async {
-    final user = await authServices.tryGetCurrentUser();
-    if (user != null) {
-      // 异步执行刷新操作，不阻塞启动
-      Future(() async {
-        try {
-          await journalRepo.syncJournalsEmpty();
-          await userRepo.syncSubscribedJournalIds();
-          await syncService.flush();
-          await syncService.pullStatus();
-          await feedRepo.refreshArticles();
-        } catch (e) {
-          debugPrint('Background sync failed: $e');
-        }
-      });
+    try {
+      final user = await authServices.tryGetCurrentUser();
+      if (user != null) {
+        // 异步执行刷新操作，不阻塞启动
+        Future(() async {
+          try {
+            await journalRepo.syncJournalsEmpty();
+            await userRepo.syncSubscribedJournalIds();
+            await syncService.flush();
+            await syncService.pullStatus();
+            await feedRepo.refreshArticles();
+          } catch (e) {
+            debugPrint('Background sync failed: $e');
+          }
+        });
+      }
+      return user;
+    } catch (e) {
+      debugPrint('Bootstrap error: $e');
+      return null;
     }
-    return user;
   }
 
   @override
@@ -74,25 +78,9 @@ class _BootstrapPageState extends State<BootstrapPage> {
           );
         }
 
-        if (snapshot.hasError) {
-          // 网络错误但本地有 token → 仍然进入主界面（离线模式）
-          return FutureBuilder<bool>(
-            future: context.read<AuthServices>().hasToken(),
-            builder: (context, tokenSnapshot) {
-              if (tokenSnapshot.connectionState != ConnectionState.done) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (tokenSnapshot.data == true) {
-                return const AppShellPage();
-              }
-              return const LoginPage();
-            },
-          );
-        }
-
-        return AppShellPage();
+        // 无论是否登录，始终进入 AppShellPage
+        // FeedPage 会根据 AuthServices.isLoggedIn 决定是否触发自动刷新
+        return const AppShellPage();
       },
     );
   }
