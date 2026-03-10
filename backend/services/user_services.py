@@ -164,7 +164,9 @@ class UserService:
                 )
             return True
 
-    def get_articles_feed(self, user_id: int, limit: int = 200, offset: int = 0) -> list[dict]:
+    def get_articles_feed(self, user_id: int, limit: int = 200, offset: int = 0, max_offset: int = 1000) -> list[dict]:
+        if offset >= max_offset:
+            return []  # 限制最大偏移量，避免过大查询影响性能
         with get_db_connection() as conn:
             rows = conn.execute(
                 text(
