@@ -40,7 +40,7 @@ services:
       - paperpulse_network
 
   backend:
-    image: sineli/paperpulse:1.0
+    image: ${BACKEND_IMAGE:-ghcr.io/sineli/paperpulse-backend:v0.0.3}
     container_name: paperpulse_backend
     restart: unless-stopped
     depends_on:
