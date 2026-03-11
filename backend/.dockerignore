@@ -2,9 +2,14 @@
 __pycache__/
 *.py[codz]
 *$py.class
+*.db
+*.bak_*
 
-# C extensions
-*.so
+# Env / VS Code
+.venv/
+.env
+.vscode/
+.idea/
 
 # Distribution / packaging
 .Python
@@ -14,10 +19,26 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-!frontend_app/lib/
 lib64/
 parts/
+sdist/
+var/
+wheels/
+share/wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Project specific
+docs/
+assets/
+frontend_app/
+/app/pw-browsers
+.git/
+Dockerfile
+docker-compose.yml
+
 sdist/
 var/
 wheels/
@@ -233,8 +254,6 @@ docs/
 backend/app/index.html
 backend/db/advNewsFeed.db-shm
 backend/db/advNewsFeed.db-wal
-*.jks
-*.keystore
-frontend_app/android/key.properties
-frontend_app/android/keystores/
-.env.compose
+
+
+sqlite_to_postgres.py
