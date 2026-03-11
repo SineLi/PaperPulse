@@ -12,7 +12,7 @@ import '../data/models/user.dart';
 import '../widgets/policy_dialog.dart';
 
 const _appName = 'PaperPulse';
-const _appVersion = '0.0.2';
+const _appVersion = '0.0.3';
 const _githubRepoUrl = 'https://github.com/SineLi/PaperPulse';
 
 class AppSetting {
