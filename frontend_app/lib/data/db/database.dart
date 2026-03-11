@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart';
@@ -64,6 +66,6 @@ class DatabaseHelper {
   Future<void> dbCheck() async {
     final db = await database;
     final result = await db.rawQuery("SELECT * FROM articles;");
-    print(result);
+    log('$result', name: 'DatabaseHelper');
   }
 }

@@ -270,17 +270,17 @@ class AuthServices extends ChangeNotifier {
     if (lower.contains('too many failed attempts')) {
       return retryAfterSeconds == null
           ? '验证码错误次数过多，请稍后再试'
-          : '验证码错误次数过多，请在 ${retryAfterSeconds} 秒后重试';
+          : '验证码错误次数过多，请在 $retryAfterSeconds 秒后重试';
     }
     if (lower.contains('too many requests')) {
       return retryAfterSeconds == null
           ? '请求过于频繁，请稍后再试'
-          : '请求过于频繁，请在 ${retryAfterSeconds} 秒后重试';
+          : '请求过于频繁，请在 $retryAfterSeconds 秒后重试';
     }
     if (lower.contains('daily limit reached')) {
       return retryAfterSeconds == null
           ? '今日验证码发送次数已达上限，请稍后再试'
-          : '今日验证码发送次数已达上限，请在 ${retryAfterSeconds} 秒后重试';
+          : '今日验证码发送次数已达上限，请在 $retryAfterSeconds 秒后重试';
     }
     if (lower.contains('verification email delivery failed')) {
       return '验证码邮件发送失败，请稍后重试';

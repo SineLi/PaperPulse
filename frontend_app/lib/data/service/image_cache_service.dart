@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
@@ -130,32 +131,49 @@ class ImageCacheService {
               response.statusCode < 500 &&
               response.statusCode != 403 &&
               response.statusCode != 429) {
-            print('Image download failed with ${response.statusCode}: $url');
+            log(
+              'Image download failed with ${response.statusCode}: $url',
+              name: 'ImageCacheService',
+            );
             _failedArticles[articleId] = url;
             return;
           }
 
           // 403/429/5xx 继续重试
-          print(
+          log(
             'Image download got ${response.statusCode} (attempt $attempt): $url',
+            name: 'ImageCacheService',
           );
         } on SocketException catch (e) {
-          print('Network error while downloading image (attempt $attempt): $e');
+          log(
+            'Network error while downloading image (attempt $attempt): $e',
+            name: 'ImageCacheService',
+          );
         } on HttpException catch (e) {
-          print('HTTP error while downloading image (attempt $attempt): $e');
+          log(
+            'HTTP error while downloading image (attempt $attempt): $e',
+            name: 'ImageCacheService',
+          );
         } on http.ClientException catch (e) {
-          print(
+          log(
             'HTTP client error while downloading image (attempt $attempt): $e',
+            name: 'ImageCacheService',
           );
         } catch (e) {
-          print('Unexpected error downloading image (attempt $attempt): $e');
+          log(
+            'Unexpected error downloading image (attempt $attempt): $e',
+            name: 'ImageCacheService',
+          );
         }
 
         if (attempt < maxRetries) {
           await Future.delayed(Duration(seconds: attempt));
         }
       }
-      print('Image download failed after $maxRetries retries: $url');
+      log(
+        'Image download failed after $maxRetries retries: $url',
+        name: 'ImageCacheService',
+      );
       _failedArticles[articleId] = url;
     } finally {
       if (slotAcquired) {
