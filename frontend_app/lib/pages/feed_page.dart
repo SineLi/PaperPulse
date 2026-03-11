@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../data/auth/auth_services.dart';
 import '../data/repositories/feed_repo.dart';
 import '../data/service/sync_service.dart';
 import '../widgets/article_list_page.dart';
@@ -15,7 +14,6 @@ class FeedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final feedRepo = context.read<FeedRepo>();
     final syncService = context.read<SyncService>();
-    final isLoggedIn = context.watch<AuthServices>().isLoggedIn;
 
     return ArticleListPage(
       title: '文章推送',
@@ -30,7 +28,6 @@ class FeedPage extends StatelessWidget {
       onSettings: () {},
       onRefresh: () => feedRepo.refreshArticles(),
       onPostRefresh: () => syncService.pullStatus(),
-      autoRefreshOnInit: isLoggedIn,
       loadFilterJournals: feedRepo.getFilterableJournals,
       loadFilterTags: feedRepo.getFilterableTags,
       emptyTitle: '暂无文章',

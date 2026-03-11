@@ -3,10 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/models/user.dart';
-import '../data/repositories/feed_repo.dart';
-import '../data/repositories/journal_repo.dart';
-import '../data/repositories/user_repo.dart';
-import '../data/service/sync_service.dart';
+import '../data/service/post_auth_sync_service.dart';
 import 'app_shell_page.dart';
 
 class BootstrapPage extends StatefulWidget {
@@ -23,37 +20,21 @@ class _BootstrapPageState extends State<BootstrapPage> {
   void initState() {
     super.initState();
     final authServices = context.read<AuthServices>();
-    final journalRepo = context.read<JournalRepo>();
-    final userRepo = context.read<UserRepo>();
-    final feedRepo = context.read<FeedRepo>();
-    final syncService = context.read<SyncService>();
-    _bootstrapFuture = _bootstrap(
-      authServices,
-      journalRepo,
-      userRepo,
-      feedRepo,
-      syncService,
-    );
+    final postAuthSyncService = context.read<PostAuthSyncService>();
+    _bootstrapFuture = _bootstrap(authServices, postAuthSyncService);
   }
 
   Future<User?> _bootstrap(
     AuthServices authServices,
-    JournalRepo journalRepo,
-    UserRepo userRepo,
-    FeedRepo feedRepo,
-    SyncService syncService,
+    PostAuthSyncService postAuthSyncService,
   ) async {
     try {
       final user = await authServices.tryGetCurrentUser();
       if (user != null) {
-        // 异步执行刷新操作，不阻塞启动
+        // Keep startup responsive while post-auth sync continues in background.
         Future(() async {
           try {
-            await journalRepo.syncJournalsEmpty();
-            await userRepo.syncSubscribedJournalIds();
-            await syncService.flush();
-            await syncService.pullStatus();
-            await feedRepo.refreshArticles();
+            await postAuthSyncService.syncAfterAuth();
           } catch (e) {
             debugPrint('Background sync failed: $e');
           }
@@ -71,15 +52,12 @@ class _BootstrapPageState extends State<BootstrapPage> {
     return FutureBuilder<User?>(
       future: _bootstrapFuture,
       builder: (context, snapshot) {
-        // 启动加载中
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        // 无论是否登录，始终进入 AppShellPage
-        // FeedPage 会根据 AuthServices.isLoggedIn 决定是否触发自动刷新
         return const AppShellPage();
       },
     );

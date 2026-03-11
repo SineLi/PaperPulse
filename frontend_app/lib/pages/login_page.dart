@@ -3,10 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../data/auth/auth_services.dart';
-import '../data/repositories/feed_repo.dart';
-import '../data/repositories/journal_repo.dart';
-import '../data/repositories/user_repo.dart';
-import '../data/service/sync_service.dart';
+import '../data/service/post_auth_sync_service.dart';
 import '../widgets/policy_dialog.dart';
 
 class LoginPage extends StatefulWidget {
@@ -240,10 +237,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     final authServices = context.read<AuthServices>();
-    final journalRepo = context.read<JournalRepo>();
-    final userRepo = context.read<UserRepo>();
-    final feedRepo = context.read<FeedRepo>();
-    final syncService = context.read<SyncService>();
+    final postAuthSyncService = context.read<PostAuthSyncService>();
 
     try {
       await authServices.login(username: username, password: password);
@@ -257,11 +251,7 @@ class _LoginPageState extends State<LoginPage> {
       Future(() async {
         try {
           if (!authServices.isLoggedIn) return;
-          await journalRepo.syncJournalsEmpty();
-          await userRepo.syncSubscribedJournalIds();
-          await syncService.flush();
-          await syncService.pullStatus();
-          await feedRepo.refreshArticles();
+          await postAuthSyncService.syncAfterAuth();
         } catch (e) {
           debugPrint('Background sync failed: $e');
         }
