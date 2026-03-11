@@ -7,6 +7,7 @@ class SyncService {
   final ApiClient _apiClient;
   final SyncDatabaseIO _syncDatabase;
   final ArticleDatabaseIO _articleDatabase;
+  Future<void>? _pullStatusInFlight;
 
   SyncService({
     required ApiClient apiClient,
@@ -80,7 +81,23 @@ class SyncService {
     await _syncDatabase.removeSyncActions(processedIds);
   }
 
-  Future<void> pullStatus() async {
+  Future<void> pullStatus() {
+    final inFlight = _pullStatusInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _performPullStatus();
+    _pullStatusInFlight = future;
+    future.whenComplete(() {
+      if (identical(_pullStatusInFlight, future)) {
+        _pullStatusInFlight = null;
+      }
+    });
+    return future;
+  }
+
+  Future<void> _performPullStatus() async {
     await flush();
     final data = await _apiClient.getJson('/articles/favorites');
     final raw = data['items'] as List;

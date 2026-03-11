@@ -1,7 +1,9 @@
 import 'dart:io';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../data/service/image_cache_service.dart';
 import '../pages/setting_page.dart';
 
@@ -52,9 +54,11 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   }
 
   Future<void> _resolveImage() async {
-    final wifiOnly = context.read<SettingsController>().setting.wifiOnlyImages;
+    final settingsController = context.read<SettingsController>();
+    final cacheService = context.read<ImageCacheService>();
+    final wifiOnly = settingsController.setting.wifiOnlyImages;
 
-    // Wi-Fi 专属：非 WiFi 时不加载
+    // Wi-Fi 专属：非 WiFi 时不加载。
     if (wifiOnly) {
       final result = await Connectivity().checkConnectivity();
       final isWifi = result.contains(ConnectivityResult.wifi);
@@ -64,9 +68,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       }
     }
 
-    final cacheService = context.read<ImageCacheService>();
-
-    // 先尝试获取本地缓存路径（不触发下载，仅查文件）
+    // 先检查本地缓存路径；未命中时由服务在后台触发下载。
     final cached = cacheService.getCachedPath(
       articleId: widget.articleId,
       url: widget.imageUrl,
@@ -94,7 +96,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    // 优先本地文件
+    // 优先展示本地文件。
     if (_localPath != null) {
       return Image.file(
         File(_localPath!),
@@ -106,12 +108,12 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       );
     }
 
-    // 仅 Wi-Fi 模式：当前非 WiFi，展示提示占位符
+    // 仅 Wi-Fi 模式下，非 WiFi 时展示提示占位符。
     if (_blockedByWifi) {
       return _buildWifiPlaceholder(colorScheme);
     }
 
-    // 回退到网络图片
+    // 回退到网络图片。
     if (_networkFailed) {
       return _buildPlaceholder(colorScheme, tappable: true);
     }
@@ -122,7 +124,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       width: widget.width,
       height: widget.height,
       errorBuilder: (context, error, stackTrace) {
-        // 网络加载也失败时，标记错误状态以支持点击重试
+        // 网络加载失败后，标记错误状态以支持点击重试。
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && !_networkFailed) {
             setState(() => _networkFailed = true);
@@ -157,7 +159,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
 
   Widget _buildWifiPlaceholder(ColorScheme colorScheme) {
     return GestureDetector(
-      onTap: _retry, // 点击可尝试重新检测网络并重试
+      onTap: _retry, // 点击后重新检测网络并重试。
       child: Container(
         width: widget.width,
         height: widget.height,

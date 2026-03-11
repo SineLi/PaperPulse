@@ -85,9 +85,10 @@ docker compose up -d postgres redis
 ```powershell
 cd backend
 Copy-Item .env.example .env
-docker compose up -d --build
+docker compose up -d
 ```
 注意：启动前请在 `.env` 文件中配置好环境变量。
+默认会拉取 `docker-compose.yml` 中配置的后端镜像；如需覆盖镜像版本，可设置 `BACKEND_IMAGE` 环境变量。
 
 ### 2. 直接运行统一入口
 
@@ -114,7 +115,6 @@ python run.py --no-scheduler
 
 文档地址:
 
-- OpenAPI: `http://127.0.0.1:8000/docs`
 - 健康检查: `GET /`
 - Redis 状态: `GET /status/redis`
 
@@ -169,6 +169,8 @@ python run.py --no-scheduler
 3. 提交新的摘要批处理任务
 
 ## 期刊数据说明
+
+仓库提交中包含 `backend/journals.csv`。初始化数据库后，用户需要自行将该文件导入 `journals` 表；后端启动和迁移过程不会自动执行这一步。
 
 后端不会自动导入完整的期刊主数据。要让前端“期刊列表”可用，`journals` 表里至少需要有可抓取的期刊记录，并满足以下条件之一:
 

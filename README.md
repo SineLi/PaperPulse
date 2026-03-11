@@ -54,6 +54,7 @@ PaperPulse 会把关注期刊的新内容汇总到一个统一的信息流里，
 
 ## 工作原理
 
+![](assets/scheme.svg)
 后端定时抓取你订阅期刊的 RSS 源，自动爬取文章摘要并存储在数据库中。同时将新文章批量推送至 Qwen LLM 进行智能推理，生成结构化的中文总结。用户端则像刷信息流一样浏览经过 LLM 处理的优质内容，无需手动筛选。
 
 
@@ -116,13 +117,14 @@ PaperPulse 想解决的是这几个常见问题：
 ```powershell
 cd backend
 Copy-Item .env.example .env
-docker compose up -d --build
+docker compose up -d
 ```
+
+默认会拉取 `docker-compose.yml` 中配置的后端镜像；如需覆盖镜像版本，可设置 `BACKEND_IMAGE` 环境变量。
 
 启动后端后可用这些地址自检：
 
 - `http://127.0.0.1:8000/`（健康检查）
-- `http://127.0.0.1:8000/docs`（接口文档）
 
 ### 2) 安装前端（Release）
 
@@ -151,3 +153,5 @@ docker compose up -d --build
 ## 说明
 
 本项目仍在持续迭代中，功能和界面会继续优化。  
+
+> 注意：大语言模型生成的内容可能不完全准确，请以原文为准。

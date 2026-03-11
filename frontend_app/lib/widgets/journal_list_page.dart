@@ -31,6 +31,8 @@ class JournalListPage extends StatefulWidget {
   final String emptySubtitle;
   final int pageSize;
   final ScrollController? scrollController;
+  final bool showExternalRefreshing;
+  final int externalRefreshSignal;
 
   const JournalListPage({
     super.key,
@@ -48,6 +50,8 @@ class JournalListPage extends StatefulWidget {
     this.emptySubtitle = '期刊数据加载中…',
     this.pageSize = 30,
     this.scrollController,
+    this.showExternalRefreshing = false,
+    this.externalRefreshSignal = 0,
   });
 
   @override
@@ -103,9 +107,11 @@ class _JournalListPageState extends State<JournalListPage> {
       emptySubtitle: widget.emptySubtitle,
       pageSize: widget.pageSize,
       scrollController: widget.scrollController,
+      showExternalRefreshing: widget.showExternalRefreshing,
+      externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 8,
       skeletonBuilder: (cs) => _JournalSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, journal, index, _1, _2) {
+      itemBuilder: (ctx, journal, index, isSelected, isSelectionMode) {
         return JournalCard(
           journal: journal,
           isFollowed: widget.isFollowed(journal.journalId),

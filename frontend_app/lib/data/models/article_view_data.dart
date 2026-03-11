@@ -1,10 +1,7 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'article.dart';
-
-import '../repositories/journal_repo.dart';
 
 Map<String, Color> tagColorMap = {
   'Wiley': Color(0xFF18C76F),
