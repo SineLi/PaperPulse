@@ -111,7 +111,7 @@ class _JournalListPageState extends State<JournalListPage> {
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 8,
       skeletonBuilder: (cs) => _JournalSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, journal, index, _1, _2) {
+      itemBuilder: (ctx, journal, index, isSelected, isSelectionMode) {
         return JournalCard(
           journal: journal,
           isFollowed: widget.isFollowed(journal.journalId),

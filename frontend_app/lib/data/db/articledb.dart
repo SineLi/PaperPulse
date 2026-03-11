@@ -1,5 +1,3 @@
-import 'package:frontend_app/data/models/journal.dart';
-
 import 'database.dart';
 import '../models/article.dart';
 import '../models/article_filter.dart';
