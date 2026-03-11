@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models/journal.dart';
 import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';
+import '../data/service/post_auth_sync_service.dart';
 import '../widgets/journal_list_page.dart';
 
 class JournalPage extends StatefulWidget {
@@ -16,9 +19,9 @@ class JournalPage extends StatefulWidget {
 }
 
 class _JournalPageState extends State<JournalPage> {
-  /// 本地已关注的期刊 ID 集合（快速查找）
   final Set<int> _followedIds = {};
   bool _initialized = false;
+  int _lastExternalRefreshSignal = 0;
 
   @override
   void initState() {
@@ -39,7 +42,9 @@ class _JournalPageState extends State<JournalPage> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _initialized = true);
+      if (mounted) {
+        setState(() => _initialized = true);
+      }
     }
   }
 
@@ -53,7 +58,9 @@ class _JournalPageState extends State<JournalPage> {
         await userRepo.unfollowJournal(journal.journalId);
         _followedIds.remove(journal.journalId);
       }
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -65,6 +72,9 @@ class _JournalPageState extends State<JournalPage> {
 
   @override
   Widget build(BuildContext context) {
+    final postAuthSyncService = context.watch<PostAuthSyncService>();
+    _handleExternalRefreshSignal(postAuthSyncService.completedSyncCount);
+
     if (!_initialized) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -85,10 +95,21 @@ class _JournalPageState extends State<JournalPage> {
       onFollowChanged: _handleFollowChanged,
       loadFilterPublishers: journalRepo.getFilterablePublishers,
       loadFilterCasCategories: journalRepo.getFilterableCasCategories,
+      showExternalRefreshing: postAuthSyncService.isSyncing,
+      externalRefreshSignal: postAuthSyncService.completedSyncCount,
       onSettings: () {},
       emptyIcon: Icons.book_outlined,
       emptyTitle: '暂无期刊',
       emptySubtitle: '期刊数据尚未同步',
     );
+  }
+
+  void _handleExternalRefreshSignal(int signal) {
+    if (_lastExternalRefreshSignal == signal) return;
+    _lastExternalRefreshSignal = signal;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_loadFollowedIds());
+    });
   }
 }

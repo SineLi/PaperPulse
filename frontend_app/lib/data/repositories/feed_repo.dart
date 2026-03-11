@@ -10,6 +10,7 @@ class FeedRepo {
   final ArticleDatabaseIO _articleDatabaseIO;
   final JournalRepo? _journalRepo;
   final ImageCacheService? _imageCacheService;
+  Future<int>? _refreshInFlight;
 
   // 内存缓存 Publisher
   final Map<int, String> _publisherCache = {};
@@ -116,7 +117,23 @@ class FeedRepo {
   Future<List<String>> getFilterableTags() =>
       _articleDatabaseIO.getDistinctTagsInArticles();
 
-  Future<int> refreshArticles() async {
+  Future<int> refreshArticles() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _performRefreshArticles();
+    _refreshInFlight = future;
+    future.whenComplete(() {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    });
+    return future;
+  }
+
+  Future<int> _performRefreshArticles() async {
     // 使用独立的 feed 同步 ID，不受收藏单篇拉取的影响
     final lastSyncId = await _articleDatabaseIO.getLastFeedSyncId();
     int newArticlesCount = 0;

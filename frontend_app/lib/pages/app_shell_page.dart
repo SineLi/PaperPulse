@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
+import '../data/service/post_auth_sync_service.dart';
 import 'fav_page.dart';
 import 'feed_page.dart';
 import 'journal_page.dart';
@@ -16,6 +17,7 @@ class AppShellPage extends StatefulWidget {
 
 class _AppShellPageState extends State<AppShellPage> {
   int _currentIndex = 2; // Default to Feed
+  int _lastHandledSyncCompletion = 0;
 
   // 为每个 Tab 维护一个独立的 ScrollController
   final List<ScrollController> _scrollControllers = [
@@ -68,6 +70,8 @@ class _AppShellPageState extends State<AppShellPage> {
   @override
   Widget build(BuildContext context) {
     context.watch<AuthServices>();
+    final postAuthSyncService = context.watch<PostAuthSyncService>();
+    _handleSyncCompletion(postAuthSyncService);
 
     return FutureBuilder<bool>(
       future: context.read<AuthServices>().hasToken(),
@@ -111,5 +115,24 @@ class _AppShellPageState extends State<AppShellPage> {
         );
       },
     );
+  }
+
+  void _handleSyncCompletion(PostAuthSyncService postAuthSyncService) {
+    if (_lastHandledSyncCompletion == postAuthSyncService.completedSyncCount) {
+      return;
+    }
+    _lastHandledSyncCompletion = postAuthSyncService.completedSyncCount;
+
+    final newArticleCount = postAuthSyncService.lastNewArticleCount;
+    if (newArticleCount <= 0) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已同步 $newArticleCount 条新数据')));
+    });
   }
 }
