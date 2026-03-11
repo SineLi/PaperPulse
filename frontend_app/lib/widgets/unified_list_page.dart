@@ -104,6 +104,8 @@ class UnifiedListPage<T> extends StatefulWidget {
   /// 暴露 ScrollController 给外部使用（可选）
   final ScrollController? scrollController;
   final bool autoRefreshOnInit;
+  final bool showExternalRefreshing;
+  final int externalRefreshSignal;
 
   const UnifiedListPage({
     super.key,
@@ -128,6 +130,8 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.pageSize = 20,
     this.scrollController,
     this.autoRefreshOnInit = false,
+    this.showExternalRefreshing = false,
+    this.externalRefreshSignal = 0,
   });
 
   @override
@@ -158,6 +162,17 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         unawaited(_refresh());
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant UnifiedListPage<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.externalRefreshSignal != widget.externalRefreshSignal) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_reloadVisibleItems());
       });
     }
   }
@@ -225,6 +240,17 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     _loadMore();
   }
 
+  Future<void> _reloadVisibleItems() async {
+    if (!mounted) return;
+    setState(() {
+      _currentOffset = 0;
+      _items.clear();
+      _hasMore = true;
+      _isLoading = false;
+    });
+    await _loadMore();
+  }
+
   // ── 分页加载 ──
 
   Future<void> _loadMore() async {
@@ -272,20 +298,14 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     try {
       final count = await widget.onRefresh!();
 
-      setState(() {
-        _currentOffset = 0;
-        _items.clear();
-        _hasMore = true;
-      });
+      if (widget.onPostRefresh != null) {
+        await widget.onPostRefresh!();
+      }
 
-      await _loadMore();
+      await _reloadVisibleItems();
 
       if (mounted) {
         setState(() => _isRefreshing = false);
-      }
-
-      if (widget.onPostRefresh != null) {
-        await widget.onPostRefresh!();
       }
 
       if (mounted && count > 0) {
@@ -419,7 +439,9 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
               // ── 刷新进度指示条 ──
               // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
-              if (_isRefreshing || (_isLoading && _items.isNotEmpty))
+              if (widget.showExternalRefreshing ||
+                  _isRefreshing ||
+                  (_isLoading && _items.isNotEmpty))
                 LinearProgressIndicator(
                   minHeight: 3,
                   color: colorScheme.primary,
@@ -475,7 +497,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   Widget _buildListContent(ColorScheme colorScheme, TextTheme textTheme) {
     // 首次加载 → 骨架屏
-    if (_items.isEmpty && _isLoading) {
+    if (_items.isEmpty && (_isLoading || widget.showExternalRefreshing)) {
       return _buildSkeletonList(colorScheme);
     }
 

@@ -190,7 +190,7 @@ class MyApp extends StatelessWidget {
                     value: feedRepo,
                     child: Provider<SyncService>.value(
                       value: syncService,
-                      child: Provider<PostAuthSyncService>.value(
+                      child: ChangeNotifierProvider<PostAuthSyncService>.value(
                         value: postAuthSyncService,
                         child: Provider<ImageCacheService>.value(
                           value: imageCacheService,
