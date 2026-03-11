@@ -85,9 +85,10 @@ docker compose up -d postgres redis
 ```powershell
 cd backend
 Copy-Item .env.example .env
-docker compose up -d --build
+docker compose up -d
 ```
 注意：启动前请在 `.env` 文件中配置好环境变量。
+默认会拉取 `docker-compose.yml` 中配置的后端镜像；如需覆盖镜像版本，可设置 `BACKEND_IMAGE` 环境变量。
 
 ### 2. 直接运行统一入口
 
@@ -114,7 +115,6 @@ python run.py --no-scheduler
 
 文档地址:
 
-- OpenAPI: `http://127.0.0.1:8000/docs`
 - 健康检查: `GET /`
 - Redis 状态: `GET /status/redis`
 
