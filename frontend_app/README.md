@@ -1,5 +1,7 @@
 # Frontend App
-
+  <img alt="Frontend Licence" src="https://img.shields.io/badge/Licence-Apache_2.0-blue?logo=apache
+    "/>
+  
 本目录是 PaperPulse 的 Flutter 客户端，负责登录、期刊浏览、文章流展示、收藏/已读、本地缓存和离线同步。
 
 ## 当前功能
