@@ -1,9 +1,9 @@
 import 'dart:developer';
 
 import 'package:sqflite/sqflite.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart';
 import 'schema.dart';
+import 'database_platform_io.dart'
+    if (dart.library.html) 'database_platform_web.dart' as database_platform;
 
 class DatabaseHelper {
   Database? _database;
@@ -17,8 +17,8 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final dbFileDir = join(
-      (await getApplicationDocumentsDirectory()).path,
+    await database_platform.initializeDatabasePlatform();
+    final dbFileDir = await database_platform.resolveDatabasePath(
       'app_database.db',
     );
     final db = await openDatabase(
