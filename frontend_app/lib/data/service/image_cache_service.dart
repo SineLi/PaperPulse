@@ -138,14 +138,10 @@ class ImageCacheService {
       final fallbackUrl = buildFallbackUrl(articleId);
 
       final candidates = <({String url, bool rateLimited})>[
-        if (preferFallback &&
-            fallbackUrl != null &&
-            fallbackUrl.isNotEmpty)
+        if (preferFallback && fallbackUrl != null && fallbackUrl.isNotEmpty)
           (url: fallbackUrl, rateLimited: true),
         if (!preferFallback) (url: url, rateLimited: false),
-        if (!preferFallback &&
-            fallbackUrl != null &&
-            fallbackUrl.isNotEmpty)
+        if (!preferFallback && fallbackUrl != null && fallbackUrl.isNotEmpty)
           (url: fallbackUrl, rateLimited: true),
       ];
 
@@ -269,7 +265,8 @@ class ImageCacheService {
     final bucketStart =
         ((articleId - 1) ~/ _fallbackBucketSize) * _fallbackBucketSize + 1;
     final bucketEnd = bucketStart + _fallbackBucketSize - 1;
-    final path = '/media/article-images/$bucketStart-$bucketEnd/$articleId.webp';
+    final path =
+        '/media/article-images/$bucketStart-$bucketEnd/$articleId.webp';
     return Uri.parse(normalizedBaseUrl).resolve(path).toString();
   }
 
@@ -348,13 +345,7 @@ class ImageCacheService {
 
     final tasks = <Future<void>>[];
     for (final entry in toRetry.entries) {
-      tasks.add(
-        _downloadAndCache(
-          entry.key,
-          entry.value,
-          null,
-        ),
-      );
+      tasks.add(_downloadAndCache(entry.key, entry.value, null));
     }
     final batches = _chunk(tasks, _maxConcurrentDownloads);
     for (var i = 0; i < batches.length; i++) {
@@ -385,8 +376,7 @@ class ImageCacheService {
 
   /// 批量预缓存多篇文章的图片
   Future<void> precacheArticles(
-    List<({int articleId, String? url, String? cachePath})>
-        items, {
+    List<({int articleId, String? url, String? cachePath})> items, {
     bool? wifiOnly,
   }) async {
     if (wifiOnly ?? this.wifiOnly) {
@@ -394,7 +384,7 @@ class ImageCacheService {
       final isWifi = result.contains(ConnectivityResult.wifi);
       if (!isWifi) return;
     }
-    final tasks = <Future<void>>[]; 
+    final tasks = <Future<void>>[];
     for (final item in items) {
       if (item.url == null || item.url!.isEmpty) continue;
       if (item.cachePath != null &&
@@ -402,13 +392,7 @@ class ImageCacheService {
           File(item.cachePath!).existsSync()) {
         continue;
       }
-      tasks.add(
-        _downloadAndCache(
-          item.articleId,
-          item.url!,
-          null,
-        ),
-      );
+      tasks.add(_downloadAndCache(item.articleId, item.url!, null));
     }
     // 并发但限制为 _maxConcurrentDownloads 个，并在批次间做短暂等待
     final batches = _chunk(tasks, _maxConcurrentDownloads);
