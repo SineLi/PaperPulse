@@ -15,6 +15,9 @@
   <img alt="Redis" src="https://img.shields.io/badge/Redis-8.6-DC382D?logo=redis&logoColor=white" />
   <img alt="LLM Summary" src="https://img.shields.io/badge/LLM-Qwen-5B4DFF" />
   <img alt="Waka Time" src="https://wakatime.com/badge/user/b415f305-24f8-432e-8d25-a46c15eba566/project/f7d2db16-f7c5-4782-aaf4-d651d7eb7458.svg" />
+  <img alt="Backend Licence" src="https://img.shields.io/badge/Backend_Licence-AGPLv3-orange?logo=gnu  "/>
+  <img alt="Frontend Licence" src="https://img.shields.io/badge/Frontend_Licence-Apache_2.0-blue?logo=apache
+    "/>
 </p>
 
 PaperPulse 是一款面向科研用户的论文追踪与阅读应用。

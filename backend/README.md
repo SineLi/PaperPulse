@@ -1,4 +1,5 @@
 # Backend
+<img alt="Backend Licence" src="https://img.shields.io/badge/Licence-AGPLv3-orange?logo=gnu  "/>
 
 本目录是 PaperPulse 的后端服务，包含 API、期刊抓取器、LLM 摘要任务和定时调度。
 
