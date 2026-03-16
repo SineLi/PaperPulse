@@ -23,6 +23,8 @@ class ImageCache(TypedDict):
 
 
 class ImageService:
+    _BUCKET_SIZE = 10000
+
     def __init__(
         self,
         media_root: str | Path | None = None,
@@ -159,7 +161,14 @@ class ImageService:
     def _build_file_path(self, article_id: int) -> Path:
         if article_id <= 0:
             raise ValueError("invalid_article_id")
-        return self._cache_dir / f"{article_id}.webp"
+        bucket_dir = self._cache_dir / self._build_bucket_name(article_id)
+        bucket_dir.mkdir(parents=True, exist_ok=True)
+        return bucket_dir / f"{article_id}.webp"
 
     def _to_relative_path(self, file_path: Path) -> str:
         return file_path.relative_to(self._media_root).as_posix()
+
+    def _build_bucket_name(self, article_id: int) -> str:
+        bucket_start = ((article_id - 1) // self._BUCKET_SIZE) * self._BUCKET_SIZE + 1
+        bucket_end = bucket_start + self._BUCKET_SIZE - 1
+        return f"{bucket_start}-{bucket_end}"
