@@ -20,6 +20,7 @@ feedparser==6.0.12
 lxml==6.0.2
 python-dateutil==2.9.0.post0
 playwright==1.57.0
+Pillow==12.1.0
 
 # LLM summary
 openai==2.15.0

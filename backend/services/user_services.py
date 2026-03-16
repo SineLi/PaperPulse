@@ -3,12 +3,16 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from db.database import get_db_connection
+from services.image_service import ImageService
 from utils.auth import hash_password, verify_password
 
 logger = logging.getLogger(__name__)
 
 
 class UserService:
+    def __init__(self):
+        self.image_service = ImageService()
+
     def get_user_by_id(self, user_id: int) -> dict | None:
         with get_db_connection() as conn:
             row = conn.execute(
@@ -184,7 +188,7 @@ class UserService:
                 ),
                 {"uid": user_id, "limit": limit, "offset": offset},
             ).mappings().all()
-            return [dict(r) for r in rows]
+            return [self._attach_cached_image_url(dict(r)) for r in rows]
 
     def get_article_by_id(self, article_id: int) -> dict | None:
         with get_db_connection() as conn:
@@ -201,7 +205,7 @@ class UserService:
                 ),
                 {"aid": article_id},
             ).mappings().first()
-            return dict(row) if row else None
+            return self._attach_cached_image_url(dict(row)) if row else None
 
     def mark_as_read(self, user_id: int, article_ids: list[int]) -> bool:
         if not article_ids:
@@ -277,3 +281,7 @@ class UserService:
                 {"uid": user_id},
             ).scalars().all()
             return [int(x) for x in ids]
+
+    def _attach_cached_image_url(self, article: dict) -> dict:
+        article["graphical_abstract_cached_url"] = self.image_service.build_public_url(int(article["id"]))
+        return article

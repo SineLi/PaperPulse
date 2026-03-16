@@ -4,6 +4,8 @@ from typing import Optional, List, Union, TypedDict
 
 from sqlalchemy import text
 from db.database import get_db_connection
+from services.image_service import ImageService
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,9 @@ class Article(TypedDict):
 
 
 class ArticleService:
+    def __init__(self):
+        self.image_service = ImageService()
+
     def article_filter(self, articles: List[dict]) -> List[dict]:
         if not articles:
             return []
@@ -201,3 +206,26 @@ class ArticleService:
                     "doi": entry.get("doi"),
                 },
             )
+
+
+    def _cache_inserted_article_images(self, inserted_rows: list[dict]) -> None:
+        if not inserted_rows:
+            return
+
+        for row in inserted_rows:
+            article_id = int(row["id"])
+            image_url = row.get("graphical_abstract")
+            if not image_url:
+                continue
+
+            cache_result = self.image_service.cache_image(image_url, article_id=article_id)
+            cache_path = cache_result.get("path")
+            if not cache_path:
+                logger.warning(
+                    "Image cache skipped for article_id=%s url=%s status=%s error=%s",
+                    article_id,
+                    image_url,
+                    cache_result.get("status"),
+                    cache_result.get("error"),
+                )
+                continue

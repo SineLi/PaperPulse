@@ -75,10 +75,13 @@ class ImageService:
             logger.warning("Failed to process image from %s: %s", url, exc)
             return ImageCache(url=url, path=None, status="failed", error=str(exc))
 
-    def build_public_url(self, path: str | None) -> str | None:
-        if not path:
+    def build_public_url(self, article_id: int) -> str | None:
+        file_path = self.get_image_path(article_id)
+        if not file_path.exists():
             return None
-        normalized = path.replace("\\", "/").lstrip("/")
+
+        relative_path = self._to_relative_path(file_path)
+        normalized = relative_path.replace("\\", "/").lstrip("/")
         return f"{self._public_prefix}/{normalized.removeprefix('article-images/')}"
 
     def _download_image_with_playwright(self, url: str) -> bytes:
