@@ -1,16 +1,18 @@
-import hashlib
 import io
 import logging
 from pathlib import Path
 from typing import TypedDict
 
 import requests
+from playwright.sync_api import sync_playwright
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 class ImageCache(TypedDict):
@@ -28,8 +30,7 @@ class ImageService:
         timeout: tuple[int, int] = (10, 30),
     ):
         base_dir = Path(__file__).resolve().parents[1]
-        self._media_root = Path(
-            media_root) if media_root else base_dir / "media"
+        self._media_root = Path(media_root) if media_root else base_dir / "media"
         self._cache_dir = self._media_root / "article-images"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._public_prefix = public_prefix.rstrip("/")
@@ -43,24 +44,33 @@ class ImageService:
             }
         )
 
-    def cache_image(self, url: str, hash: str | None = None) -> ImageCache:
+    def cache_image(self, url: str, article_id: int) -> ImageCache:
         if not url:
             return ImageCache(url=url, path=None, status="invalid", error="empty_url")
 
-        cache_key = self._normalize_cache_key(hash, url)
-        file_path = self._cache_dir / f"{cache_key}.webp"
-        relative_path = file_path.relative_to(self._media_root).as_posix()
+        file_path = self._build_file_path(article_id)
+        relative_path = self._to_relative_path(file_path)
 
         if file_path.exists():
             return ImageCache(url=url, path=relative_path, status="exists", error=None)
 
         try:
             image_bytes = self._download_image(url)
-            webp_bytes = self._convert_image(image_bytes)
-            file_path.write_bytes(webp_bytes)
-            return ImageCache(url=url, path=relative_path, status="cached", error=None)
+            status = "cached"
+        except requests.RequestException as exc:
+            logger.warning("Failed to cache image from %s: %s", url, exc)
+            image_bytes = self._download_image_with_playwright(url)
+            status = "cached_with_playwright"
         except Exception as exc:
             logger.warning("Failed to cache image from %s: %s", url, exc)
+            return ImageCache(url=url, path=None, status="failed", error=str(exc))
+
+        try:
+            webp_bytes = self._convert_image(image_bytes)
+            file_path.write_bytes(webp_bytes)
+            return ImageCache(url=url, path=relative_path, status=status, error=None)
+        except Exception as exc:
+            logger.warning("Failed to process image from %s: %s", url, exc)
             return ImageCache(url=url, path=None, status="failed", error=str(exc))
 
     def build_public_url(self, path: str | None) -> str | None:
@@ -68,6 +78,38 @@ class ImageService:
             return None
         normalized = path.replace("\\", "/").lstrip("/")
         return f"{self._public_prefix}/{normalized.removeprefix('article-images/')}"
+
+    def _download_image_with_playwright(self, url: str) -> bytes:
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch()
+                try:
+                    page = browser.new_page(
+                        user_agent=_DEFAULT_USER_AGENT,
+                        viewport={"width": 1920, "height": 1080},
+                    )
+                    response = page.goto(
+                        url,
+                        wait_until="networkidle",
+                        timeout=self._timeout[1] * 1000,
+                    )
+
+                    body: bytes | None = None
+                    if response is not None:
+                        try:
+                            body = response.body()
+                        except Exception:
+                            body = None
+                finally:
+                    browser.close()
+
+            if not body:
+                raise ValueError("empty_image_response_playwright")
+
+            return body
+        except Exception as exc:
+            logger.warning("Playwright failed to fetch image from %s: %s", url, exc)
+            raise ValueError("playwright_fetch_failed") from exc
 
     def _download_image(self, url: str) -> bytes:
         headers = self._build_headers(url)
@@ -89,8 +131,7 @@ class ImageService:
             with Image.open(io.BytesIO(image)) as img:
                 normalized = ImageOps.exif_transpose(img)
                 if normalized.mode not in ("RGB", "RGBA"):
-                    normalized = normalized.convert(
-                        "RGBA" if "A" in normalized.getbands() else "RGB")
+                    normalized = normalized.convert("RGBA" if "A" in normalized.getbands() else "RGB")
 
                 buffer = io.BytesIO()
                 normalized.save(buffer, format="WEBP", quality=80, method=6)
@@ -98,14 +139,14 @@ class ImageService:
         except UnidentifiedImageError as exc:
             raise ValueError("invalid_image_data") from exc
 
-    def get_image(self, hash: str) -> bytes | None:
-        file_path = self._cache_dir / f"{self._normalize_cache_key(hash)}.webp"
+    def get_image(self, article_id: int) -> bytes | None:
+        file_path = self._build_file_path(article_id)
         if not file_path.exists():
             return None
         return file_path.read_bytes()
 
-    def get_image_path(self, hash: str) -> Path:
-        return self._cache_dir / f"{self._normalize_cache_key(hash)}.webp"
+    def get_image_path(self, article_id: int) -> Path:
+        return self._build_file_path(article_id)
 
     def _build_headers(self, url: str) -> dict[str, str]:
         host = requests.utils.urlparse(url)
@@ -115,15 +156,10 @@ class ImageService:
             headers["Referer"] = f"{origin}/"
         return headers
 
-    def _normalize_cache_key(self, hash_value: str | None = None, url: str | None = None) -> str:
-        if hash_value:
-            return "".join(ch for ch in hash_value.lower() if ch.isalnum() or ch in ("-", "_"))
-        if url:
-            return hashlib.sha256(url.encode("utf-8")).hexdigest()
-        raise ValueError("missing_cache_key")
+    def _build_file_path(self, article_id: int) -> Path:
+        if article_id <= 0:
+            raise ValueError("invalid_article_id")
+        return self._cache_dir / f"{article_id}.webp"
 
-
-if __name__ == "__main__":
-    service = ImageService()
-    result = service.cache_image("https://pubs.acs.org/cms/10.1021/acs.analchem.5c07921/asset/images/medium/ac5c07921_0006.gif")
-    print(result)
+    def _to_relative_path(self, file_path: Path) -> str:
+        return file_path.relative_to(self._media_root).as_posix()
