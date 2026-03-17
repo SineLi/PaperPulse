@@ -14,6 +14,7 @@ class Article {
   static const colSubtags = 'subtags';
   static const colGAUrl = 'graphical_abstract_url';
   static const colGACachePath = 'graphical_abstract_cache_path';
+  static const colGAFallbackUrl = 'graphical_abstract_fallback_url';
   static const colPublishedDate = 'published_date';
   static const colAuthors = 'authors';
   static const colJournalId = 'journal_id';
@@ -29,6 +30,7 @@ class Article {
   final String summary;
   final String? graphicalAbstractUrl;
   final String? graphicalAbstractCachePath;
+  final String? graphicalAbstractFallbackUrl;
   final String publishedDate;
   final List<String>? authors;
   final int journalId;
@@ -52,6 +54,7 @@ class Article {
     required this.summary,
     this.graphicalAbstractUrl,
     this.graphicalAbstractCachePath,
+    this.graphicalAbstractFallbackUrl,
     required this.publishedDate,
     this.authors,
     required this.journalId,
@@ -74,6 +77,7 @@ class Article {
     bool? isFavorite,
     bool? isRead,
     String? graphicalAbstractCachePath,
+    String? graphicalAbstractFallbackUrl,
   }) {
     return Article(
       articleId: articleId,
@@ -83,6 +87,8 @@ class Article {
       graphicalAbstractUrl: graphicalAbstractUrl,
       graphicalAbstractCachePath:
           graphicalAbstractCachePath ?? this.graphicalAbstractCachePath,
+      graphicalAbstractFallbackUrl:
+          graphicalAbstractFallbackUrl ?? this.graphicalAbstractFallbackUrl,
       publishedDate: publishedDate,
       authors: authors,
       journalId: journalId,
@@ -115,6 +121,7 @@ class Article {
       colSubtags: jsonEncode(subtags),
       colGAUrl: graphicalAbstractUrl,
       colGACachePath: graphicalAbstractCachePath,
+      colGAFallbackUrl: graphicalAbstractFallbackUrl,
       colPublishedDate: publishedDate,
       colAuthors: authors != null ? jsonEncode(authors) : null,
       colJournalId: journalId,
@@ -140,6 +147,7 @@ class Article {
       summary: map[colSummary] as String,
       graphicalAbstractUrl: map[colGAUrl] as String?,
       graphicalAbstractCachePath: map[colGACachePath] as String?,
+      graphicalAbstractFallbackUrl: map[colGAFallbackUrl] as String?,
       publishedDate: map[colPublishedDate] as String,
       authors: map[colAuthors] != null
           ? List<String>.from(jsonDecode(map[colAuthors] as String))
@@ -170,6 +178,8 @@ class Article {
       subtags: List<String>.from(llmMap['subtags'] as List),
       graphicalAbstractUrl: json['graphical_abstract'] as String?,
       graphicalAbstractCachePath: null,
+      graphicalAbstractFallbackUrl:
+          json['graphical_abstract_cached_url'] as String?,
       publishedDate: json['date'] as String,
       authors: json['authors'] != null
           ? List<String>.from(json['authors'] as List)

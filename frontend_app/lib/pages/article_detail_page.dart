@@ -782,6 +782,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
             child: CachedArticleImage(
               articleId: _viewData.article.articleId,
               imageUrl: _viewData.graphicalAbsUrl!,
+              fallbackImageUrl: _viewData.graphicalAbsFallbackUrl,
               cachePath: _viewData.graphicalAbsCachePath,
               fit: BoxFit.contain,
               width: double.infinity,

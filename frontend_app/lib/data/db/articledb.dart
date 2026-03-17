@@ -246,7 +246,12 @@ class ArticleDatabaseIO {
     final db = await dbHelper.database;
     return await db.query(
       Article.tableArticles,
-      columns: [Article.colId, Article.colGAUrl, Article.colGACachePath],
+      columns: [
+        Article.colId,
+        Article.colGAUrl,
+        Article.colGACachePath,
+        Article.colGAFallbackUrl,
+      ],
       where:
           '${Article.colGAUrl} IS NOT NULL AND ${Article.colGAUrl} != ? '
           'AND (${Article.colGACachePath} IS NULL OR ${Article.colGACachePath} = ?)',

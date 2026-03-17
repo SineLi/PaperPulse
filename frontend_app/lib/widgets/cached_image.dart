@@ -11,6 +11,7 @@ import '../pages/setting_page.dart';
 class CachedArticleImage extends StatefulWidget {
   final int articleId;
   final String imageUrl;
+  final String? fallbackImageUrl;
   final String? cachePath;
   final BoxFit fit;
   final double? width;
@@ -20,6 +21,7 @@ class CachedArticleImage extends StatefulWidget {
     super.key,
     required this.articleId,
     required this.imageUrl,
+    this.fallbackImageUrl,
     this.cachePath,
     this.fit = BoxFit.cover,
     this.width,
@@ -34,6 +36,8 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   String? _localPath;
   bool _networkFailed = false;
   bool _blockedByWifi = false;
+  bool _fallbackAttempted = false;
+  bool _fallbackLoading = false;
 
   @override
   void initState() {
@@ -45,15 +49,18 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   void didUpdateWidget(CachedArticleImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.articleId != widget.articleId ||
-        oldWidget.imageUrl != widget.imageUrl) {
+        oldWidget.imageUrl != widget.imageUrl ||
+        oldWidget.fallbackImageUrl != widget.fallbackImageUrl) {
       _localPath = null;
       _networkFailed = false;
       _blockedByWifi = false;
+      _fallbackAttempted = false;
+      _fallbackLoading = false;
       _resolveImage();
     }
   }
 
-  Future<void> _resolveImage() async {
+  Future<void> _resolveImage({bool preferFallback = false}) async {
     final settingsController = context.read<SettingsController>();
     final cacheService = context.read<ImageCacheService>();
     final wifiOnly = settingsController.setting.wifiOnlyImages;
@@ -72,14 +79,24 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     final cached = cacheService.getCachedPath(
       articleId: widget.articleId,
       url: widget.imageUrl,
+      fallbackUrl: widget.fallbackImageUrl,
       existingCachePath: widget.cachePath,
       wifiOnly: wifiOnly,
+      preferFallback: preferFallback,
       onCached: (path) {
-        if (mounted) setState(() => _localPath = path);
+        if (mounted) {
+          setState(() {
+            _localPath = path;
+            _fallbackLoading = false;
+          });
+        }
       },
     );
     if (cached != null && mounted) {
-      setState(() => _localPath = cached);
+      setState(() {
+        _localPath = cached;
+        _fallbackLoading = false;
+      });
     }
   }
 
@@ -88,6 +105,8 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _localPath = null;
       _networkFailed = false;
       _blockedByWifi = false;
+      _fallbackAttempted = false;
+      _fallbackLoading = false;
     });
     _resolveImage();
   }
@@ -113,7 +132,10 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       return _buildWifiPlaceholder(colorScheme);
     }
 
-    // 回退到网络图片。
+    if (_fallbackLoading) {
+      return _buildLoading(colorScheme);
+    }
+
     if (_networkFailed) {
       return _buildPlaceholder(colorScheme, tappable: true);
     }
@@ -126,7 +148,24 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       errorBuilder: (context, error, stackTrace) {
         // 网络加载失败后，标记错误状态以支持点击重试。
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_networkFailed) {
+          if (!mounted || _networkFailed) {
+            return;
+          }
+
+          if (!_fallbackAttempted &&
+              widget.fallbackImageUrl != null &&
+              widget.fallbackImageUrl!.isNotEmpty) {
+            setState(() {
+              _networkFailed = true;
+              _fallbackAttempted = true;
+              _fallbackLoading = true;
+            });
+            _resolveImage(preferFallback: true).whenComplete(() {
+              if (mounted && _localPath == null) {
+                setState(() => _fallbackLoading = false);
+              }
+            });
+          } else {
             setState(() => _networkFailed = true);
           }
         });
@@ -134,7 +173,12 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       },
       loadingBuilder: (context, child, progress) {
         if (progress == null) return child;
-        return _buildLoading(colorScheme, progress);
+        return _buildLoading(
+          colorScheme,
+          value: progress.expectedTotalBytes != null
+              ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+              : null,
+        );
       },
     );
   }
@@ -183,7 +227,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     );
   }
 
-  Widget _buildLoading(ColorScheme colorScheme, ImageChunkEvent progress) {
+  Widget _buildLoading(ColorScheme colorScheme, {double? value}) {
     return Container(
       width: widget.width,
       height: widget.height,
@@ -194,9 +238,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
           height: 20,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            value: progress.expectedTotalBytes != null
-                ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                : null,
+            value: value,
           ),
         ),
       ),

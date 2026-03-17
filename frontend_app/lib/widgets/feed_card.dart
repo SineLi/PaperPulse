@@ -147,6 +147,7 @@ class FeedItemCard extends StatelessWidget {
         child: CachedArticleImage(
           articleId: articleViewData.article.articleId,
           imageUrl: articleViewData.graphicalAbsUrl!,
+          fallbackImageUrl: articleViewData.graphicalAbsFallbackUrl,
           cachePath: articleViewData.graphicalAbsCachePath,
           fit: BoxFit.cover,
           width: 100,

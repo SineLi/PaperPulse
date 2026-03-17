@@ -89,6 +89,8 @@ class ArticleViewData {
 
   String? get graphicalAbsUrl => article.graphicalAbstractUrl ?? '';
   String? get graphicalAbsCachePath => article.graphicalAbstractCachePath;
+  String? get graphicalAbsFallbackUrl =>
+      article.graphicalAbstractFallbackUrl ?? '';
 
   bool get isRead => article.isRead;
   bool get isFavorite => article.isFavorite;

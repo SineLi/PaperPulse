@@ -23,7 +23,7 @@ class DatabaseHelper {
     );
     final db = await openDatabase(
       dbFileDir,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute(createArticlesTable);
         await db.execute(createJournalsTable);
@@ -43,6 +43,11 @@ class DatabaseHelper {
             'key': 'last_feed_sync_id',
             'value': maxId.toString(),
           });
+        }
+        if (oldVersion < 4) {
+          await db.execute(
+            'ALTER TABLE articles ADD COLUMN graphical_abstract_fallback_url TEXT',
+          );
         }
       },
     );
