@@ -32,7 +32,16 @@ def cycle_job():
     try:
         service.run_submission_cycle()
     except Exception as e:
-        logger.error(f"LLM submission cycle failed: {e}", exc_info=True)
+        logger.exception("event=scheduler_step_failed step=llm_submission detail=%s", e)
+
+
+def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
+    started_at = time.monotonic()
+    service = ArticleService()
+    try:
+        result = service.cache_missing_article_images(limit=limit, scan_limit=scan_limit)
+    except Exception as e:
+        logger.exception("event=scheduler_step_failed step=image_cache_backfill detail=%s", e)
 
 
 def _add_jobs(scheduler):
@@ -43,6 +52,17 @@ def _add_jobs(scheduler):
         id='run_all_cycle',
         name='Fetch articles and process LLM summaries every hour',
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        image_cache_backfill_job,
+        trigger=CronTrigger(minute="*/15"),
+        id="image_cache_backfill",
+        name="Backfill missing cached images every 15 minutes",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
 
@@ -57,7 +77,11 @@ def start_background_scheduler() -> BackgroundScheduler:
     # Schedule one immediate run in the background thread so it does NOT
     # block the main thread (uvicorn startup).
     scheduler.add_job(cycle_job, id='initial_cycle', name='Initial cycle on startup')
-    logger.info("Background scheduler started.")
+    scheduler.add_job(
+        image_cache_backfill_job,
+        id="initial_image_cache_backfill",
+        name="Initial image cache backfill on startup",
+    )
     return scheduler
 
 
@@ -80,6 +104,8 @@ def start_blocking_scheduler():
     )
 
     cycle_job()  # 先运行一次
+
+    image_cache_backfill_job()
 
     scheduler = BlockingScheduler()
     _add_jobs(scheduler)

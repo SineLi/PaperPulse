@@ -50,7 +50,7 @@ class ImageService:
         if not url:
             return ImageCache(url=url, path=None, status="invalid", error="empty_url")
 
-        file_path = self._build_file_path(article_id)
+        file_path = self.get_image_path(article_id, ensure_parent=True)
         relative_path = self._to_relative_path(file_path)
 
         if file_path.exists():
@@ -61,8 +61,12 @@ class ImageService:
             status = "cached"
         except requests.RequestException as exc:
             logger.warning("Failed to cache image from %s: %s", url, exc)
-            image_bytes = self._download_image_with_playwright(url)
-            status = "cached_with_playwright"
+            try: 
+                image_bytes = self._download_image_with_playwright(url)
+                status = "cached_with_playwright"
+            except Exception as exc:
+                logger.warning("Playwright also failed to cache image from %s: %s", url, exc)
+                return ImageCache(url=url, path=None, status="failed", error=str(exc))
         except Exception as exc:
             logger.warning("Failed to cache image from %s: %s", url, exc)
             return ImageCache(url=url, path=None, status="failed", error=str(exc))
@@ -76,10 +80,10 @@ class ImageService:
             return ImageCache(url=url, path=None, status="failed", error=str(exc))
 
     def build_public_url(self, article_id: int) -> str | None:
-        file_path = self.get_image_path(article_id)
-        if not file_path.exists():
+        if not self.has_cached_image(article_id):
             return None
 
+        file_path = self.get_image_path(article_id)
         relative_path = self._to_relative_path(file_path)
         normalized = relative_path.replace("\\", "/").lstrip("/")
         return f"{self._public_prefix}/{normalized.removeprefix('article-images/')}"
@@ -150,8 +154,11 @@ class ImageService:
             return None
         return file_path.read_bytes()
 
-    def get_image_path(self, article_id: int) -> Path:
-        return self._build_file_path(article_id)
+    def get_image_path(self, article_id: int, ensure_parent: bool = False) -> Path:
+        return self._build_file_path(article_id, ensure_parent=ensure_parent)
+
+    def has_cached_image(self, article_id: int) -> bool:
+        return self.get_image_path(article_id).exists()
 
     def _build_headers(self, url: str) -> dict[str, str]:
         host = requests.utils.urlparse(url)
@@ -161,11 +168,12 @@ class ImageService:
             headers["Referer"] = f"{origin}/"
         return headers
 
-    def _build_file_path(self, article_id: int) -> Path:
+    def _build_file_path(self, article_id: int, ensure_parent: bool = False) -> Path:
         if article_id <= 0:
             raise ValueError("invalid_article_id")
         bucket_dir = self._cache_dir / self._build_bucket_name(article_id)
-        bucket_dir.mkdir(parents=True, exist_ok=True)
+        if ensure_parent:
+            bucket_dir.mkdir(parents=True, exist_ok=True)
         return bucket_dir / f"{article_id}.webp"
 
     def _to_relative_path(self, file_path: Path) -> str:
