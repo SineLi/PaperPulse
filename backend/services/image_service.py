@@ -1,4 +1,5 @@
 import io
+import base64
 import logging
 from pathlib import Path
 from typing import TypedDict
@@ -60,13 +61,13 @@ class ImageService:
             image_bytes = self._download_image(url)
             status = "cached"
         except requests.RequestException as exc:
-            logger.warning("Failed to cache image from %s: %s", url, exc)
             try: 
                 image_bytes = self._download_image_with_playwright(url)
                 status = "cached_with_playwright"
-            except Exception as exc:
-                logger.warning("Playwright also failed to cache image from %s: %s", url, exc)
-                return ImageCache(url=url, path=None, status="failed", error=str(exc))
+            except Exception as playwright_exc:
+                error = self._build_download_failure_error(exc, playwright_exc)
+                logger.warning("Failed to cache image from %s: %s", url, error)
+                return ImageCache(url=url, path=None, status="failed", error=error)
         except Exception as exc:
             logger.warning("Failed to cache image from %s: %s", url, exc)
             return ImageCache(url=url, path=None, status="failed", error=str(exc))
@@ -109,16 +110,20 @@ class ImageService:
                             body = response.body()
                         except Exception:
                             body = None
+                        recovered_body = self._recover_invalid_navigation_image_body(page, url, response, body)
+                        if recovered_body is not None:
+                            body = recovered_body
                 finally:
                     browser.close()
 
             if not body:
                 raise ValueError("empty_image_response_playwright")
+            if not self._is_supported_image_bytes(body):
+                raise ValueError("invalid_image_data_playwright")
 
             return body
         except Exception as exc:
-            logger.warning("Playwright failed to fetch image from %s: %s", url, exc)
-            raise ValueError("playwright_fetch_failed") from exc
+            raise ValueError(self._format_nested_error("playwright_fetch_failed", exc)) from exc
 
     def _download_image(self, url: str) -> bytes:
         headers = self._build_headers(url)
@@ -167,6 +172,96 @@ class ImageService:
         if origin:
             headers["Referer"] = f"{origin}/"
         return headers
+
+    def _recover_invalid_navigation_image_body(
+        self,
+        page,
+        requested_url: str,
+        response,
+        body: bytes | None,
+    ) -> bytes | None:
+        content_type = response.headers.get("content-type", "").lower()
+        if response.request.resource_type != "document":
+            return None
+        if not content_type.startswith("image/"):
+            return None
+        if body and self._is_supported_image_bytes(body):
+            return None
+
+        try:
+            return self._load_image_body_via_cdp(page, requested_url)
+        except Exception:
+            return None
+
+    def _load_image_body_via_cdp(self, page, requested_url: str) -> bytes:
+        cdp = page.context.new_cdp_session(page)
+        cdp.send("Page.enable")
+        frame_tree = cdp.send("Page.getFrameTree")
+        frame_id = frame_tree["frameTree"]["frame"]["id"]
+        resource = cdp.send(
+            "Network.loadNetworkResource",
+            {
+                "url": requested_url,
+                "frameId": frame_id,
+                "options": {"disableCache": False, "includeCredentials": True},
+            },
+        )
+
+        if not resource["resource"].get("success"):
+            raise ValueError("cdp_load_network_resource_failed")
+
+        stream = resource["resource"].get("stream")
+        if not stream:
+            return b""
+
+        chunks: list[bytes] = []
+        while True:
+            chunk = cdp.send("IO.read", {"handle": stream})
+            data = chunk.get("data", "")
+            if chunk.get("base64Encoded"):
+                chunks.append(base64.b64decode(data))
+            else:
+                chunks.append(data.encode("utf-8", errors="replace"))
+            if chunk.get("eof"):
+                break
+
+        cdp.send("IO.close", {"handle": stream})
+        body = b"".join(chunks)
+        if not self._is_supported_image_bytes(body):
+            raise ValueError("cdp_invalid_image_data")
+        return body
+
+    def _is_supported_image_bytes(self, data: bytes) -> bool:
+        if not data:
+            return False
+        try:
+            with Image.open(io.BytesIO(data)) as img:
+                img.verify()
+            return True
+        except (UnidentifiedImageError, OSError):
+            return False
+
+    def _build_download_failure_error(
+        self,
+        request_exc: Exception,
+        playwright_exc: Exception,
+    ) -> str:
+        return (
+            "download_failed:"
+            f"requests={self._format_nested_error(type(request_exc).__name__, request_exc)};"
+            f"playwright={self._format_nested_error(type(playwright_exc).__name__, playwright_exc)}"
+        )
+
+    def _format_nested_error(self, label: str, exc: Exception) -> str:
+        messages = [label]
+        current: BaseException | None = exc
+        while current is not None:
+            text = str(current).strip()
+            if text and text not in messages:
+                messages.append(text)
+            current = current.__cause__
+        return ":".join(messages)
+
 
     def _build_file_path(self, article_id: int, ensure_parent: bool = False) -> Path:
         if article_id <= 0:
