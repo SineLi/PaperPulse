@@ -199,6 +199,12 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
                 : null,
           );
         },
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
+            return child;
+          }
+          return _buildLoading(colorScheme);
+        },
       );
     }
 
