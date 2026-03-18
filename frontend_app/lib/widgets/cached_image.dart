@@ -39,6 +39,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   bool _fallbackAttempted = false;
   bool _fallbackLoading = false;
   bool _showFallbackNetwork = false;
+  bool _sourceCacheQueued = false;
 
   @override
   void initState() {
@@ -58,6 +59,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackAttempted = false;
       _fallbackLoading = false;
       _showFallbackNetwork = false;
+      _sourceCacheQueued = false;
       _initializeImage();
     }
   }
@@ -134,6 +136,20 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     }
   }
 
+  void _queueSourceCache() {
+    if (_sourceCacheQueued || _localPath != null || widget.imageUrl.isEmpty) {
+      return;
+    }
+
+    _sourceCacheQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _localPath != null) {
+        return;
+      }
+      _resolveImage();
+    });
+  }
+
   void _retry() {
     setState(() {
       _localPath = null;
@@ -142,6 +158,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackAttempted = false;
       _fallbackLoading = false;
       _showFallbackNetwork = false;
+      _sourceCacheQueued = false;
     });
     _initializeImage();
   }
@@ -255,6 +272,12 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
               ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
               : null,
         );
+      },
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) {
+          _queueSourceCache();
+        }
+        return child;
       },
     );
   }
