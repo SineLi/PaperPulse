@@ -38,6 +38,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   bool _blockedByWifi = false;
   bool _fallbackAttempted = false;
   bool _fallbackLoading = false;
+  bool _showFallbackNetwork = false;
 
   @override
   void initState() {
@@ -56,6 +57,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _blockedByWifi = false;
       _fallbackAttempted = false;
       _fallbackLoading = false;
+      _showFallbackNetwork = false;
       _initializeImage();
     }
   }
@@ -118,6 +120,8 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
           setState(() {
             _localPath = path;
             _fallbackLoading = false;
+            _showFallbackNetwork = false;
+            _networkFailed = false;
           });
         }
       },
@@ -137,6 +141,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _blockedByWifi = false;
       _fallbackAttempted = false;
       _fallbackLoading = false;
+      _showFallbackNetwork = false;
     });
     _initializeImage();
   }
@@ -160,6 +165,41 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     // 仅 Wi-Fi 模式下，非 WiFi 时展示提示占位符。
     if (_blockedByWifi) {
       return _buildWifiPlaceholder(colorScheme);
+    }
+
+    if (_showFallbackNetwork &&
+        widget.fallbackImageUrl != null &&
+        widget.fallbackImageUrl!.isNotEmpty) {
+      return Image.network(
+        widget.fallbackImageUrl!,
+        fit: widget.fit,
+        width: widget.width,
+        height: widget.height,
+        errorBuilder: (context, error, stackTrace) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _showFallbackNetwork = false;
+              _fallbackLoading = false;
+              _networkFailed = true;
+            });
+          });
+          return _buildPlaceholder(colorScheme, tappable: true);
+        },
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) {
+            return child;
+          }
+          return _buildLoading(
+            colorScheme,
+            value: progress.expectedTotalBytes != null
+                ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                : null,
+          );
+        },
+      );
     }
 
     if (_fallbackLoading) {
@@ -186,9 +226,9 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
               widget.fallbackImageUrl != null &&
               widget.fallbackImageUrl!.isNotEmpty) {
             setState(() {
-              _networkFailed = true;
               _fallbackAttempted = true;
               _fallbackLoading = true;
+              _showFallbackNetwork = true;
             });
             _resolveImage(preferFallback: true).whenComplete(() {
               if (mounted && _localPath == null) {
