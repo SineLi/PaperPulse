@@ -1,5 +1,6 @@
 import logging
 import sys
+import time
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from utils.main_fetcher import run_enabled_fetchers
+    from services.article_services import ArticleService
     from services.LLM_service import LLMService
 except ImportError as e:
     logger.error(f"Failed to import modules: {e}")

@@ -162,11 +162,11 @@ class ArticleService:
                         """
                         INSERT INTO articles (
                           title, link, doi, date, journal_id, authors,
-                          editor_summary, structured_abstract, abstract, graphical_abstract, status
+                          editor_summary, structured_abstract, abstract, graphical_abstract, ga_cache_status, status
                         )
                         VALUES (
                           :title, :link, :doi, :date, :journal_id, :authors,
-                          :editor_summary, :structured_abstract, :abstract, :graphical_abstract, :status
+                          :editor_summary, :structured_abstract, :abstract, :graphical_abstract, :ga_cache_status, :status
                         )
                         ON CONFLICT DO NOTHING
                         """
