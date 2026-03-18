@@ -78,6 +78,26 @@ class ImageCacheService {
     return null;
   }
 
+  Future<String?> getExistingCachedPath({
+    required int articleId,
+    String? existingCachePath,
+  }) async {
+    if (existingCachePath != null && existingCachePath.isNotEmpty) {
+      if (await File(existingCachePath).exists()) {
+        return existingCachePath;
+      }
+    }
+
+    final cacheDir = await _cacheDirFuture;
+    final file = File(p.join(cacheDir.path, '$articleId.img'));
+    if (!await file.exists()) {
+      return null;
+    }
+
+    await _articleDb.updateCachePath(articleId, file.path);
+    return file.path;
+  }
+
   Future<void> _downloadAndCache(
     int articleId,
     String url,
@@ -158,7 +178,8 @@ class ImageCacheService {
     required bool rateLimited,
   }) async {
     final headers = _buildHeaders(url);
-    const maxRetries = 3;
+    final maxRetries = rateLimited ? 2 : 1;
+    final timeout = Duration(seconds: rateLimited ? 15 : 8);
 
     for (var attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -168,10 +189,20 @@ class ImageCacheService {
 
         final response = await http
             .get(Uri.parse(url), headers: headers)
-            .timeout(const Duration(seconds: 30));
+            .timeout(timeout);
 
-        if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        if (response.statusCode == 200 &&
+            response.bodyBytes.isNotEmpty &&
+            _isImageResponse(response)) {
           return response.bodyBytes;
+        }
+
+        if (response.statusCode == 200 && !_isImageResponse(response)) {
+          log(
+            'Image download returned non-image content: $url',
+            name: 'ImageCacheService',
+          );
+          return null;
         }
 
         if (response.statusCode >= 400 &&
@@ -217,6 +248,11 @@ class ImageCacheService {
     }
 
     return null;
+  }
+
+  bool _isImageResponse(http.Response response) {
+    final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+    return contentType.startsWith('image/');
   }
 
   Future<void> _waitForBackendRateLimit() {

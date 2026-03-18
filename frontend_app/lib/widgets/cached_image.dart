@@ -42,7 +42,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   @override
   void initState() {
     super.initState();
-    _resolveImage();
+    _initializeImage();
   }
 
   @override
@@ -56,8 +56,38 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _blockedByWifi = false;
       _fallbackAttempted = false;
       _fallbackLoading = false;
-      _resolveImage();
+      _initializeImage();
     }
+  }
+
+  Future<void> _initializeImage() async {
+    final settingsController = context.read<SettingsController>();
+    final cacheService = context.read<ImageCacheService>();
+    final wifiOnly = settingsController.setting.wifiOnlyImages;
+
+    if (wifiOnly) {
+      final result = await Connectivity().checkConnectivity();
+      final isWifi = result.contains(ConnectivityResult.wifi);
+      if (!isWifi) {
+        if (mounted) {
+          setState(() => _blockedByWifi = true);
+        }
+        return;
+      }
+    }
+
+    final cached = await cacheService.getExistingCachedPath(
+      articleId: widget.articleId,
+      existingCachePath: widget.cachePath,
+    );
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _blockedByWifi = false;
+      _localPath = cached;
+    });
   }
 
   Future<void> _resolveImage({bool preferFallback = false}) async {
@@ -108,7 +138,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackAttempted = false;
       _fallbackLoading = false;
     });
-    _resolveImage();
+    _initializeImage();
   }
 
   @override
