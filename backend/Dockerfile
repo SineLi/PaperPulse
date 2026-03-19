@@ -31,6 +31,7 @@ RUN playwright install chromium
 # 复制代码时直接 chown
 USER root
 COPY --chown=appuser:appuser . /app
+RUN mkdir -p /app/media && chown appuser:appuser /app/media
 USER appuser
 
 CMD ["python", "run.py"]
