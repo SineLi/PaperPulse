@@ -11,7 +11,6 @@ import '../pages/setting_page.dart';
 class CachedArticleImage extends StatefulWidget {
   final int articleId;
   final String imageUrl;
-  final String? fallbackImageUrl;
   final String? cachePath;
   final BoxFit fit;
   final double? width;
@@ -21,7 +20,6 @@ class CachedArticleImage extends StatefulWidget {
     super.key,
     required this.articleId,
     required this.imageUrl,
-    this.fallbackImageUrl,
     this.cachePath,
     this.fit = BoxFit.cover,
     this.width,
@@ -51,8 +49,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   void didUpdateWidget(CachedArticleImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.articleId != widget.articleId ||
-        oldWidget.imageUrl != widget.imageUrl ||
-        oldWidget.fallbackImageUrl != widget.fallbackImageUrl) {
+        oldWidget.imageUrl != widget.imageUrl) {
       _localPath = null;
       _networkFailed = false;
       _blockedByWifi = false;
@@ -113,7 +110,6 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     final cached = cacheService.getCachedPath(
       articleId: widget.articleId,
       url: widget.imageUrl,
-      fallbackUrl: widget.fallbackImageUrl,
       existingCachePath: widget.cachePath,
       wifiOnly: wifiOnly,
       preferFallback: preferFallback,
@@ -134,6 +130,10 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         _fallbackLoading = false;
       });
     }
+  }
+
+  String? _effectiveFallbackUrl(ImageCacheService cacheService) {
+    return cacheService.buildFallbackUrl(widget.articleId);
   }
 
   void _queueSourceCache() {
@@ -166,6 +166,8 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cacheService = context.read<ImageCacheService>();
+    final fallbackUrl = _effectiveFallbackUrl(cacheService);
 
     // 优先展示本地文件。
     if (_localPath != null) {
@@ -184,11 +186,9 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       return _buildWifiPlaceholder(colorScheme);
     }
 
-    if (_showFallbackNetwork &&
-        widget.fallbackImageUrl != null &&
-        widget.fallbackImageUrl!.isNotEmpty) {
+    if (_showFallbackNetwork && fallbackUrl != null && fallbackUrl.isNotEmpty) {
       return Image.network(
-        widget.fallbackImageUrl!,
+        fallbackUrl,
         fit: widget.fit,
         width: widget.width,
         height: widget.height,
@@ -246,8 +246,8 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
           }
 
           if (!_fallbackAttempted &&
-              widget.fallbackImageUrl != null &&
-              widget.fallbackImageUrl!.isNotEmpty) {
+              fallbackUrl != null &&
+              fallbackUrl.isNotEmpty) {
             setState(() {
               _fallbackAttempted = true;
               _fallbackLoading = true;
@@ -335,10 +335,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         child: SizedBox(
           width: 20,
           height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            value: value,
-          ),
+          child: CircularProgressIndicator(strokeWidth: 2, value: value),
         ),
       ),
     );

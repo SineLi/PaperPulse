@@ -174,7 +174,6 @@ class FeedRepo {
                   articleId: a.articleId,
                   url: a.graphicalAbstractUrl,
                   cachePath: a.graphicalAbstractCachePath,
-                  fallbackUrl: a.graphicalAbstractFallbackUrl,
                 ),
               )
               .toList(),

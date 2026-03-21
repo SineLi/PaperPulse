@@ -250,7 +250,6 @@ class ArticleDatabaseIO {
         Article.colId,
         Article.colGAUrl,
         Article.colGACachePath,
-        Article.colGAFallbackUrl,
       ],
       where:
           '${Article.colGAUrl} IS NOT NULL AND ${Article.colGAUrl} != ? '

@@ -55,32 +55,6 @@ class ApiClient {
     }
   }
 
-  String? resolveUrl(String? value) {
-    if (value == null) {
-      return null;
-    }
-
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    final uri = Uri.tryParse(trimmed);
-    if (uri != null && uri.hasScheme) {
-      return trimmed;
-    }
-
-    if (baseUrl.isEmpty) {
-      return trimmed;
-    }
-
-    try {
-      return Uri.parse(baseUrl).resolve(trimmed).toString();
-    } on FormatException {
-      return trimmed;
-    }
-  }
-
   Future<Map<String, String>> _buildHeaders({
     bool includeAuthorization = true,
   }) async {

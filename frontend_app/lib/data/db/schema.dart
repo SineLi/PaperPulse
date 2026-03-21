@@ -12,7 +12,6 @@ const String createArticlesTable = '''
      subtags TEXT NOT NULL,
      graphical_abstract_url TEXT,
      graphical_abstract_cache_path TEXT,
-     graphical_abstract_fallback_url TEXT,
      published_date TEXT NOT NULL,
      authors TEXT,
      journal_id INTEGER NOT NULL,

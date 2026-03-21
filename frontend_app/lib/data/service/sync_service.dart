@@ -108,12 +108,7 @@ class SyncService {
       if (await _articleDatabase.getArticle(toFav) == null) {
         try {
           final articleData = await _apiClient.getJson('/articles/$toFav');
-          final article = Article.fromJson(articleData).copyWith(
-            graphicalAbstractFallbackUrl: _apiClient.resolveUrl(
-              articleData['graphical_abstract_cached_url'] as String?,
-            ),
-          );
-          await _articleDatabase.addArticle(article);
+          await _articleDatabase.addArticle(Article.fromJson(articleData));
         } on ApiException catch (e) {
           if (e.statusCode == 404) {
             continue;

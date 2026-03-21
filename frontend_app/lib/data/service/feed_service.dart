@@ -13,7 +13,7 @@ class FeedService {
       );
       final items = (response)['items'] as List<dynamic>;
       final articles = items
-          .map((articleJson) => _parseArticle(articleJson))
+          .map((articleJson) => Article.fromJson(articleJson))
           .toList();
       return articles;
     } on ApiException {
@@ -21,14 +21,5 @@ class FeedService {
     } catch (e) {
       throw Exception('Failed to fetch articles: $e');
     }
-  }
-
-  Article _parseArticle(dynamic articleJson) {
-    final article = Article.fromJson(articleJson as Map<String, dynamic>);
-    return article.copyWith(
-      graphicalAbstractFallbackUrl: _apiClient.resolveUrl(
-        article.graphicalAbstractFallbackUrl,
-      ),
-    );
   }
 }

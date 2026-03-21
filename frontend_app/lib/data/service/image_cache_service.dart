@@ -13,6 +13,7 @@ import '../models/article.dart';
 /// 同时将缓存路径写回数据库。
 class ImageCacheService {
   final ArticleDatabaseIO _articleDb;
+  static const int _fallbackBucketSize = 10000;
 
   static const int _maxConcurrentDownloads = 3;
   static const Duration _retryBatchDelay = Duration(milliseconds: 500);
@@ -23,7 +24,7 @@ class ImageCacheService {
       '(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0';
 
   final Map<int, List<void Function(String path)>> _downloading = {};
-  final Map<int, ({String url, String? fallbackUrl})> _failedArticles = {};
+  final Map<int, String> _failedArticles = {};
 
   int _activeDownloads = 0;
   final List<Completer<void>> _downloadWaiters = [];
@@ -32,6 +33,7 @@ class ImageCacheService {
 
   /// 仅在 Wi-Fi 下下载图片（由 SettingsController 同步更新）
   bool wifiOnly = false;
+  String baseUrl = '';
 
   late final Future<Directory> _cacheDirFuture = _initCacheDir();
 
@@ -54,7 +56,6 @@ class ImageCacheService {
   String? getCachedPath({
     required int articleId,
     required String url,
-    String? fallbackUrl,
     String? existingCachePath,
     void Function(String path)? onCached,
     bool? wifiOnly,
@@ -71,7 +72,6 @@ class ImageCacheService {
       articleId,
       url,
       onCached,
-      fallbackUrl: fallbackUrl,
       wifiOnly: wifiOnly ?? this.wifiOnly,
       preferFallback: preferFallback,
     );
@@ -102,7 +102,6 @@ class ImageCacheService {
     int articleId,
     String url,
     void Function(String path)? onCached, {
-    String? fallbackUrl,
     bool wifiOnly = false,
     bool preferFallback = false,
   }) async {
@@ -136,6 +135,8 @@ class ImageCacheService {
       await _acquireDownloadSlot();
       slotAcquired = true;
 
+      final fallbackUrl = buildFallbackUrl(articleId);
+
       final candidates = <({String url, bool rateLimited})>[
         if (preferFallback &&
             fallbackUrl != null &&
@@ -164,7 +165,7 @@ class ImageCacheService {
         return;
       }
 
-      _failedArticles[articleId] = (url: url, fallbackUrl: fallbackUrl);
+      _failedArticles[articleId] = url;
     } finally {
       if (slotAcquired) {
         _releaseDownloadSlot();
@@ -255,6 +256,23 @@ class ImageCacheService {
     return contentType.startsWith('image/');
   }
 
+  String? buildFallbackUrl(int articleId) {
+    if (articleId <= 0) {
+      return null;
+    }
+
+    final normalizedBaseUrl = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (normalizedBaseUrl.isEmpty) {
+      return null;
+    }
+
+    final bucketStart =
+        ((articleId - 1) ~/ _fallbackBucketSize) * _fallbackBucketSize + 1;
+    final bucketEnd = bucketStart + _fallbackBucketSize - 1;
+    final path = '/media/article-images/$bucketStart-$bucketEnd/$articleId.webp';
+    return Uri.parse(normalizedBaseUrl).resolve(path).toString();
+  }
+
   Future<void> _waitForBackendRateLimit() {
     final completer = Completer<void>();
     final previous = _backendRateGate;
@@ -325,9 +343,7 @@ class ImageCacheService {
   Future<void> retryFailedImages() async {
     if (_failedArticles.isEmpty) return;
 
-    final toRetry = Map<int, ({String url, String? fallbackUrl})>.from(
-      _failedArticles,
-    );
+    final toRetry = Map<int, String>.from(_failedArticles);
     _failedArticles.clear();
 
     final tasks = <Future<void>>[];
@@ -335,9 +351,8 @@ class ImageCacheService {
       tasks.add(
         _downloadAndCache(
           entry.key,
-          entry.value.url,
+          entry.value,
           null,
-          fallbackUrl: entry.value.fallbackUrl,
         ),
       );
     }
@@ -362,7 +377,6 @@ class ImageCacheService {
             articleId: row[Article.colId] as int,
             url: row[Article.colGAUrl] as String?,
             cachePath: row[Article.colGACachePath] as String?,
-            fallbackUrl: row[Article.colGAFallbackUrl] as String?,
           ),
         )
         .toList();
@@ -371,7 +385,7 @@ class ImageCacheService {
 
   /// 批量预缓存多篇文章的图片
   Future<void> precacheArticles(
-    List<({int articleId, String? url, String? cachePath, String? fallbackUrl})>
+    List<({int articleId, String? url, String? cachePath})>
         items, {
     bool? wifiOnly,
   }) async {
@@ -393,7 +407,6 @@ class ImageCacheService {
           item.articleId,
           item.url!,
           null,
-          fallbackUrl: item.fallbackUrl,
         ),
       );
     }
