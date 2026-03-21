@@ -31,6 +31,9 @@ class CachedArticleImage extends StatefulWidget {
 }
 
 class _CachedArticleImageState extends State<CachedArticleImage> {
+  static const int _maxFallbackRetries = 3;
+  static const Duration _fallbackRetryDelay = Duration(seconds: 2);
+
   String? _localPath;
   bool _networkFailed = false;
   bool _blockedByWifi = false;
@@ -38,6 +41,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   bool _fallbackLoading = false;
   bool _showFallbackNetwork = false;
   bool _sourceCacheQueued = false;
+  int _fallbackRetryCount = 0;
 
   @override
   void initState() {
@@ -57,6 +61,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackLoading = false;
       _showFallbackNetwork = false;
       _sourceCacheQueued = false;
+      _fallbackRetryCount = 0;
       _initializeImage();
     }
   }
@@ -120,6 +125,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
             _fallbackLoading = false;
             _showFallbackNetwork = false;
             _networkFailed = false;
+            _fallbackRetryCount = 0;
           });
         }
       },
@@ -128,6 +134,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       setState(() {
         _localPath = cached;
         _fallbackLoading = false;
+        _fallbackRetryCount = 0;
       });
     }
   }
@@ -159,8 +166,44 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackLoading = false;
       _showFallbackNetwork = false;
       _sourceCacheQueued = false;
+      _fallbackRetryCount = 0;
     });
     _initializeImage();
+  }
+
+  void _scheduleFallbackRetry(String fallbackUrl) {
+    if (_fallbackRetryCount >= _maxFallbackRetries) {
+      setState(() {
+        _showFallbackNetwork = false;
+        _fallbackLoading = false;
+        _networkFailed = true;
+      });
+      return;
+    }
+
+    _fallbackRetryCount += 1;
+    setState(() {
+      _showFallbackNetwork = false;
+      _fallbackLoading = true;
+      _networkFailed = false;
+    });
+
+    Future.delayed(_fallbackRetryDelay, () {
+      if (!mounted || _localPath != null) {
+        return;
+      }
+
+      setState(() {
+        _showFallbackNetwork = true;
+        _fallbackLoading = true;
+        _networkFailed = false;
+      });
+      _resolveImage(preferFallback: true).whenComplete(() {
+        if (mounted && _localPath == null && !_showFallbackNetwork) {
+          setState(() => _fallbackLoading = false);
+        }
+      });
+    });
   }
 
   @override
@@ -197,11 +240,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
             if (!mounted) {
               return;
             }
-            setState(() {
-              _showFallbackNetwork = false;
-              _fallbackLoading = false;
-              _networkFailed = true;
-            });
+            _scheduleFallbackRetry(fallbackUrl);
           });
           return _buildPlaceholder(colorScheme, tappable: true);
         },
@@ -252,6 +291,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
               _fallbackAttempted = true;
               _fallbackLoading = true;
               _showFallbackNetwork = true;
+              _fallbackRetryCount = 0;
             });
             _resolveImage(preferFallback: true).whenComplete(() {
               if (mounted && _localPath == null) {
