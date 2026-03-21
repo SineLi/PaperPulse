@@ -13,25 +13,27 @@ import '../models/article.dart';
 /// 同时将缓存路径写回数据库。
 class ImageCacheService {
   final ArticleDatabaseIO _articleDb;
+  static const int _fallbackBucketSize = 10000;
 
   static const int _maxConcurrentDownloads = 3;
   static const Duration _retryBatchDelay = Duration(milliseconds: 500);
+  static const Duration _backendMinInterval = Duration(milliseconds: 500);
 
   static const _userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       '(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0';
 
-  /// 正在下载的 URL -> 等待通知的回调列表（避免重复请求，同时保留所有回调）
-  final Map<String, List<void Function(String path)>> _downloading = {};
-
-  /// 记录下载失败的文章 (articleId -> url)，以便刷新时重试
+  final Map<int, List<void Function(String path)>> _downloading = {};
   final Map<int, String> _failedArticles = {};
 
   int _activeDownloads = 0;
   final List<Completer<void>> _downloadWaiters = [];
+  Future<void> _backendRateGate = Future<void>.value();
+  DateTime _nextBackendRequestAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 仅在 Wi-Fi 下下载图片（由 SettingsController 同步更新）
   bool wifiOnly = false;
+  String baseUrl = '';
 
   late final Future<Directory> _cacheDirFuture = _initCacheDir();
 
@@ -57,6 +59,7 @@ class ImageCacheService {
     String? existingCachePath,
     void Function(String path)? onCached,
     bool? wifiOnly,
+    bool preferFallback = false,
   }) {
     // 已有缓存路径且文件存在
     if (existingCachePath != null && existingCachePath.isNotEmpty) {
@@ -65,10 +68,34 @@ class ImageCacheService {
       }
     }
 
-    // 触发后台下载
-    _downloadAndCache(articleId, url, onCached,
-        wifiOnly: wifiOnly ?? this.wifiOnly);
+    _downloadAndCache(
+      articleId,
+      url,
+      onCached,
+      wifiOnly: wifiOnly ?? this.wifiOnly,
+      preferFallback: preferFallback,
+    );
     return null;
+  }
+
+  Future<String?> getExistingCachedPath({
+    required int articleId,
+    String? existingCachePath,
+  }) async {
+    if (existingCachePath != null && existingCachePath.isNotEmpty) {
+      if (await File(existingCachePath).exists()) {
+        return existingCachePath;
+      }
+    }
+
+    final cacheDir = await _cacheDirFuture;
+    final file = File(p.join(cacheDir.path, '$articleId.img'));
+    if (!await file.exists()) {
+      return null;
+    }
+
+    await _articleDb.updateCachePath(articleId, file.path);
+    return file.path;
   }
 
   Future<void> _downloadAndCache(
@@ -76,6 +103,7 @@ class ImageCacheService {
     String url,
     void Function(String path)? onCached, {
     bool wifiOnly = false,
+    bool preferFallback = false,
   }) async {
     // Wi-Fi 专属模式：非 Wi-Fi 网络时跳过下载
     if (wifiOnly) {
@@ -84,103 +112,181 @@ class ImageCacheService {
       if (!isWifi) return;
     }
     // 已在下载中 → 注册回调后返回，由先前的下载任务负责通知
-    if (_downloading.containsKey(url)) {
+    if (_downloading.containsKey(articleId)) {
       if (onCached != null) {
-        _downloading[url]!.add(onCached);
+        _downloading[articleId]!.add(onCached);
       }
       return;
     }
-    _downloading[url] = onCached != null ? [onCached] : [];
+    _downloading[articleId] = onCached != null ? [onCached] : [];
 
     var slotAcquired = false;
     try {
       final cacheDir = await _cacheDirFuture;
-      final ext = _extensionFromUrl(url);
-      final fileName = '$articleId$ext';
-      final file = File(p.join(cacheDir.path, fileName));
+      final file = File(p.join(cacheDir.path, '$articleId.img'));
 
       if (await file.exists()) {
         // 文件存在但 DB 记录缺失，补写 DB
         await _articleDb.updateCachePath(articleId, file.path);
-        _notifyCallbacks(url, file.path);
+        _notifyCallbacks(articleId, file.path);
         return;
       }
 
       await _acquireDownloadSlot();
       slotAcquired = true;
 
-      final headers = _buildHeaders(url);
+      final fallbackUrl = buildFallbackUrl(articleId);
 
-      const maxRetries = 3;
-      for (var attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          final response = await http
-              .get(Uri.parse(url), headers: headers)
-              .timeout(const Duration(seconds: 30));
+      final candidates = <({String url, bool rateLimited})>[
+        if (preferFallback &&
+            fallbackUrl != null &&
+            fallbackUrl.isNotEmpty)
+          (url: fallbackUrl, rateLimited: true),
+        if (!preferFallback) (url: url, rateLimited: false),
+        if (!preferFallback &&
+            fallbackUrl != null &&
+            fallbackUrl.isNotEmpty)
+          (url: fallbackUrl, rateLimited: true),
+      ];
 
-          if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
-            await file.writeAsBytes(response.bodyBytes);
-            await _articleDb.updateCachePath(articleId, file.path);
-            _failedArticles.remove(articleId);
-            _notifyCallbacks(url, file.path);
-            return;
-          }
-
-          // 4xx 客户端错误（除 403/429 外）不重试
-          if (response.statusCode >= 400 &&
-              response.statusCode < 500 &&
-              response.statusCode != 403 &&
-              response.statusCode != 429) {
-            log(
-              'Image download failed with ${response.statusCode}: $url',
-              name: 'ImageCacheService',
-            );
-            _failedArticles[articleId] = url;
-            return;
-          }
-
-          // 403/429/5xx 继续重试
-          log(
-            'Image download got ${response.statusCode} (attempt $attempt): $url',
-            name: 'ImageCacheService',
-          );
-        } on SocketException catch (e) {
-          log(
-            'Network error while downloading image (attempt $attempt): $e',
-            name: 'ImageCacheService',
-          );
-        } on HttpException catch (e) {
-          log(
-            'HTTP error while downloading image (attempt $attempt): $e',
-            name: 'ImageCacheService',
-          );
-        } on http.ClientException catch (e) {
-          log(
-            'HTTP client error while downloading image (attempt $attempt): $e',
-            name: 'ImageCacheService',
-          );
-        } catch (e) {
-          log(
-            'Unexpected error downloading image (attempt $attempt): $e',
-            name: 'ImageCacheService',
-          );
+      for (final candidate in candidates) {
+        final body = await _downloadBytes(
+          candidate.url,
+          rateLimited: candidate.rateLimited,
+        );
+        if (body == null) {
+          continue;
         }
 
-        if (attempt < maxRetries) {
-          await Future.delayed(Duration(seconds: attempt));
-        }
+        await file.writeAsBytes(body);
+        await _articleDb.updateCachePath(articleId, file.path);
+        _failedArticles.remove(articleId);
+        _notifyCallbacks(articleId, file.path);
+        return;
       }
-      log(
-        'Image download failed after $maxRetries retries: $url',
-        name: 'ImageCacheService',
-      );
+
       _failedArticles[articleId] = url;
     } finally {
       if (slotAcquired) {
         _releaseDownloadSlot();
       }
-      _downloading.remove(url);
+      _downloading.remove(articleId);
     }
+  }
+
+  Future<List<int>?> _downloadBytes(
+    String url, {
+    required bool rateLimited,
+  }) async {
+    final headers = _buildHeaders(url);
+    final maxRetries = rateLimited ? 2 : 1;
+    final timeout = Duration(seconds: rateLimited ? 15 : 8);
+
+    for (var attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (rateLimited) {
+          await _waitForBackendRateLimit();
+        }
+
+        final response = await http
+            .get(Uri.parse(url), headers: headers)
+            .timeout(timeout);
+
+        if (response.statusCode == 200 &&
+            response.bodyBytes.isNotEmpty &&
+            _isImageResponse(response)) {
+          return response.bodyBytes;
+        }
+
+        if (response.statusCode == 200 && !_isImageResponse(response)) {
+          log(
+            'Image download returned non-image content: $url',
+            name: 'ImageCacheService',
+          );
+          return null;
+        }
+
+        if (response.statusCode >= 400 &&
+            response.statusCode < 500 &&
+            response.statusCode != 403 &&
+            response.statusCode != 429) {
+          log(
+            'Image download failed with ${response.statusCode}: $url',
+            name: 'ImageCacheService',
+          );
+          return null;
+        }
+
+        log(
+          'Image download got ${response.statusCode} (attempt $attempt): $url',
+          name: 'ImageCacheService',
+        );
+      } on SocketException catch (e) {
+        log(
+          'Network error while downloading image (attempt $attempt): $e',
+          name: 'ImageCacheService',
+        );
+      } on HttpException catch (e) {
+        log(
+          'HTTP error while downloading image (attempt $attempt): $e',
+          name: 'ImageCacheService',
+        );
+      } on http.ClientException catch (e) {
+        log(
+          'HTTP client error while downloading image (attempt $attempt): $e',
+          name: 'ImageCacheService',
+        );
+      } catch (e) {
+        log(
+          'Unexpected error downloading image (attempt $attempt): $e',
+          name: 'ImageCacheService',
+        );
+      }
+
+      if (attempt < maxRetries) {
+        await Future.delayed(Duration(seconds: attempt));
+      }
+    }
+
+    return null;
+  }
+
+  bool _isImageResponse(http.Response response) {
+    final contentType = response.headers['content-type']?.toLowerCase() ?? '';
+    return contentType.startsWith('image/');
+  }
+
+  String? buildFallbackUrl(int articleId) {
+    if (articleId <= 0) {
+      return null;
+    }
+
+    final normalizedBaseUrl = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (normalizedBaseUrl.isEmpty) {
+      return null;
+    }
+
+    final bucketStart =
+        ((articleId - 1) ~/ _fallbackBucketSize) * _fallbackBucketSize + 1;
+    final bucketEnd = bucketStart + _fallbackBucketSize - 1;
+    final path = '/media/article-images/$bucketStart-$bucketEnd/$articleId.webp';
+    return Uri.parse(normalizedBaseUrl).resolve(path).toString();
+  }
+
+  Future<void> _waitForBackendRateLimit() {
+    final completer = Completer<void>();
+    final previous = _backendRateGate;
+    _backendRateGate = completer.future;
+
+    return previous.then((_) async {
+      final now = DateTime.now();
+      final wait = _nextBackendRequestAt.difference(now);
+      if (wait > Duration.zero) {
+        await Future.delayed(wait);
+      }
+      _nextBackendRequestAt = DateTime.now().add(_backendMinInterval);
+      completer.complete();
+    });
   }
 
   Future<void> _acquireDownloadSlot() async {
@@ -207,9 +313,8 @@ class ImageCacheService {
     }
   }
 
-  /// 通知所有等待该 URL 下载完成的回调
-  void _notifyCallbacks(String url, String path) {
-    final callbacks = _downloading[url];
+  void _notifyCallbacks(int articleId, String path) {
+    final callbacks = _downloading[articleId];
     if (callbacks != null) {
       for (final cb in callbacks) {
         cb(path);
@@ -238,13 +343,18 @@ class ImageCacheService {
   Future<void> retryFailedImages() async {
     if (_failedArticles.isEmpty) return;
 
-    // 复制一份，避免迭代时修改
     final toRetry = Map<int, String>.from(_failedArticles);
     _failedArticles.clear();
 
     final tasks = <Future<void>>[];
     for (final entry in toRetry.entries) {
-      tasks.add(_downloadAndCache(entry.key, entry.value, null));
+      tasks.add(
+        _downloadAndCache(
+          entry.key,
+          entry.value,
+          null,
+        ),
+      );
     }
     final batches = _chunk(tasks, _maxConcurrentDownloads);
     for (var i = 0; i < batches.length; i++) {
@@ -275,7 +385,8 @@ class ImageCacheService {
 
   /// 批量预缓存多篇文章的图片
   Future<void> precacheArticles(
-    List<({int articleId, String? url, String? cachePath})> items, {
+    List<({int articleId, String? url, String? cachePath})>
+        items, {
     bool? wifiOnly,
   }) async {
     if (wifiOnly ?? this.wifiOnly) {
@@ -291,7 +402,13 @@ class ImageCacheService {
           File(item.cachePath!).existsSync()) {
         continue;
       }
-      tasks.add(_downloadAndCache(item.articleId, item.url!, null));
+      tasks.add(
+        _downloadAndCache(
+          item.articleId,
+          item.url!,
+          null,
+        ),
+      );
     }
     // 并发但限制为 _maxConcurrentDownloads 个，并在批次间做短暂等待
     final batches = _chunk(tasks, _maxConcurrentDownloads);
@@ -302,17 +419,6 @@ class ImageCacheService {
         await Future.delayed(_retryBatchDelay);
       }
     }
-  }
-
-  static String _extensionFromUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final pathExt = p.extension(uri.path).toLowerCase();
-      if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].contains(pathExt)) {
-        return pathExt;
-      }
-    } catch (_) {}
-    return '.jpg';
   }
 
   static List<List<T>> _chunk<T>(List<T> list, int size) {

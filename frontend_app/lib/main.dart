@@ -89,11 +89,13 @@ Future<void> main() async {
   // (settingsController, apiClient, imageCacheService) share the same
   // application lifetime, so there is no risk of a memory leak.
   imageCacheService.wifiOnly = settingsController.setting.wifiOnlyImages;
+  imageCacheService.baseUrl = settingsController.setting.baseURL;
   settingsController.addListener(() {
     final url = settingsController.setting.baseURL.trim();
     if (url.isNotEmpty) {
       apiClient.baseUrl = url;
     }
+    imageCacheService.baseUrl = settingsController.setting.baseURL;
     imageCacheService.wifiOnly = settingsController.setting.wifiOnlyImages;
   });
 
