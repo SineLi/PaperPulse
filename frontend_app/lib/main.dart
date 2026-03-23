@@ -205,6 +205,7 @@ class MyApp extends StatelessWidget {
                               return MaterialApp(
                                 title: 'PaperPulse',
                                 theme: ThemeData(
+                                  platform: TargetPlatform.android,
                                   colorScheme: lightColorScheme,
                                   useMaterial3: true,
                                   snackBarTheme: snackBarTheme,
@@ -213,6 +214,7 @@ class MyApp extends StatelessWidget {
                                   colorScheme: effectiveDarkColorScheme,
                                   useMaterial3: true,
                                   snackBarTheme: snackBarTheme,
+                                  platform: TargetPlatform.android,
                                   scaffoldBackgroundColor: amoledEnabled
                                       ? _amoledBlack
                                       : null,
