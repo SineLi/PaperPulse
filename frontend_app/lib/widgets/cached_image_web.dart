@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../data/service/image_cache_service.dart';
 
 class CachedArticleImage extends StatefulWidget {
   final int articleId;
@@ -24,17 +27,59 @@ class CachedArticleImage extends StatefulWidget {
 
 class _CachedArticleImageState extends State<CachedArticleImage> {
   bool _networkFailed = false;
+  bool _fallbackAttempted = false;
+  bool _showFallbackNetwork = false;
+  bool _fallbackLoading = false;
 
   void _retry() {
-    setState(() => _networkFailed = false);
+    setState(() {
+      _networkFailed = false;
+      _fallbackAttempted = false;
+      _showFallbackNetwork = false;
+      _fallbackLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final cacheService = context.read<ImageCacheService>();
+    final fallbackUrl = cacheService.buildFallbackUrl(widget.articleId);
 
     if (_networkFailed) {
       return _buildPlaceholder(colorScheme, tappable: true);
+    }
+
+    if (_fallbackLoading) {
+      return _buildLoading(
+        colorScheme,
+        ImageChunkEvent(cumulativeBytesLoaded: 0, expectedTotalBytes: null),
+      );
+    }
+
+    if (_showFallbackNetwork && fallbackUrl != null && fallbackUrl.isNotEmpty) {
+      return Image.network(
+        fallbackUrl,
+        fit: widget.fit,
+        width: widget.width,
+        height: widget.height,
+        errorBuilder: (context, error, stackTrace) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_networkFailed) {
+              setState(() {
+                _showFallbackNetwork = false;
+                _fallbackLoading = false;
+                _networkFailed = true;
+              });
+            }
+          });
+          return _buildPlaceholder(colorScheme, tappable: true);
+        },
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return _buildLoading(colorScheme, progress);
+        },
+      );
     }
 
     return Image.network(
@@ -45,7 +90,22 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       errorBuilder: (context, error, stackTrace) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && !_networkFailed) {
-            setState(() => _networkFailed = true);
+            if (!_fallbackAttempted &&
+                fallbackUrl != null &&
+                fallbackUrl.isNotEmpty) {
+              setState(() {
+                _fallbackAttempted = true;
+                _fallbackLoading = true;
+                _showFallbackNetwork = true;
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _fallbackLoading) {
+                  setState(() => _fallbackLoading = false);
+                }
+              });
+            } else {
+              setState(() => _networkFailed = true);
+            }
           }
         });
         return _buildPlaceholder(colorScheme, tappable: true);
