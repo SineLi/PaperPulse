@@ -18,12 +18,7 @@ import 'data/service/post_auth_sync_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 import 'data/service/image_cache_service.dart';
-
-import 'pages/login_page.dart';
-import 'pages/bootstrap_page.dart';
-import 'pages/app_shell_page.dart';
-import 'pages/setting_page.dart';
-import 'pages/signup_page.dart';
+import 'settings/settings_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

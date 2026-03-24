@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../pages/setting_page.dart';
+import '../settings/settings_controller.dart';
 
 /// 包裹需要登录才能查看的页面。
 /// 有 token 时正常渲染 [child]，无 token 时显示居中登录提示。

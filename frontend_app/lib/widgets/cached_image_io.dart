@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/service/image_cache_service.dart';
-import '../pages/setting_page.dart';
+import '../settings/settings_controller.dart';
 
 class CachedArticleImage extends StatefulWidget {
   final int articleId;

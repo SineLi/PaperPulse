@@ -3,10 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/service/post_auth_sync_service.dart';
+import '../settings/settings_controller.dart';
 import 'fav_page.dart';
 import 'feed_page.dart';
 import 'journal_page.dart';
-import 'setting_page.dart';
 
 class AppShellPage extends StatefulWidget {
   const AppShellPage({super.key});
