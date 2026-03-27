@@ -19,9 +19,12 @@ import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 import 'data/service/image_cache_service.dart';
 import 'settings/settings_controller.dart';
+import 'router/app_router.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
 
   final settingsController = SettingsController(SettingStorage());
   await settingsController.load();
@@ -135,6 +138,7 @@ class MyApp extends StatelessWidget {
   static const _defaultColorSeed = Colors.blue;
   static const _amoledBlack = Color(0xFF000000);
   static const _amoledRaised = Color(0xFF0D0D0D);
+  static final _router = createAppRouter();
 
   ColorScheme _withAmoledSurfaces(ColorScheme base) {
     return base.copyWith(
@@ -197,8 +201,9 @@ class MyApp extends StatelessWidget {
                               final effectiveDarkColorScheme = amoledEnabled
                                   ? _withAmoledSurfaces(darkColorScheme)
                                   : darkColorScheme;
-                              return MaterialApp(
+                              return MaterialApp.router(
                                 title: 'PaperPulse',
+                                routerConfig: _router,
                                 theme: ThemeData(
                                   platform: TargetPlatform.android,
                                   colorScheme: lightColorScheme,
@@ -231,14 +236,6 @@ class MyApp extends StatelessWidget {
                                 themeMode: context
                                     .watch<SettingsController>()
                                     .themeMode,
-                                home: const BootstrapPage(),
-                                routes: {
-                                  '/feed': (context) => const AppShellPage(),
-                                  '/login': (context) => const LoginPage(),
-                                  '/register': (context) =>
-                                      const RegisterPage(),
-                                  '/settings': (context) => const SettingPage(),
-                                },
                               );
                             },
                           ),

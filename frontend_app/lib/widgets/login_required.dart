@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
@@ -132,7 +133,7 @@ class _LoginPrompt extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => Navigator.of(context).pushNamed('/login'),
+              onPressed: () => context.push('/login'),
               icon: const Icon(Icons.login_rounded),
               label: const Text('去登录'),
               style: FilledButton.styleFrom(minimumSize: const Size(200, 48)),

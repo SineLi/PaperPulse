@@ -9,7 +9,6 @@ import '../data/models/article_view_data.dart';
 import '../data/db/articledb.dart';
 import '../settings/settings_controller.dart';
 import '../widgets/cached_image.dart';
-import 'setting_page.dart';
 
 /// 文章详情页
 ///

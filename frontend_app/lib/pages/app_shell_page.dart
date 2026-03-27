@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
@@ -9,14 +10,20 @@ import 'feed_page.dart';
 import 'journal_page.dart';
 
 class AppShellPage extends StatefulWidget {
-  const AppShellPage({super.key});
+  final int currentIndex;
+  final StatefulNavigationShell navigationShell;
+
+  const AppShellPage({
+    super.key,
+    required this.currentIndex,
+    required this.navigationShell,
+  });
 
   @override
   State<AppShellPage> createState() => _AppShellPageState();
 }
 
 class _AppShellPageState extends State<AppShellPage> {
-  int _currentIndex = 2; // Default to Feed
   int _lastHandledSyncCompletion = 0;
 
   // 为每个 Tab 维护一个独立的 ScrollController
@@ -27,6 +34,7 @@ class _AppShellPageState extends State<AppShellPage> {
   ];
 
   // 记录上次点击导航栏的时间，用于判断双击
+  // Tracks the previous nav tap for the double-tap-to-top gesture.
   DateTime? _lastTapTime;
 
   @override
@@ -40,7 +48,7 @@ class _AppShellPageState extends State<AppShellPage> {
   void _handleNavTap(int index) {
     final settings = context.read<SettingsController>().setting;
 
-    if (_currentIndex == index) {
+    if (widget.currentIndex == index) {
       // 如果点击的是当前选中的 Tab，检查是否是双击
       if (settings.doubleTapToTop) {
         final now = DateTime.now();
@@ -62,7 +70,7 @@ class _AppShellPageState extends State<AppShellPage> {
       }
     } else {
       // 切换 Tab
-      setState(() => _currentIndex = index);
+      widget.navigationShell.goBranch(index);
       _lastTapTime = null;
     }
   }
@@ -88,10 +96,10 @@ class _AppShellPageState extends State<AppShellPage> {
 
         return Scaffold(
           key: shellKey,
-          body: IndexedStack(index: _currentIndex, children: pages),
+          body: IndexedStack(index: widget.currentIndex, children: pages),
           bottomNavigationBar: NavigationBar(
             height: 64,
-            selectedIndex: _currentIndex,
+            selectedIndex: widget.navigationShell.currentIndex,
             labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
             onDestinationSelected: _handleNavTap,
             destinations: const [

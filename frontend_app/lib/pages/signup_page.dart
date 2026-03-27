@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
@@ -273,7 +274,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: () => context.go('/login'),
                           child: const Text('立即登录'),
                         ),
                       ],
@@ -375,7 +376,7 @@ class _RegisterPageState extends State<RegisterPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('注册成功，请登录')));
-      Navigator.of(context).pop();
+      context.go('/login');
     } catch (e) {
       if (!mounted) return;
       final message = e is AuthActionException ? e.message : '注册失败，请稍后重试';
