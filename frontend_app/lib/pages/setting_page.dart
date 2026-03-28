@@ -616,6 +616,18 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
                       .read<SettingsController>()
                       .updateDoubleTapToTop(v),
                 ),
+                SizedBox(height: 12),
+                _FontSizeRow(
+                  label: '双击灵敏度',
+                  value: settings.doubleTapSensitivity,
+                  min: 100,
+                  max: 1000,
+                  unit: 'ms',
+                  onSizeChanged: (v) => context
+                      .read<SettingsController>()
+                      .updateDoubleTapSensitivity(v),
+                ),
+                SizedBox(height: 20),
               ]),
             ),
           ],
@@ -863,6 +875,7 @@ class _FontSizeRow extends StatelessWidget {
   final double max;
   final bool showBoldToggle;
   final bool isBold;
+  final String unit;
   final ValueChanged<int> onSizeChanged;
   final ValueChanged<bool>? onBoldChanged;
 
@@ -874,6 +887,7 @@ class _FontSizeRow extends StatelessWidget {
     required this.onSizeChanged,
     this.showBoldToggle = false,
     this.isBold = false,
+    this.unit = 'px',
     this.onBoldChanged,
   });
 
@@ -900,7 +914,7 @@ class _FontSizeRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '$value px',
+                  '$value $unit',
                   style: textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSecondaryContainer,
                     fontWeight: FontWeight.bold,

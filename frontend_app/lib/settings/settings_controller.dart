@@ -18,6 +18,7 @@ class AppSetting {
   final int swipeSensitivity; // 50-200 px
   final bool enablePredictiveBack;
   final bool doubleTapToTop;
+  final int doubleTapSensitivity; // 100-1000 ms
 
   AppSetting({
     required this.themeMode,
@@ -34,6 +35,7 @@ class AppSetting {
     this.swipeSensitivity = 120,
     this.enablePredictiveBack = true,
     this.doubleTapToTop = true,
+    this.doubleTapSensitivity = 300,
   });
 
   AppSetting copyWith({
@@ -51,6 +53,7 @@ class AppSetting {
     int? swipeSensitivity,
     bool? enablePredictiveBack,
     bool? doubleTapToTop,
+    int? doubleTapSensitivity,
   }) {
     return AppSetting(
       themeMode: themeMode ?? this.themeMode,
@@ -69,6 +72,7 @@ class AppSetting {
       swipeSensitivity: swipeSensitivity ?? this.swipeSensitivity,
       enablePredictiveBack: enablePredictiveBack ?? this.enablePredictiveBack,
       doubleTapToTop: doubleTapToTop ?? this.doubleTapToTop,
+      doubleTapSensitivity: doubleTapSensitivity ?? this.doubleTapSensitivity,
     );
   }
 
@@ -102,6 +106,8 @@ class SettingStorage {
   static const String _keyEnablePredictiveBack =
       'settings.enablePredictiveBack';
   static const String _keyDoubleTapToTop = 'settings.doubleTapToTop';
+  static const String _keyDoubleTapSensitivity =
+      'settings.doubleTapSensitivity';
 
   Future<AppSetting> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -121,6 +127,7 @@ class SettingStorage {
       swipeSensitivity: prefs.getInt(_keySwipeSensitivity) ?? 140,
       enablePredictiveBack: prefs.getBool(_keyEnablePredictiveBack) ?? true,
       doubleTapToTop: prefs.getBool(_keyDoubleTapToTop) ?? true,
+      doubleTapSensitivity: prefs.getInt(_keyDoubleTapSensitivity) ?? 300,
     );
   }
 
@@ -146,6 +153,7 @@ class SettingStorage {
     await prefs.setInt(_keySwipeSensitivity, setting.swipeSensitivity);
     await prefs.setBool(_keyEnablePredictiveBack, setting.enablePredictiveBack);
     await prefs.setBool(_keyDoubleTapToTop, setting.doubleTapToTop);
+    await prefs.setInt(_keyDoubleTapSensitivity, setting.doubleTapSensitivity);
   }
 }
 
@@ -163,6 +171,7 @@ class SettingsController extends ChangeNotifier {
     headerBold: true,
     titleBold: true,
     wifiOnlyImages: false,
+    doubleTapSensitivity: 300,
   );
 
   AppSetting get setting => _setting;
@@ -253,6 +262,12 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> updateDoubleTapToTop(bool enabled) async {
     _setting = _setting.copyWith(doubleTapToTop: enabled);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
+
+  Future<void> updateDoubleTapSensitivity(int sensitivity) async {
+    _setting = _setting.copyWith(doubleTapSensitivity: sensitivity);
     await _storage.save(_setting);
     notifyListeners();
   }
