@@ -4,10 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/service/post_auth_sync_service.dart';
+import '../navigation/tab_scroll_registry.dart';
 import '../settings/settings_controller.dart';
-import 'fav_page.dart';
-import 'feed_page.dart';
-import 'journal_page.dart';
 
 class AppShellPage extends StatefulWidget {
   final int currentIndex;
@@ -25,53 +23,38 @@ class AppShellPage extends StatefulWidget {
 
 class _AppShellPageState extends State<AppShellPage> {
   int _lastHandledSyncCompletion = 0;
+  int get _currentIndex => widget.currentIndex;
 
-  // 为每个 Tab 维护一个独立的 ScrollController
-  final List<ScrollController> _scrollControllers = [
-    ScrollController(),
-    ScrollController(),
-    ScrollController(),
-  ];
+  DateTime? _lastDestinationClickTime;
+  int? _lastClickedIndex;
 
-  // 记录上次点击导航栏的时间，用于判断双击
-  // Tracks the previous nav tap for the double-tap-to-top gesture.
-  DateTime? _lastTapTime;
-
-  @override
-  void dispose() {
-    for (final controller in _scrollControllers) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  void _handleNavTap(int index) {
+  Future<void> _onDestinationClick(int index) async {
     final settings = context.read<SettingsController>().setting;
+    final isSameTab = _currentIndex == index;
 
-    if (widget.currentIndex == index) {
-      // 如果点击的是当前选中的 Tab，检查是否是双击
-      if (settings.doubleTapToTop) {
-        final now = DateTime.now();
-        if (_lastTapTime != null &&
-            now.difference(_lastTapTime!) < const Duration(milliseconds: 300)) {
-          // 触发双击回到顶部
-          final controller = _scrollControllers[index];
-          if (controller.hasClients) {
-            controller.animateTo(
-              0,
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeOutCubic,
-            );
-          }
-          _lastTapTime = null; // 重置时间
-          return;
-        }
-        _lastTapTime = now;
+    if (settings.doubleTapToTop) {
+      final now = DateTime.now();
+      final isDoubleTap =
+          isSameTab &&
+          _lastClickedIndex == index &&
+          _lastDestinationClickTime != null &&
+          now.difference(_lastDestinationClickTime!) <
+              Duration(milliseconds: settings.doubleTapSensitivity);
+
+      if (isDoubleTap) {
+        // The tab page owns the controller; the shell only triggers the action.
+        await context.read<TabScrollRegistry>().scrollToTop(index);
+        _lastDestinationClickTime = null;
+        _lastClickedIndex = null;
+        return;
       }
-    } else {
-      // 切换 Tab
+
+      _lastDestinationClickTime = now;
+      _lastClickedIndex = index;
+    }
+
+    if (!isSameTab) {
       widget.navigationShell.goBranch(index);
-      _lastTapTime = null;
     }
   }
 
@@ -88,20 +71,16 @@ class _AppShellPageState extends State<AppShellPage> {
 
         final shellKey = ValueKey('AppShell-${hasToken ? "Auth" : "Guest"}');
 
-        final pages = [
-          JournalPage(scrollController: _scrollControllers[0]),
-          FavPage(scrollController: _scrollControllers[1]),
-          FeedPage(scrollController: _scrollControllers[2]),
-        ];
-
         return Scaffold(
           key: shellKey,
-          body: IndexedStack(index: widget.currentIndex, children: pages),
+          body: widget.navigationShell,
           bottomNavigationBar: NavigationBar(
             height: 64,
             selectedIndex: widget.navigationShell.currentIndex,
             labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-            onDestinationSelected: _handleNavTap,
+            onDestinationSelected: (index) async {
+              await _onDestinationClick(index);
+            },
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.book_outlined),

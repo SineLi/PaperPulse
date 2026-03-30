@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/repositories/feed_repo.dart';
 import '../data/service/post_auth_sync_service.dart';
 import '../data/service/sync_service.dart';
+import '../navigation/tab_scroll_registry.dart';
 import '../widgets/article_list_page.dart';
 
 class FavPage extends StatelessWidget {
@@ -20,6 +21,7 @@ class FavPage extends StatelessWidget {
     return ArticleListPage(
       title: '我的收藏',
       scrollController: scrollController,
+      tabScrollIndex: favoritesTabIndex,
       loadArticles: (limit, offset, filter) =>
           feedRepo.getLocalFavoriteArticles(
             limit: limit,

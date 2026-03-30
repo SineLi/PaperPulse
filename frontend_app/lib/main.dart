@@ -18,6 +18,7 @@ import 'data/service/post_auth_sync_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 import 'data/service/image_cache_service.dart';
+import 'navigation/tab_scroll_registry.dart';
 import 'settings/settings_controller.dart';
 import 'router/app_router.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -81,6 +82,7 @@ Future<void> main() async {
     feedRepo: feedRepo,
     syncService: syncService,
   );
+  final tabScrollRegistry = TabScrollRegistry();
 
   // Initialize wifiOnly from loaded settings, then keep in sync via listener.
   // The listener is intentionally never removed: all three objects
@@ -108,6 +110,7 @@ Future<void> main() async {
       syncService: syncService,
       imageCacheService: imageCacheService,
       postAuthSyncService: postAuthSyncService,
+      tabScrollRegistry: tabScrollRegistry,
     ),
   );
 }
@@ -122,6 +125,7 @@ class MyApp extends StatelessWidget {
   final SyncService syncService;
   final ImageCacheService imageCacheService;
   final PostAuthSyncService postAuthSyncService;
+  final TabScrollRegistry tabScrollRegistry;
   const MyApp({
     super.key,
     required this.settingsController,
@@ -133,6 +137,7 @@ class MyApp extends StatelessWidget {
     required this.syncService,
     required this.imageCacheService,
     required this.postAuthSyncService,
+    required this.tabScrollRegistry,
   });
 
   static const _defaultColorSeed = Colors.blue;
@@ -195,49 +200,53 @@ class MyApp extends StatelessWidget {
                         value: postAuthSyncService,
                         child: Provider<ImageCacheService>.value(
                           value: imageCacheService,
-                          child: Consumer<SettingsController>(
-                            builder: (context, settingsCtrl, _) {
-                              final amoledEnabled = settingsCtrl.setting.amoled;
-                              final effectiveDarkColorScheme = amoledEnabled
-                                  ? _withAmoledSurfaces(darkColorScheme)
-                                  : darkColorScheme;
-                              return MaterialApp.router(
-                                title: 'PaperPulse',
-                                routerConfig: _router,
-                                theme: ThemeData(
-                                  platform: TargetPlatform.android,
-                                  colorScheme: lightColorScheme,
-                                  useMaterial3: true,
-                                  snackBarTheme: snackBarTheme,
-                                ),
-                                darkTheme: ThemeData(
-                                  colorScheme: effectiveDarkColorScheme,
-                                  useMaterial3: true,
-                                  snackBarTheme: snackBarTheme,
-                                  platform: TargetPlatform.android,
-                                  scaffoldBackgroundColor: amoledEnabled
-                                      ? _amoledBlack
-                                      : null,
-                                  canvasColor: amoledEnabled
-                                      ? _amoledBlack
-                                      : null,
-                                  cardColor: amoledEnabled
-                                      ? _amoledBlack
-                                      : null,
-                                  appBarTheme: AppBarTheme(
-                                    backgroundColor: amoledEnabled
+                          child: Provider<TabScrollRegistry>.value(
+                            value: tabScrollRegistry,
+                            child: Consumer<SettingsController>(
+                              builder: (context, settingsCtrl, _) {
+                                final amoledEnabled =
+                                    settingsCtrl.setting.amoled;
+                                final effectiveDarkColorScheme = amoledEnabled
+                                    ? _withAmoledSurfaces(darkColorScheme)
+                                    : darkColorScheme;
+                                return MaterialApp.router(
+                                  title: 'PaperPulse',
+                                  routerConfig: _router,
+                                  theme: ThemeData(
+                                    platform: TargetPlatform.android,
+                                    colorScheme: lightColorScheme,
+                                    useMaterial3: true,
+                                    snackBarTheme: snackBarTheme,
+                                  ),
+                                  darkTheme: ThemeData(
+                                    colorScheme: effectiveDarkColorScheme,
+                                    useMaterial3: true,
+                                    snackBarTheme: snackBarTheme,
+                                    platform: TargetPlatform.android,
+                                    scaffoldBackgroundColor: amoledEnabled
                                         ? _amoledBlack
                                         : null,
-                                    surfaceTintColor: amoledEnabled
-                                        ? Colors.transparent
+                                    canvasColor: amoledEnabled
+                                        ? _amoledBlack
                                         : null,
+                                    cardColor: amoledEnabled
+                                        ? _amoledBlack
+                                        : null,
+                                    appBarTheme: AppBarTheme(
+                                      backgroundColor: amoledEnabled
+                                          ? _amoledBlack
+                                          : null,
+                                      surfaceTintColor: amoledEnabled
+                                          ? Colors.transparent
+                                          : null,
+                                    ),
                                   ),
-                                ),
-                                themeMode: context
-                                    .watch<SettingsController>()
-                                    .themeMode,
-                              );
-                            },
+                                  themeMode: context
+                                      .watch<SettingsController>()
+                                      .themeMode,
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),

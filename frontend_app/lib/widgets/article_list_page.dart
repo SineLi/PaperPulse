@@ -32,6 +32,7 @@ class ArticleListPage extends StatefulWidget {
   final String? emptyActionLabel;
   final int pageSize;
   final ScrollController? scrollController;
+  final int? tabScrollIndex;
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
@@ -59,6 +60,7 @@ class ArticleListPage extends StatefulWidget {
     this.emptyActionLabel = '刷新',
     this.pageSize = 20,
     this.scrollController,
+    this.tabScrollIndex,
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
@@ -125,6 +127,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
       emptyActionLabel: widget.emptyActionLabel,
       pageSize: widget.pageSize,
       scrollController: widget.scrollController,
+      tabScrollIndex: widget.tabScrollIndex,
       autoRefreshOnInit: widget.autoRefreshOnInit,
       showExternalRefreshing: widget.showExternalRefreshing,
       externalRefreshSignal: widget.externalRefreshSignal,

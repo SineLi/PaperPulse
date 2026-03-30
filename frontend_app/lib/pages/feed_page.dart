@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../data/repositories/feed_repo.dart';
 import '../data/service/post_auth_sync_service.dart';
 import '../data/service/sync_service.dart';
+import '../navigation/tab_scroll_registry.dart';
 import '../widgets/article_list_page.dart';
 
 class FeedPage extends StatelessWidget {
@@ -20,6 +21,7 @@ class FeedPage extends StatelessWidget {
     return ArticleListPage(
       title: '文章推送',
       scrollController: scrollController,
+      tabScrollIndex: feedTabIndex,
       loadArticles: (limit, offset, filter) => feedRepo.getLocalArticles(
         limit: limit,
         offset: offset,

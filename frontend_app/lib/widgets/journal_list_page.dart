@@ -31,6 +31,7 @@ class JournalListPage extends StatefulWidget {
   final String emptySubtitle;
   final int pageSize;
   final ScrollController? scrollController;
+  final int? tabScrollIndex;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
 
@@ -50,6 +51,7 @@ class JournalListPage extends StatefulWidget {
     this.emptySubtitle = '期刊数据加载中…',
     this.pageSize = 30,
     this.scrollController,
+    this.tabScrollIndex,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
   });
@@ -107,6 +109,7 @@ class _JournalListPageState extends State<JournalListPage> {
       emptySubtitle: widget.emptySubtitle,
       pageSize: widget.pageSize,
       scrollController: widget.scrollController,
+      tabScrollIndex: widget.tabScrollIndex,
       showExternalRefreshing: widget.showExternalRefreshing,
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 8,

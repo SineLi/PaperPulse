@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../navigation/tab_scroll_registry.dart';
 import '../pages/setting_page.dart';
 import 'login_required.dart';
 
@@ -103,6 +105,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 
   /// 暴露 ScrollController 给外部使用（可选）
   final ScrollController? scrollController;
+  final int? tabScrollIndex;
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
@@ -129,6 +132,7 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.emptyActionLabel,
     this.pageSize = 20,
     this.scrollController,
+    this.tabScrollIndex,
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
@@ -157,6 +161,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   void initState() {
     super.initState();
     _scrollController = widget.scrollController ?? ScrollController();
+    if (widget.tabScrollIndex != null) {
+      // The page owns the controller, but the shell can still find it by tab.
+      context.read<TabScrollRegistry>().register(
+        widget.tabScrollIndex!,
+        _scrollController,
+      );
+    }
     _loadMore();
     if (widget.autoRefreshOnInit && widget.onRefresh != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -327,6 +338,12 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   @override
   void dispose() {
+    if (widget.tabScrollIndex != null) {
+      context.read<TabScrollRegistry>().unregister(
+        widget.tabScrollIndex!,
+        _scrollController,
+      );
+    }
     if (widget.scrollController == null) {
       _scrollController.dispose();
     }
