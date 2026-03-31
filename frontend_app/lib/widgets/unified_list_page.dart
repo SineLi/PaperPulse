@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../navigation/tab_scroll_registry.dart';
@@ -403,9 +404,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           icon: const Icon(Icons.settings_outlined),
           tooltip: '设置',
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const SettingPage()),
-            );
+            context.push("/settings");
           },
         ),
       );

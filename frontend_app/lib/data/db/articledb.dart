@@ -60,6 +60,38 @@ class ArticleDatabaseIO {
     return maps.map((map) => Article.fromMap(map)).toList();
   }
 
+  Future<List<int>> getArticleIds(ArticleFilter filter) async {
+    final db = await dbHelper.database;
+    final q = _buildFilterQuery(filter);
+    final maps = await db.query(
+      Article.tableArticles,
+      columns: [Article.colId],
+      where: q.where.isEmpty ? null : q.where,
+      whereArgs: q.whereArgs.isEmpty ? null : q.whereArgs,
+      orderBy: q.orderBy,
+    );
+    return maps.map((map) => map[Article.colId] as int).toList();
+  }
+
+  Future<List<int>> getAllArticleIds() async {
+    // Feed 详情页直接沿用默认文章排序。
+    return getArticleIds(ArticleFilter.empty);
+  }
+
+  Future<List<int>> getFavoriteArticleIdsInOrder() async {
+    final db = await dbHelper.database;
+    // 详情页的上一篇/下一篇需要有序 ID 列表；
+    // 下面原有的 getFavoriteArticleIds() 仍然保留给同步逻辑使用。
+    final maps = await db.query(
+      Article.tableArticles,
+      columns: [Article.colId],
+      where: '${Article.colIsFavorite} = ?',
+      whereArgs: [1],
+      orderBy: '${Article.colId} DESC',
+    );
+    return maps.map((map) => map[Article.colId] as int).toList();
+  }
+
   Future<int> setFavorite(int id, bool isFavorite) async {
     final db = await dbHelper.database;
     return await db.update(
@@ -246,11 +278,7 @@ class ArticleDatabaseIO {
     final db = await dbHelper.database;
     return await db.query(
       Article.tableArticles,
-      columns: [
-        Article.colId,
-        Article.colGAUrl,
-        Article.colGACachePath,
-      ],
+      columns: [Article.colId, Article.colGAUrl, Article.colGACachePath],
       where:
           '${Article.colGAUrl} IS NOT NULL AND ${Article.colGAUrl} != ? '
           'AND (${Article.colGACachePath} IS NULL OR ${Article.colGACachePath} = ?)',

@@ -22,6 +22,7 @@ class FeedPage extends StatelessWidget {
       title: '文章推送',
       scrollController: scrollController,
       tabScrollIndex: feedTabIndex,
+      routeSource: 'feed',
       loadArticles: (limit, offset, filter) => feedRepo.getLocalArticles(
         limit: limit,
         offset: offset,

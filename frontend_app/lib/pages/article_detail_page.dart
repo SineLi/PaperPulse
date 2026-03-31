@@ -4,25 +4,40 @@ import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../data/models/article.dart';
 import '../data/models/article_view_data.dart';
 import '../data/db/articledb.dart';
 import '../settings/settings_controller.dart';
 import '../widgets/cached_image.dart';
 
+const articleSourceFeed = 'feed';
+const articleSourceFavorites = 'favorites';
+
+// 目前只支持少数几个固定来源，用来在详情页里重建上一篇/下一篇的文章 ID 列表。
+String normalizeArticleSource(String? source) {
+  switch (source?.toLowerCase()) {
+    case articleSourceFavorites:
+      return articleSourceFavorites;
+    case articleSourceFeed:
+    default:
+      return articleSourceFeed;
+  }
+}
+
 /// 文章详情页
 ///
 /// [articles] 当前文章列表，用于上一篇 / 下一篇导航
 /// [initialIndex] 当前文章在列表中的索引
+/// 基于路由参数驱动的文章详情页。
 class ArticleDetailPage extends StatefulWidget {
-  final List<Article> articles;
-  final int initialIndex;
+  final int articleId;
+  final String source; // 用于分析入口来源
+  // 可选回调：从列表页进入时，用来同步更新发起页的已读状态。
   final void Function(int articleId)? onArticleRead;
 
   const ArticleDetailPage({
     super.key,
-    required this.articles,
-    required this.initialIndex,
+    required this.articleId,
+    required this.source,
     this.onArticleRead,
   });
 
@@ -31,60 +46,99 @@ class ArticleDetailPage extends StatefulWidget {
 }
 
 class _ArticleDetailPageState extends State<ArticleDetailPage> {
-  late int _currentIndex;
   late ArticleViewData _viewData;
+  bool _hasData = false;
+  List<int> _articleIds = const <int>[];
+  int _currentPosition = 0;
   late ScrollController _scrollController;
-  late final Map<int, ArticleViewData> _viewDataCache;
   final Set<int> _markedAsRead = <int>{};
   bool _barsVisible = true;
   double _lastScrollOffset = 0;
   late bool _isFavorite;
   bool _suppressScrollListener = false;
-  bool _hasSwitchedArticle = false;
-
-  /// 切换动画方向: 1 = 下一篇(向上滑出), -1 = 上一篇(向下滑出)
-  int _slideDirection = 1;
-
-  /// 用于 AnimatedSwitcher 的 key
   late ValueKey<int> _contentKey;
-
-  /// 边缘过度滚动阈值（由设置 swipeSensitivity 覆盖）
-  static const double _overscrollThresholdDefault = 120;
-
-  /// 已达到阈值，等待松手后触发切换的方向: 1=下一篇, -1=上一篇, 0=无
-  int _pendingDirection = 0;
-  bool _showReleaseHint = false;
-  bool _hapticFired = false;
-  bool _pointerIsDown = false;
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
-    _viewDataCache = <int, ArticleViewData>{};
-    _viewData = _viewDataForIndex(_currentIndex);
-    _isFavorite = _viewData.isFavorite;
-    _contentKey = ValueKey(_currentIndex);
+    _contentKey = ValueKey(widget.articleId);
+    _isFavorite = false;
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
-    _markAsRead();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
   }
 
-  ArticleViewData _viewDataForIndex(int index) {
-    return _viewDataCache.putIfAbsent(
-      index,
-      () => ArticleViewData.fromArticle(widget.articles[index]),
-    );
-  }
+  Future<void> _loadInitialData() async {
+    // 从本地数据库重建当前来源下的文章 ID 列表，这样无论是直达 URL
+    // 还是页面刷新，详情页都仍然知道如何切换上一篇/下一篇。
+    final ids = await _loadSourceArticleIds();
+    if (!mounted) return;
 
-  void _setSwitchHint(int direction, bool visible) {
-    if (_pendingDirection == direction && _showReleaseHint == visible) {
+    if (ids.isEmpty) {
+      _articleIds = <int>[widget.articleId];
+      _currentPosition = 0;
+      await _loadArticle(widget.articleId);
       return;
     }
+
+    final position = ids.indexOf(widget.articleId);
+    if (position == -1) {
+      _articleIds = <int>[widget.articleId];
+      _currentPosition = 0;
+      await _loadArticle(widget.articleId);
+      return;
+    }
+
+    _articleIds = ids;
+    _currentPosition = position;
+    await _loadArticle(widget.articleId);
+  }
+
+  Future<List<int>> _loadSourceArticleIds() async {
+    final db = context.read<ArticleDatabaseIO>();
+    switch (normalizeArticleSource(widget.source)) {
+      case articleSourceFavorites:
+        return db.getFavoriteArticleIdsInOrder();
+      case articleSourceFeed:
+      default:
+        return db.getAllArticleIds();
+    }
+  }
+
+  Future<void> _loadArticle(int id) async {
+    final db = context.read<ArticleDatabaseIO>();
+    // 按文章 ID 现场查库，不再依赖列表页传进来的内存文章列表。
+    final article = await db.getArticle(id);
+    if (!mounted || article == null) return;
+    final view = ArticleViewData.fromArticle(article);
     setState(() {
-      _pendingDirection = direction;
-      _showReleaseHint = visible;
+      _viewData = view;
+      _isFavorite = view.isFavorite;
+      _contentKey = ValueKey(id);
+      _hasData = true;
     });
+    await _markAsRead();
+  }
+
+  Future<void> _navigateToPosition(int nextPosition) async {
+    if (nextPosition < 0 || nextPosition >= _articleIds.length) return;
+    // 切换文章时总是回到顶部，避免保留上一篇的滚动位置。
+    if (_scrollController.hasClients && _scrollController.offset != 0) {
+      _suppressScrollListener = true;
+      try {
+        _scrollController.jumpTo(0);
+      } finally {
+        _suppressScrollListener = false;
+      }
+    }
+    setState(() {
+      _currentPosition = nextPosition;
+      _barsVisible = true;
+      _lastScrollOffset = 0;
+    });
+    await _loadArticle(_articleIds[nextPosition]);
   }
 
   void _onScroll() {
@@ -104,103 +158,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
   /// 监听滚动：达到阈值时振动提示并显示 hint，松手时才真正切换
   bool _onScrollNotification(ScrollNotification notification) {
-    final settings = context.read<SettingsController>().setting;
-    final threshold = settings.swipeSensitivity <= 0
-        ? _overscrollThresholdDefault
-        : settings.swipeSensitivity.toDouble();
-
-    if (notification is ScrollStartNotification) {
-      _pendingDirection = 0;
-      _showReleaseHint = false;
-      _hapticFired = false;
-    } else if (notification is ScrollUpdateNotification) {
-      if (!_pointerIsDown || notification.dragDetails == null) {
-        return false;
-      }
-
-      final metrics = notification.metrics;
-
-      // 顶端越界 → 准备上一篇（受 swipeToChangeArticleUp 控制）
-      if (settings.swipeToChangeArticleUp &&
-          metrics.pixels < metrics.minScrollExtent &&
-          _currentIndex > 0) {
-        final overscroll = metrics.minScrollExtent - metrics.pixels;
-        if (overscroll > threshold) {
-          if (!_hapticFired) {
-            _hapticFired = true;
-            HapticFeedback.mediumImpact();
-          }
-          _setSwitchHint(-1, true);
-        } else {
-          _setSwitchHint(0, false);
-          _hapticFired = false;
-        }
-      }
-      // 底端越界 → 准备下一篇（受 swipeToChangeArticleDown 控制）
-      else if (settings.swipeToChangeArticleDown &&
-          metrics.pixels > metrics.maxScrollExtent &&
-          _currentIndex < widget.articles.length - 1) {
-        final overscroll = metrics.pixels - metrics.maxScrollExtent;
-        if (overscroll > threshold) {
-          if (!_hapticFired) {
-            _hapticFired = true;
-            HapticFeedback.mediumImpact();
-          }
-          _setSwitchHint(1, true);
-        } else {
-          _setSwitchHint(0, false);
-          _hapticFired = false;
-        }
-      } else {
-        _setSwitchHint(0, false);
-        _hapticFired = false;
-      }
-    }
     return false;
   }
 
-  void _triggerPendingSwitch() {
-    _pointerIsDown = false;
-    if (_showReleaseHint && _pendingDirection == -1) {
-      _navigateTo(_currentIndex - 1);
-    } else if (_showReleaseHint && _pendingDirection == 1) {
-      _navigateTo(_currentIndex + 1);
-    }
-    _pendingDirection = 0;
-    _showReleaseHint = false;
-    _hapticFired = false;
-  }
-
-  void _navigateTo(int index) {
-    if (index < 0 ||
-        index >= widget.articles.length ||
-        index == _currentIndex) {
-      return;
-    }
-
-    if (_scrollController.hasClients && _scrollController.offset != 0) {
-      _suppressScrollListener = true;
-      try {
-        _scrollController.jumpTo(0);
-      } finally {
-        _suppressScrollListener = false;
-      }
-    }
-
-    setState(() {
-      _hasSwitchedArticle = true;
-      _slideDirection = index > _currentIndex ? 1 : -1;
-      _currentIndex = index;
-      _viewData = _viewDataForIndex(_currentIndex);
-      _isFavorite = _viewData.isFavorite;
-      _contentKey = ValueKey(_currentIndex);
-      _lastScrollOffset = 0;
-      _barsVisible = true;
-    });
-    _markAsRead();
-  }
-
   Future<void> _markAsRead() async {
+    if (!_hasData) return;
     if (_viewData.isRead || _markedAsRead.contains(_viewData.id)) return;
     _markedAsRead.add(_viewData.id);
     final db = context.read<ArticleDatabaseIO>();
@@ -214,6 +176,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   Future<void> _toggleFavorite() async {
+    if (!_hasData) return;
     final db = context.read<ArticleDatabaseIO>();
     final newState = !_isFavorite;
     await db.setFavoriteWithSync(_viewData.id, newState);
@@ -223,6 +186,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   void _shareDoi() {
+    if (!_hasData) return;
     final doi = _viewData.article.doi;
     if (doi.isEmpty) {
       ScaffoldMessenger.of(
@@ -239,6 +203,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   void _openInBrowser() {
+    if (!_hasData) return;
     final doi = _viewData.article.doi;
     if (doi.isEmpty) {
       ScaffoldMessenger.of(
@@ -262,113 +227,56 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final settings = context.watch<SettingsController>().setting;
-    final disableAnimations =
-        MediaQuery.maybeOf(context)?.accessibleNavigation ?? false;
+
+    if (!_hasData) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return PredictiveBackScope(
       child: Scaffold(
         body: Stack(
           children: [
             // ── 主要内容 ──
-            Listener(
-              onPointerDown: (_) => _pointerIsDown = true,
-              onPointerUp: (_) => _triggerPendingSwitch(),
-              onPointerCancel: (_) => _triggerPendingSwitch(),
-              child: NotificationListener<ScrollNotification>(
-                onNotification: _onScrollNotification,
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  slivers: [
-                    // AppBar — floating + snap，向下滚动隐藏，向上微滑即回
-                    SliverAppBar(
-                      floating: true,
-                      snap: true,
-                      title: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                      ),
-                      actions: [
-                        IconButton(
-                          icon: const Icon(Icons.open_in_browser_rounded),
-                          tooltip: '在浏览器中打开',
-                          onPressed: _openInBrowser,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                    ),
-
-                    // 正文 — 带上下切换动画
-                    SliverToBoxAdapter(
-                      child: _buildArticleSwitchTransition(
-                        animate: !disableAnimations && _hasSwitchedArticle,
-                        child: RepaintBoundary(
-                          child: _buildArticleContent(
-                            colorScheme,
-                            textTheme,
-                            settings,
-                            key: _contentKey,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+            NotificationListener<ScrollNotification>(
+              onNotification: _onScrollNotification,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
                 ),
-              ),
-            ),
+                slivers: [
+                  // AppBar — floating + snap，向下滚动隐藏，向上微滑即回
+                  SliverAppBar(
+                    floating: true,
+                    snap: true,
+                    title: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.open_in_browser_rounded),
+                        tooltip: '在浏览器中打开',
+                        onPressed: _openInBrowser,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                  ),
 
-            // ── 切换提示 ──
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: _pendingDirection == 1 ? 0 : null,
-              top: _pendingDirection == -1 ? 0 : null,
-              child: IgnorePointer(
-                ignoring: true,
-                child: SafeArea(
-                  bottom: _pendingDirection == 1,
-                  top: _pendingDirection == -1,
-                  child: Center(
-                    child: AnimatedOpacity(
-                      opacity: _showReleaseHint ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeOut,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 12),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colorScheme.inverseSurface,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _pendingDirection == -1
-                                  ? Icons.keyboard_arrow_up_rounded
-                                  : Icons.keyboard_arrow_down_rounded,
-                              size: 18,
-                              color: colorScheme.onInverseSurface,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _pendingDirection == -1 ? '松手切换上一篇' : '松手切换下一篇',
-                              style: TextStyle(
-                                color: colorScheme.onInverseSurface,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                  // 正文 — 带上下切换动画
+                  SliverToBoxAdapter(
+                    child: _buildArticleSwitchTransition(
+                      animate: false,
+                      child: RepaintBoundary(
+                        child: _buildArticleContent(
+                          colorScheme,
+                          textTheme,
+                          settings,
+                          key: _contentKey,
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
 
@@ -391,7 +299,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   // ── 文章正文内容（独立 widget 方便做 AnimatedSwitcher） ──
-  // Only animate incoming content to avoid rendering two heavy trees at once.
+  // 只给新内容做入场动画，避免同时渲染两棵较重的内容树。
   Widget _buildArticleSwitchTransition({
     required Widget child,
     required bool animate,
@@ -405,7 +313,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       curve: Curves.easeOutCubic,
       child: child,
       builder: (context, value, child) {
-        final translateY = (1 - value) * 50 * _slideDirection;
+        const slideDirection = 1;
+        final translateY = (1 - value) * 50 * slideDirection;
         final opacity = 0.82 + (0.18 * value);
         return Transform.translate(
           offset: Offset(0, translateY),
@@ -794,8 +703,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
   // ── 底部功能栏 ──
   Widget _buildBottomBar(ColorScheme colorScheme, TextTheme textTheme) {
-    final hasPrev = _currentIndex > 0;
-    final hasNext = _currentIndex < widget.articles.length - 1;
+    final hasPrev = _currentPosition > 0;
+    final hasNext = _currentPosition < _articleIds.length - 1;
 
     return Container(
       decoration: BoxDecoration(
@@ -812,36 +721,28 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             children: [
-              // 上一篇
               IconButton(
                 icon: const Icon(Icons.keyboard_arrow_up_rounded),
                 tooltip: '上一篇',
                 onPressed: hasPrev
-                    ? () => _navigateTo(_currentIndex - 1)
+                    ? () => _navigateToPosition(_currentPosition - 1)
                     : null,
               ),
-
-              // 下一篇
               IconButton(
                 icon: const Icon(Icons.keyboard_arrow_down_rounded),
                 tooltip: '下一篇',
                 onPressed: hasNext
-                    ? () => _navigateTo(_currentIndex + 1)
+                    ? () => _navigateToPosition(_currentPosition + 1)
                     : null,
               ),
-
               const Spacer(),
-
-              // 位置指示
               Text(
-                '${_currentIndex + 1} / ${widget.articles.length}',
+                '${_currentPosition + 1} / ${_articleIds.length}',
                 style: textTheme.labelMedium?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-
               const Spacer(),
-
               // 收藏
               IconButton(
                 icon: Icon(

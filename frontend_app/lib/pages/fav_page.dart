@@ -22,6 +22,7 @@ class FavPage extends StatelessWidget {
       title: '我的收藏',
       scrollController: scrollController,
       tabScrollIndex: favoritesTabIndex,
+      routeSource: 'favorites',
       loadArticles: (limit, offset, filter) =>
           feedRepo.getLocalFavoriteArticles(
             limit: limit,
