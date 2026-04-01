@@ -232,10 +232,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: Stack(
-          children: [
+    return Scaffold(
+      body: Stack(
+        children: [
             // ── 主要内容 ──
             NotificationListener<ScrollNotification>(
               onNotification: _onScrollNotification,
@@ -292,8 +291,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 child: _buildBottomBar(colorScheme, textTheme),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

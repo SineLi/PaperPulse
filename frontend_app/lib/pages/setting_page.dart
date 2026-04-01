@@ -25,10 +25,9 @@ class SettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('设置')),
             SliverList(
               delegate: SliverChildListDelegate([
@@ -93,8 +92,7 @@ class SettingPage extends StatelessWidget {
                 SizedBox(height: 48),
               ]),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -205,10 +203,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('账户')),
             if (_loading)
               const SliverFillRemaining(
@@ -221,8 +218,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   _user != null ? _buildLoggedIn() : _buildLoggedOut(),
                 ),
               ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -317,10 +313,9 @@ class ThemeSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>().setting;
 
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('外观')),
             SliverList(
               delegate: SliverChildListDelegate([
@@ -436,8 +431,7 @@ class ThemeSettingsPage extends StatelessWidget {
                 SizedBox(height: 64),
               ]),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -494,10 +488,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>().setting;
 
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('网络')),
             SliverList(
               delegate: SliverChildListDelegate([
@@ -539,8 +532,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ),
               ]),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -560,10 +552,9 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsController>().setting;
 
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('操作')),
             SliverList(
               delegate: SliverChildListDelegate([
@@ -596,16 +587,6 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
                       .read<SettingsController>()
                       .updateSwipeSensitivity(v),
                 ),
-                const _SettingsSectionHeader(title: '动画'),
-                SwitchListTile(
-                  secondary: const Icon(Icons.arrow_back),
-                  title: const Text('启用预测性返回动画'),
-                  subtitle: const Text('在支持的设备上，启用后在返回时可能会有更流畅的过渡动画'),
-                  value: settings.enablePredictiveBack,
-                  onChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateEnablePredictiveBack(v),
-                ),
                 const _SettingsSectionHeader(title: '导航'),
                 SwitchListTile(
                   secondary: const Icon(Icons.vertical_align_top_rounded),
@@ -630,8 +611,7 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
                 SizedBox(height: 20),
               ]),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -647,10 +627,9 @@ class AboutPage extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('关于')),
             SliverFillRemaining(
               hasScrollBody: false,
@@ -727,16 +706,14 @@ class AboutPage extends StatelessWidget {
                           onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => PredictiveBackScope(
-                                  child: LicensePage(
-                                    applicationName: _appName,
-                                    applicationVersion: _appVersion,
-                                    applicationIcon: Padding(
-                                      padding: const EdgeInsets.all(24.0),
-                                      child: SvgPicture.asset(
-                                        'assets/logo.svg',
-                                        width: 64,
-                                      ),
+                                builder: (_) => LicensePage(
+                                  applicationName: _appName,
+                                  applicationVersion: _appVersion,
+                                  applicationIcon: Padding(
+                                    padding: const EdgeInsets.all(24.0),
+                                    child: SvgPicture.asset(
+                                      'assets/logo.svg',
+                                      width: 64,
                                     ),
                                   ),
                                 ),
@@ -791,8 +768,7 @@ class AboutPage extends StatelessWidget {
                 ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -964,17 +940,15 @@ class ExperimentalPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PredictiveBackScope(
-      child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
             const SliverAppBar.large(title: Text('实验功能')),
             const SliverFillRemaining(
               hasScrollBody: false,
               child: Center(child: Text('暂无实验功能，敬请期待！')),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSetting {
@@ -16,7 +15,6 @@ class AppSetting {
   final bool swipeToChangeArticleUp;
   final bool swipeToChangeArticleDown;
   final int swipeSensitivity; // 50-200 px
-  final bool enablePredictiveBack;
   final bool doubleTapToTop;
   final int doubleTapSensitivity; // 100-1000 ms
 
@@ -33,7 +31,6 @@ class AppSetting {
     this.swipeToChangeArticleUp = true,
     this.swipeToChangeArticleDown = true,
     this.swipeSensitivity = 120,
-    this.enablePredictiveBack = true,
     this.doubleTapToTop = true,
     this.doubleTapSensitivity = 300,
   });
@@ -51,7 +48,6 @@ class AppSetting {
     bool? swipeToChangeArticleUp,
     bool? swipeToChangeArticleDown,
     int? swipeSensitivity,
-    bool? enablePredictiveBack,
     bool? doubleTapToTop,
     int? doubleTapSensitivity,
   }) {
@@ -70,7 +66,6 @@ class AppSetting {
       swipeToChangeArticleDown:
           swipeToChangeArticleDown ?? this.swipeToChangeArticleDown,
       swipeSensitivity: swipeSensitivity ?? this.swipeSensitivity,
-      enablePredictiveBack: enablePredictiveBack ?? this.enablePredictiveBack,
       doubleTapToTop: doubleTapToTop ?? this.doubleTapToTop,
       doubleTapSensitivity: doubleTapSensitivity ?? this.doubleTapSensitivity,
     );
@@ -103,8 +98,6 @@ class SettingStorage {
   static const String _keySwipeToChangeArticleDown =
       'settings.swipeToChangeArticleDown';
   static const String _keySwipeSensitivity = 'settings.swipeSensitivity';
-  static const String _keyEnablePredictiveBack =
-      'settings.enablePredictiveBack';
   static const String _keyDoubleTapToTop = 'settings.doubleTapToTop';
   static const String _keyDoubleTapSensitivity =
       'settings.doubleTapSensitivity';
@@ -125,7 +118,6 @@ class SettingStorage {
       swipeToChangeArticleDown:
           prefs.getBool(_keySwipeToChangeArticleDown) ?? true,
       swipeSensitivity: prefs.getInt(_keySwipeSensitivity) ?? 140,
-      enablePredictiveBack: prefs.getBool(_keyEnablePredictiveBack) ?? true,
       doubleTapToTop: prefs.getBool(_keyDoubleTapToTop) ?? true,
       doubleTapSensitivity: prefs.getInt(_keyDoubleTapSensitivity) ?? 300,
     );
@@ -151,7 +143,6 @@ class SettingStorage {
       setting.swipeToChangeArticleDown,
     );
     await prefs.setInt(_keySwipeSensitivity, setting.swipeSensitivity);
-    await prefs.setBool(_keyEnablePredictiveBack, setting.enablePredictiveBack);
     await prefs.setBool(_keyDoubleTapToTop, setting.doubleTapToTop);
     await prefs.setInt(_keyDoubleTapSensitivity, setting.doubleTapSensitivity);
   }
@@ -254,12 +245,6 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateEnablePredictiveBack(bool enabled) async {
-    _setting = _setting.copyWith(enablePredictiveBack: enabled);
-    await _storage.save(_setting);
-    notifyListeners();
-  }
-
   Future<void> updateDoubleTapToTop(bool enabled) async {
     _setting = _setting.copyWith(doubleTapToTop: enabled);
     await _storage.save(_setting);
@@ -270,30 +255,5 @@ class SettingsController extends ChangeNotifier {
     _setting = _setting.copyWith(doubleTapSensitivity: sensitivity);
     await _storage.save(_setting);
     notifyListeners();
-  }
-}
-
-// ── 可预测返回作用域 ──
-/// 根据 [SettingsController.setting.enablePredictiveBack] 的值,
-/// 决定是否允许 Android 系统级可预测返回手势动画。
-/// 当关闭时, 用 [PopScope] 阻止系统预测预览, 但正常返回仍可用。
-class PredictiveBackScope extends StatelessWidget {
-  final Widget child;
-  const PredictiveBackScope({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = context
-        .watch<SettingsController>()
-        .setting
-        .enablePredictiveBack;
-    if (enabled) return child;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) Navigator.of(context).pop(result);
-      },
-      child: child,
-    );
   }
 }
