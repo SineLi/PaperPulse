@@ -145,6 +145,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 
 class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   late final ScrollController _scrollController;
+  TabScrollRegistry? _tabScrollRegistry;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _isRefreshing = false;
@@ -163,8 +164,9 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     super.initState();
     _scrollController = widget.scrollController ?? ScrollController();
     if (widget.tabScrollIndex != null) {
+      _tabScrollRegistry = context.read<TabScrollRegistry>();
       // The page owns the controller, but the shell can still find it by tab.
-      context.read<TabScrollRegistry>().register(
+      _tabScrollRegistry!.register(
         widget.tabScrollIndex!,
         _scrollController,
       );
@@ -340,7 +342,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void dispose() {
     if (widget.tabScrollIndex != null) {
-      context.read<TabScrollRegistry>().unregister(
+      _tabScrollRegistry?.unregister(
         widget.tabScrollIndex!,
         _scrollController,
       );
