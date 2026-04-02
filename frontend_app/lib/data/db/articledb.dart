@@ -1,6 +1,7 @@
 import 'database.dart';
 import '../models/article.dart';
 import '../models/article_filter.dart';
+import '../models/journal.dart';
 import 'package:sqflite/sqflite.dart';
 
 class ArticleDatabaseIO {
@@ -17,10 +18,13 @@ class ArticleDatabaseIO {
 
   Future<Article?> getArticle(int id) async {
     final db = await dbHelper.database;
-    final maps = await db.query(
-      Article.tableArticles,
-      where: '${Article.colId} = ?',
-      whereArgs: [id],
+    final maps = await db.rawQuery(
+      'SELECT a.*, j.${Journal.colPublisher} AS publisher '
+      'FROM ${Article.tableArticles} a '
+      'LEFT JOIN ${Journal.tableJournals} j '
+      'ON a.${Article.colJournalId} = j.${Journal.colId} '
+      'WHERE a.${Article.colId} = ?',
+      [id],
     );
     if (maps.isNotEmpty) {
       return Article.fromMap(maps.first);
