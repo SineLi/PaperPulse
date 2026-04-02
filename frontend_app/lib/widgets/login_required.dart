@@ -88,11 +88,7 @@ class _ApiNotConfiguredPrompt extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const NetworkSettingsPage(),
-                ),
-              ),
+              onPressed: () => context.push('/settings/network'),
               icon: const Icon(Icons.settings_rounded),
               label: const Text('去配置'),
               style: FilledButton.styleFrom(minimumSize: const Size(200, 48)),
@@ -133,7 +129,7 @@ class _LoginPrompt extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => context.push('/login'),
+              onPressed: () => context.go('/login'),
               icon: const Icon(Icons.login_rounded),
               label: const Text('去登录'),
               style: FilledButton.styleFrom(minimumSize: const Size(200, 48)),

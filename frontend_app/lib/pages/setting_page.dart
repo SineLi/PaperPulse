@@ -35,59 +35,37 @@ class SettingPage extends StatelessWidget {
                   leading: const Icon(Icons.account_circle_outlined),
                   title: const Text('账户'),
                   subtitle: Text('账户信息，登录状态'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AccountSettingsPage(),
-                    ),
-                  ),
+                  onTap: () => context.push('/settings/account'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.palette_outlined),
                   title: const Text('外观'),
                   subtitle: Text('颜色，字体'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ThemeSettingsPage(),
-                    ),
-                  ),
+                  onTap: () => context.push('/settings/theme'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.public_rounded),
                   title: const Text('网络'),
                   subtitle: Text('后端接口，图片下载'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const NetworkSettingsPage(),
-                    ),
-                  ),
+                  onTap: () => context.push('/settings/network'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.gesture_outlined),
                   title: const Text('操作'),
                   subtitle: Text('手势，动画'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const OperationSettingsPage(),
-                    ),
-                  ),
+                  onTap: () => context.push('/settings/operation'),
                 ),
                 ListTile(
                   leading: const Icon(Icons.code_outlined),
                   title: Text('实验'),
                   subtitle: Text('正在测试的新功能'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ExperimentalPage(),
-                    ),
-                  ),
+                  onTap: () => context.push('/settings/experimental'),
                 ),
                 ListTile(
                   leading: Icon(Icons.info_outline_rounded),
                   title: Text('关于'),
                   subtitle: Text('$_appName v$_appVersion'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => const AboutPage()),
-                  ),
+                  onTap: () => context.push('/settings/about'),
                 ),
                 SizedBox(height: 48),
               ]),
@@ -704,21 +682,7 @@ class AboutPage extends StatelessWidget {
                         const SizedBox(width: 16),
                         FilledButton.tonalIcon(
                           onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => LicensePage(
-                                  applicationName: _appName,
-                                  applicationVersion: _appVersion,
-                                  applicationIcon: Padding(
-                                    padding: const EdgeInsets.all(24.0),
-                                    child: SvgPicture.asset(
-                                      'assets/logo.svg',
-                                      width: 64,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
+                            context.push('/settings/about/licenses');
                           },
                           icon: const Icon(
                             Icons.description_outlined,

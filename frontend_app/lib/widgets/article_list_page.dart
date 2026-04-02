@@ -142,16 +142,8 @@ class _ArticleListPageState extends State<ArticleListPage> {
           onTap: () {
             // 路由里只放稳定、可刷新的状态。详情页会根据 articleId 查当前文章，
             // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
-            ctx.go(
+            ctx.push(
               '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
-              // extra: (int articleId) {
-              //   // 这个回调不是详情页的硬依赖，只用于从列表页进入时顺手把
-              //   // 当前列表项的已读状态同步回来。
-              //   final idx = allArticles.indexWhere((a) => a.articleId == articleId);
-              //   if (idx != -1) {
-              //     updateItem(idx, allArticles[idx].copyWith(isRead: true));
-              //   }
-              // },
             );
           },
         );
