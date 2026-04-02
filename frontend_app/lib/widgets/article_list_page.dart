@@ -144,6 +144,14 @@ class _ArticleListPageState extends State<ArticleListPage> {
             // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
             ctx.push(
               '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
+              // 为详情页提供已读回调，使其在标记已读时立即更新当前列表项的状态。
+              extra: () {
+                // 如果 Article 支持 copyWith，可以在此标记为已读。
+                updateItem(
+                  index,
+                  article.copyWith(isRead: true),
+                );
+              },
             );
           },
         );
