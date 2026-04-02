@@ -499,29 +499,25 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     required Widget child,
     required bool animate,
   }) {
-    return AnimatedSwitcher(
-      duration: animate ? const Duration(milliseconds: 300) : Duration.zero,
-      reverseDuration: animate ? const Duration(milliseconds: 300) : Duration.zero,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        if (!animate) return child;
-        final isIncoming = child.key == _contentKey;
-        final offsetBegin = isIncoming
-            ? Offset(0, _transitionDirection * 0.12)
-            : Offset(0, -_transitionDirection * 0.12);
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: offsetBegin,
-            end: Offset.zero,
-          ).animate(animation),
-          child: FadeTransition(
-            opacity: animation,
+    if (!animate) return child;
+
+    return TweenAnimationBuilder<double>(
+      key: _contentKey,
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) {
+        final translateY = (1 - value) * 42 * _transitionDirection;
+        final opacity = 0.78 + (0.22 * value);
+        return Transform.translate(
+          offset: Offset(0, translateY),
+          child: Opacity(
+            opacity: opacity,
             child: child,
           ),
         );
       },
-      child: child,
     );
   }
 
