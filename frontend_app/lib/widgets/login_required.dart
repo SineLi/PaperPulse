@@ -7,7 +7,7 @@ import '../settings/settings_controller.dart';
 
 /// 包裹需要登录才能查看的页面。
 /// 已登录时显示 [child]；未登录时显示登录提示。
-class LoginRequired extends StatelessWidget {
+class LoginRequired extends StatefulWidget {
   final Widget child;
   final bool showScaffold;
 
@@ -18,10 +18,48 @@ class LoginRequired extends StatelessWidget {
   });
 
   @override
+  State<LoginRequired> createState() => _LoginRequiredState();
+}
+
+class _LoginRequiredState extends State<LoginRequired> {
+  // 缓存 hasToken() Future，避免每次 build 都重新创建导致重复读取和重建循环。
+  Future<bool>? _hasTokenFuture;
+  AuthServices? _authServices;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authServices = context.read<AuthServices>();
+    // 仅在 AuthServices 实例变更时重新初始化 Future 并重新注册监听器。
+    if (_authServices != authServices) {
+      _authServices?.removeListener(_onAuthChanged);
+      _authServices = authServices;
+      authServices.addListener(_onAuthChanged);
+      _hasTokenFuture = authServices.hasToken();
+    }
+  }
+
+  /// 登录状态变化时（如登出）刷新 token 检查 Future，确保 FutureBuilder 不使用过期结果。
+  void _onAuthChanged() {
+    final authServices = _authServices;
+    if (authServices != null && !authServices.isLoggedIn && mounted) {
+      setState(() {
+        _hasTokenFuture = authServices.hasToken();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _authServices?.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final baseUrl = context.watch<SettingsController>().setting.baseURL.trim();
     if (baseUrl.isEmpty) {
-      return showScaffold
+      return widget.showScaffold
           ? const Scaffold(body: _ApiNotConfiguredPrompt())
           : const _ApiNotConfiguredPrompt();
     }
@@ -30,20 +68,20 @@ class LoginRequired extends StatelessWidget {
 
     // 登录成功后需要立刻放行，不能继续复用未登录时缓存下来的 Future 结果。
     if (authServices.isLoggedIn) {
-      return child;
+      return widget.child;
     }
 
     // 冷启动时 AuthServices 可能还没完成本地 token 状态恢复，这里兜底查一次本地凭证。
     return FutureBuilder<bool>(
-      future: authServices.hasToken(),
+      future: _hasTokenFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const SizedBox.shrink();
         }
         if (snapshot.data == true) {
-          return child;
+          return widget.child;
         }
-        if (showScaffold) {
+        if (widget.showScaffold) {
           return const Scaffold(body: _LoginPrompt());
         }
         return const _LoginPrompt();
