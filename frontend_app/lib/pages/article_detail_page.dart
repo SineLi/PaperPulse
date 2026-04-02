@@ -47,6 +47,7 @@ class ArticleDetailPage extends StatefulWidget {
 
 class _ArticleDetailPageState extends State<ArticleDetailPage> {
   late ArticleViewData _viewData;
+  final Map<int, ArticleViewData> _articleViewCache = <int, ArticleViewData>{};
   bool _hasData = false;
   List<int> _articleIds = const <int>[];
   int _currentPosition = 0;
@@ -57,6 +58,13 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   late bool _isFavorite;
   bool _suppressScrollListener = false;
   late ValueKey<int> _contentKey;
+  bool _animateContentSwitch = false;
+  int _transitionDirection = 1;
+  double _gestureOverscroll = 0;
+  int? _pendingGestureDirection;
+  bool _showReleaseHint = false;
+  bool _gestureHapticFired = false;
+  bool _pointerIsDown = false;
 
   @override
   void initState() {
@@ -78,22 +86,19 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
     if (ids.isEmpty) {
       _articleIds = <int>[widget.articleId];
-      _currentPosition = 0;
-      await _loadArticle(widget.articleId);
+      await _showArticle(widget.articleId, position: 0, animate: false);
       return;
     }
 
     final position = ids.indexOf(widget.articleId);
     if (position == -1) {
       _articleIds = <int>[widget.articleId];
-      _currentPosition = 0;
-      await _loadArticle(widget.articleId);
+      await _showArticle(widget.articleId, position: 0, animate: false);
       return;
     }
 
     _articleIds = ids;
-    _currentPosition = position;
-    await _loadArticle(widget.articleId);
+    await _showArticle(widget.articleId, position: position, animate: false);
   }
 
   Future<List<int>> _loadSourceArticleIds() async {
@@ -107,25 +112,28 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     }
   }
 
-  Future<void> _loadArticle(int id) async {
+  Future<ArticleViewData?> _loadArticleView(int id) async {
+    final cachedView = _articleViewCache[id];
+    if (cachedView != null) return cachedView;
     final db = context.read<ArticleDatabaseIO>();
     // 按文章 ID 现场查库，不再依赖列表页传进来的内存文章列表。
     final article = await db.getArticle(id);
-    if (!mounted || article == null) return;
+    if (article == null) return null;
     final view = ArticleViewData.fromArticle(article);
-    setState(() {
-      _viewData = view;
-      _isFavorite = view.isFavorite;
-      _contentKey = ValueKey(id);
-      _hasData = true;
-    });
-    await _markAsRead();
+    _articleViewCache[id] = view;
+    return view;
   }
 
-  Future<void> _navigateToPosition(int nextPosition) async {
-    if (nextPosition < 0 || nextPosition >= _articleIds.length) return;
-    // 切换文章时总是回到顶部，避免保留上一篇的滚动位置。
-    if (_scrollController.hasClients && _scrollController.offset != 0) {
+  Future<void> _showArticle(
+    int id, {
+    required int position,
+    required bool animate,
+    int transitionDirection = 1,
+  }) async {
+    final view = await _loadArticleView(id);
+    if (!mounted || view == null) return;
+
+    if (animate && _scrollController.hasClients && _scrollController.offset != 0) {
       _suppressScrollListener = true;
       try {
         _scrollController.jumpTo(0);
@@ -133,12 +141,32 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         _suppressScrollListener = false;
       }
     }
+
     setState(() {
-      _currentPosition = nextPosition;
+      _currentPosition = position;
+      _viewData = view;
+      _isFavorite = view.isFavorite;
+      _contentKey = ValueKey(id);
+      _hasData = true;
       _barsVisible = true;
       _lastScrollOffset = 0;
+      _transitionDirection = transitionDirection;
+      _animateContentSwitch = animate;
     });
-    await _loadArticle(_articleIds[nextPosition]);
+    await _markAsRead();
+  }
+
+  Future<void> _navigateToPosition(int nextPosition) async {
+    // 下一篇从下往上进入，上一篇从上往下进入。
+    final transitionDirection = nextPosition > _currentPosition ? 1 : -1;
+    if (nextPosition < 0 || nextPosition >= _articleIds.length) return;
+    // 切换文章时总是回到顶部，避免保留上一篇的滚动位置。
+    await _showArticle(
+      _articleIds[nextPosition],
+      position: nextPosition,
+      animate: true,
+      transitionDirection: transitionDirection,
+    );
   }
 
   void _onScroll() {
@@ -157,7 +185,103 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   /// 监听滚动：达到阈值时振动提示并显示 hint，松手时才真正切换
+  void _resetGestureTracking() {
+    _gestureOverscroll = 0;
+    _pendingGestureDirection = null;
+    _showReleaseHint = false;
+    _gestureHapticFired = false;
+  }
+
+  void _setGestureHint(int? direction, bool visible) {
+    if (_pendingGestureDirection == direction && _showReleaseHint == visible) {
+      return;
+    }
+    setState(() {
+      _pendingGestureDirection = direction;
+      _showReleaseHint = visible;
+    });
+  }
+
+  bool _canSwipeToDirection(int direction, AppSetting settings) {
+    if (direction < 0) {
+      return settings.swipeToChangeArticleDown && _currentPosition > 0;
+    }
+    return settings.swipeToChangeArticleUp &&
+        _currentPosition < _articleIds.length - 1;
+  }
+
+  Future<void> _commitGestureNavigation(int direction) async {
+    if (direction < 0) {
+      await _navigateToPosition(_currentPosition - 1);
+    } else {
+      await _navigateToPosition(_currentPosition + 1);
+    }
+  }
+
+  Future<void> _triggerPendingGestureNavigation() async {
+    final settings = context.read<SettingsController>().setting;
+    final direction = _pendingGestureDirection;
+    final reachedThreshold =
+        direction != null &&
+        _gestureOverscroll >= settings.swipeSensitivity &&
+        _canSwipeToDirection(direction, settings);
+    _pointerIsDown = false;
+    _resetGestureTracking();
+    if (reachedThreshold) {
+      await _commitGestureNavigation(direction);
+    }
+  }
+
   bool _onScrollNotification(ScrollNotification notification) {
+    final settings = context.read<SettingsController>().setting;
+
+    if (notification is ScrollStartNotification) {
+      _resetGestureTracking();
+      return false;
+    }
+
+    if (notification is ScrollUpdateNotification) {
+      if (!_pointerIsDown || notification.dragDetails == null) {
+        return false;
+      }
+
+      final metrics = notification.metrics;
+      int? direction;
+      double overscroll = 0;
+
+      if (metrics.pixels < metrics.minScrollExtent) {
+        direction = -1;
+        overscroll = metrics.minScrollExtent - metrics.pixels;
+      } else if (metrics.pixels > metrics.maxScrollExtent) {
+        direction = 1;
+        overscroll = metrics.pixels - metrics.maxScrollExtent;
+      }
+
+      if (direction == null || !_canSwipeToDirection(direction, settings)) {
+        _resetGestureTracking();
+        return false;
+      }
+
+      if (_pendingGestureDirection != direction) {
+        _gestureOverscroll = overscroll;
+        _gestureHapticFired = false;
+        _pendingGestureDirection = direction;
+      } else {
+        _gestureOverscroll = overscroll;
+      }
+
+      if (!_gestureHapticFired &&
+          _gestureOverscroll >= settings.swipeSensitivity) {
+        _gestureHapticFired = true;
+        HapticFeedback.selectionClick();
+      }
+      _setGestureHint(
+        direction,
+        _gestureOverscroll >= settings.swipeSensitivity,
+      );
+      return false;
+    }
+
     return false;
   }
 
@@ -168,6 +292,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final db = context.read<ArticleDatabaseIO>();
     try {
       await db.setReadWithSync(_viewData.id, true);
+      final updatedView = ArticleViewData.fromArticle(
+        _viewData.article.copyWith(isRead: true),
+      );
+      _articleViewCache[_viewData.id] = updatedView;
+      _viewData = updatedView;
       widget.onArticleRead?.call(_viewData.id);
     } catch (_) {
       _markedAsRead.remove(_viewData.id);
@@ -181,7 +310,14 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final newState = !_isFavorite;
     await db.setFavoriteWithSync(_viewData.id, newState);
     if (mounted) {
-      setState(() => _isFavorite = newState);
+      final updatedView = ArticleViewData.fromArticle(
+        _viewData.article.copyWith(isFavorite: newState),
+      );
+      _articleViewCache[_viewData.id] = updatedView;
+      setState(() {
+        _viewData = updatedView;
+        _isFavorite = newState;
+      });
     }
   }
 
@@ -235,8 +371,12 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     return Scaffold(
       body: Stack(
         children: [
-            // ── 主要内容 ──
-            NotificationListener<ScrollNotification>(
+          // ── 主要内容 ──
+          Listener(
+            onPointerDown: (_) => _pointerIsDown = true,
+            onPointerUp: (_) => _triggerPendingGestureNavigation(),
+            onPointerCancel: (_) => _triggerPendingGestureNavigation(),
+            child: NotificationListener<ScrollNotification>(
               onNotification: _onScrollNotification,
               child: CustomScrollView(
                 controller: _scrollController,
@@ -264,8 +404,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                   // 正文 — 带上下切换动画
                   SliverToBoxAdapter(
                     child: _buildArticleSwitchTransition(
-                      animate: false,
+                      animate: _animateContentSwitch,
                       child: RepaintBoundary(
+                        key: _contentKey,
                         child: _buildArticleContent(
                           colorScheme,
                           textTheme,
@@ -278,19 +419,75 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 ],
               ),
             ),
+          ),
 
-            // ── 底部功能栏 ──
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSlide(
-                offset: _barsVisible ? Offset.zero : const Offset(0, 1),
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                child: _buildBottomBar(colorScheme, textTheme),
+          // ── 底部功能栏 ──
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: _pendingGestureDirection == 1 ? 0 : null,
+            top: _pendingGestureDirection == -1 ? 0 : null,
+            child: IgnorePointer(
+              ignoring: true,
+              child: SafeArea(
+                bottom: _pendingGestureDirection == 1,
+                top: _pendingGestureDirection == -1,
+                child: Center(
+                  child: AnimatedOpacity(
+                    opacity: _showReleaseHint ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.inverseSurface,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _pendingGestureDirection == -1
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            size: 18,
+                            color: colorScheme.onInverseSurface,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _pendingGestureDirection == -1
+                                ? '松手切换上一篇'
+                                : '松手切换下一篇',
+                            style: TextStyle(
+                              color: colorScheme.onInverseSurface,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
+          ),
+
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedSlide(
+              offset: _barsVisible ? Offset.zero : const Offset(0, 1),
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: _buildBottomBar(colorScheme, textTheme),
+            ),
+          ),
         ],
       ),
     );
@@ -302,23 +499,29 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     required Widget child,
     required bool animate,
   }) {
-    if (!animate) return child;
-
-    return TweenAnimationBuilder<double>(
-      key: _contentKey,
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOutCubic,
-      child: child,
-      builder: (context, value, child) {
-        const slideDirection = 1;
-        final translateY = (1 - value) * 50 * slideDirection;
-        final opacity = 0.82 + (0.18 * value);
-        return Transform.translate(
-          offset: Offset(0, translateY),
-          child: Opacity(opacity: opacity, child: child),
+    return AnimatedSwitcher(
+      duration: animate ? const Duration(milliseconds: 300) : Duration.zero,
+      reverseDuration: animate ? const Duration(milliseconds: 300) : Duration.zero,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        if (!animate) return child;
+        final isIncoming = child.key == _contentKey;
+        final offsetBegin = isIncoming
+            ? Offset(0, _transitionDirection * 0.12)
+            : Offset(0, -_transitionDirection * 0.12);
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: offsetBegin,
+            end: Offset.zero,
+          ).animate(animation),
+          child: FadeTransition(
+            opacity: animation,
+            child: child,
+          ),
         );
       },
+      child: child,
     );
   }
 
