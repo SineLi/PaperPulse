@@ -4,13 +4,12 @@ import 'package:go_router/go_router.dart';
 import '../pages/app_shell_page.dart';
 import '../pages/article_detail_page.dart';
 import '../pages/bootstrap_page.dart';
-import '../pages/login_page.dart';
-import '../pages/setting_page.dart';
-import '../pages/signup_page.dart';
-
 import '../pages/fav_page.dart';
 import '../pages/feed_page.dart';
 import '../pages/journal_page.dart';
+import '../pages/login_page.dart';
+import '../pages/setting_page.dart';
+import '../pages/signup_page.dart';
 
 const homePath = '/home';
 const homeFeedPath = '/home/feed';
@@ -71,15 +70,21 @@ GoRouter createAppRouter() {
         path: '/article/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          // URL 里只保留稳定状态。source 只提供最小上下文，
-          // 让详情页能在本地重建上一篇/下一篇的文章 ID 列表。
+          final idText = state.pathParameters['id']!;
+          final articleId = int.tryParse(idText);
+          if (articleId == null) {
+            return ArticleNotFoundPage(
+              message: '无效的文章 ID：$idText',
+            );
+          }
+
           final source = normalizeArticleSource(
             state.uri.queryParameters['source'],
           );
           final onArticleRead = state.extra;
+
           return ArticleDetailPage(
-            articleId: int.parse(id),
+            articleId: articleId,
             source: source,
             onArticleRead: onArticleRead is void Function(int)
                 ? onArticleRead

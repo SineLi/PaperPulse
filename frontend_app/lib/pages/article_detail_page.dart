@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -49,6 +50,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   late ArticleViewData _viewData;
   final Map<int, ArticleViewData> _articleViewCache = <int, ArticleViewData>{};
   bool _hasData = false;
+  bool _isLoading = true;
+  String? _loadFailureMessage;
   List<int> _articleIds = const <int>[];
   int _currentPosition = 0;
   late ScrollController _scrollController;
@@ -81,24 +84,32 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   Future<void> _loadInitialData() async {
     // 从本地数据库重建当前来源下的文章 ID 列表，这样无论是直达 URL
     // 还是页面刷新，详情页都仍然知道如何切换上一篇/下一篇。
-    final ids = await _loadSourceArticleIds();
-    if (!mounted) return;
+    try {
+      final ids = await _loadSourceArticleIds();
+      if (!mounted) return;
 
-    if (ids.isEmpty) {
-      _articleIds = <int>[widget.articleId];
-      await _showArticle(widget.articleId, position: 0, animate: false);
-      return;
+      if (ids.isEmpty) {
+        _articleIds = <int>[widget.articleId];
+        await _showArticle(widget.articleId, position: 0, animate: false);
+        return;
+      }
+
+      final position = ids.indexOf(widget.articleId);
+      if (position == -1) {
+        _articleIds = <int>[widget.articleId];
+        await _showArticle(widget.articleId, position: 0, animate: false);
+        return;
+      }
+
+      _articleIds = ids;
+      await _showArticle(widget.articleId, position: position, animate: false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadFailureMessage = '文章加载失败，请稍后重试。';
+      });
     }
-
-    final position = ids.indexOf(widget.articleId);
-    if (position == -1) {
-      _articleIds = <int>[widget.articleId];
-      await _showArticle(widget.articleId, position: 0, animate: false);
-      return;
-    }
-
-    _articleIds = ids;
-    await _showArticle(widget.articleId, position: position, animate: false);
   }
 
   Future<List<int>> _loadSourceArticleIds() async {
@@ -131,7 +142,15 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     int transitionDirection = 1,
   }) async {
     final view = await _loadArticleView(id);
-    if (!mounted || view == null) return;
+    if (!mounted) return;
+    if (view == null) {
+      setState(() {
+        _isLoading = false;
+        _hasData = false;
+        _loadFailureMessage = '未找到 ID 为 $id 的文章，可能已被删除或尚未同步。';
+      });
+      return;
+    }
 
     if (animate &&
         _scrollController.hasClients &&
@@ -150,6 +169,8 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       _isFavorite = view.isFavorite;
       _contentKey = ValueKey(id);
       _hasData = true;
+      _isLoading = false;
+      _loadFailureMessage = null;
       _barsVisible = true;
       _lastScrollOffset = 0;
       _transitionDirection = transitionDirection;
@@ -366,8 +387,11 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final textTheme = Theme.of(context).textTheme;
     final settings = context.watch<SettingsController>().setting;
 
-    if (!_hasData) {
+    if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (!_hasData) {
+      return ArticleNotFoundPage(message: _loadFailureMessage);
     }
 
     return Scaffold(
@@ -958,6 +982,65 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 onPressed: _shareDoi,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ArticleNotFoundPage extends StatelessWidget {
+  final String? message;
+
+  const ArticleNotFoundPage({super.key, this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final canPop = Navigator.of(context).canPop();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('文章不存在')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.find_in_page_outlined,
+                  size: 72,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 20),
+                Text('未找到该文章', style: textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text(
+                  message ?? '该文章可能已被删除、尚未同步，或当前链接无效。',
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                FilledButton.icon(
+                  onPressed: () => context.go('/home/feed'),
+                  icon: const Icon(Icons.home_rounded),
+                  label: const Text('返回首页'),
+                ),
+                if (canPop) ...[
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    label: const Text('返回上一页'),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
