@@ -28,6 +28,39 @@ class _AppShellPageState extends State<AppShellPage> {
   DateTime? _lastDestinationClickTime;
   int? _lastClickedIndex;
 
+  // 缓存 hasToken() Future，避免每次 build 都重新创建导致重复读取和重建循环。
+  Future<bool>? _hasTokenFuture;
+  AuthServices? _authServices;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authServices = context.read<AuthServices>();
+    // 仅在 AuthServices 实例变更时重新初始化 Future 并重新注册监听器。
+    if (_authServices != authServices) {
+      _authServices?.removeListener(_onAuthChanged);
+      _authServices = authServices;
+      authServices.addListener(_onAuthChanged);
+      _hasTokenFuture = authServices.hasToken();
+    }
+  }
+
+  /// 登录状态变化时刷新 token 检查 Future，确保 FutureBuilder 不使用过期结果。
+  void _onAuthChanged() {
+    final authServices = _authServices;
+    if (authServices != null && mounted) {
+      setState(() {
+        _hasTokenFuture = authServices.hasToken();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _authServices?.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
   Future<void> _onDestinationClick(int index) async {
     final settings = context.read<SettingsController>().setting;
     final isSameTab = _currentIndex == index;
@@ -60,12 +93,11 @@ class _AppShellPageState extends State<AppShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    context.watch<AuthServices>();
     final postAuthSyncService = context.watch<PostAuthSyncService>();
     _handleSyncCompletion(postAuthSyncService);
 
     return FutureBuilder<bool>(
-      future: context.read<AuthServices>().hasToken(),
+      future: _hasTokenFuture,
       builder: (context, snapshot) {
         final hasToken = snapshot.data ?? false;
 
