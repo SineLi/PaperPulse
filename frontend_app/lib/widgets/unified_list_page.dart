@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../navigation/tab_scroll_registry.dart';
-import '../pages/setting_page.dart';
 import 'login_required.dart';
 
 /// 加载数据的回调：返回指定分页的数据列表
@@ -166,10 +165,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     if (widget.tabScrollIndex != null) {
       _tabScrollRegistry = context.read<TabScrollRegistry>();
       // The page owns the controller, but the shell can still find it by tab.
-      _tabScrollRegistry!.register(
-        widget.tabScrollIndex!,
-        _scrollController,
-      );
+      _tabScrollRegistry!.register(widget.tabScrollIndex!, _scrollController);
     }
     _loadMore();
     if (widget.autoRefreshOnInit && widget.onRefresh != null) {
@@ -342,10 +338,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void dispose() {
     if (widget.tabScrollIndex != null) {
-      _tabScrollRegistry?.unregister(
-        widget.tabScrollIndex!,
-        _scrollController,
-      );
+      _tabScrollRegistry?.unregister(widget.tabScrollIndex!, _scrollController);
     }
     if (widget.scrollController == null) {
       _scrollController.dispose();

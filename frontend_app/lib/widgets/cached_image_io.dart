@@ -351,7 +351,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
             ),
             const SizedBox(height: 4),
             Text(
-              '浠?Wi-Fi',
+              '仅Wi-Fi',
               style: TextStyle(fontSize: 11, color: colorScheme.outlineVariant),
             ),
           ],
