@@ -145,7 +145,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
             ctx.push(
               '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
               // 为详情页提供已读回调，使其在标记已读时立即更新当前列表项的状态。
-              extra: () {
+              extra: (int _) {
                 // 如果 Article 支持 copyWith，可以在此标记为已读。
                 updateItem(
                   index,
