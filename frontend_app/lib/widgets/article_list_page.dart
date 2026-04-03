@@ -145,11 +145,16 @@ class _ArticleListPageState extends State<ArticleListPage> {
             ctx.push(
               '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
               // 为详情页提供已读回调，使其在标记已读时立即更新当前列表项的状态。
-              extra: (int _) {
+              extra: (int readArticleId) {
                 // 如果 Article 支持 copyWith，可以在此标记为已读。
+                final readIndex = allArticles.indexWhere(
+                  (item) => item.articleId == readArticleId,
+                );
+                if (readIndex < 0) return;
+                final readArticle = allArticles[readIndex];
                 updateItem(
-                  index,
-                  article.copyWith(isRead: true),
+                  readIndex,
+                  readArticle.copyWith(isRead: true),
                 );
               },
             );
