@@ -133,7 +133,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     final view = await _loadArticleView(id);
     if (!mounted || view == null) return;
 
-    if (animate && _scrollController.hasClients && _scrollController.offset != 0) {
+    if (animate &&
+        _scrollController.hasClients &&
+        _scrollController.offset != 0) {
       _suppressScrollListener = true;
       try {
         _scrollController.jumpTo(0);
@@ -204,9 +206,9 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
 
   bool _canSwipeToDirection(int direction, AppSetting settings) {
     if (direction < 0) {
-      return settings.swipeToChangeArticleDown && _currentPosition > 0;
+      return settings.swipeToChangeArticleUp && _currentPosition > 0;
     }
-    return settings.swipeToChangeArticleUp &&
+    return settings.swipeToChangeArticleDown &&
         _currentPosition < _articleIds.length - 1;
   }
 
@@ -512,10 +514,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         final opacity = 0.78 + (0.22 * value);
         return Transform.translate(
           offset: Offset(0, translateY),
-          child: Opacity(
-            opacity: opacity,
-            child: child,
-          ),
+          child: Opacity(opacity: opacity, child: child),
         );
       },
     );
