@@ -304,7 +304,7 @@ class LLMService:
                         
                         summaries.append(clean_content)
                         result_ids.append(custom_id)
-                        log_event(logger, logging.INFO, "llm_result_parsed", article_id=custom_id, parsed_json=True)
+                        log_event(logger, logging.DEBUG, "llm_result_parsed", article_id=custom_id, parsed_json=True)
                     except json.JSONDecodeError as e:
                         logger.exception("event=llm_result_parse_failed article_id=%s detail=%s", custom_id, e)
                         summaries.append(content_raw)
