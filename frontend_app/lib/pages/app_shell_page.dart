@@ -1,99 +1,118 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/service/post_auth_sync_service.dart';
-import 'fav_page.dart';
-import 'feed_page.dart';
-import 'journal_page.dart';
-import 'setting_page.dart';
+import '../navigation/tab_scroll_registry.dart';
+import '../settings/settings_controller.dart';
 
 class AppShellPage extends StatefulWidget {
-  const AppShellPage({super.key});
+  final int currentIndex;
+  final StatefulNavigationShell navigationShell;
+
+  const AppShellPage({
+    super.key,
+    required this.currentIndex,
+    required this.navigationShell,
+  });
 
   @override
   State<AppShellPage> createState() => _AppShellPageState();
 }
 
 class _AppShellPageState extends State<AppShellPage> {
-  int _currentIndex = 2; // Default to Feed
   int _lastHandledSyncCompletion = 0;
+  int get _currentIndex => widget.currentIndex;
 
-  // 为每个 Tab 维护一个独立的 ScrollController
-  final List<ScrollController> _scrollControllers = [
-    ScrollController(),
-    ScrollController(),
-    ScrollController(),
-  ];
+  DateTime? _lastDestinationClickTime;
+  int? _lastClickedIndex;
 
-  // 记录上次点击导航栏的时间，用于判断双击
-  DateTime? _lastTapTime;
+  // 缓存 hasToken() Future，避免每次 build 都重新创建导致重复读取和重建循环。
+  Future<bool>? _hasTokenFuture;
+  AuthServices? _authServices;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authServices = context.read<AuthServices>();
+    // 仅在 AuthServices 实例变更时重新初始化 Future 并重新注册监听器。
+    if (_authServices != authServices) {
+      _authServices?.removeListener(_onAuthChanged);
+      _authServices = authServices;
+      authServices.addListener(_onAuthChanged);
+      _hasTokenFuture = authServices.hasToken();
+    }
+  }
+
+  /// 登录状态变化时刷新 token 检查 Future，确保 FutureBuilder 不使用过期结果。
+  void _onAuthChanged() {
+    final authServices = _authServices;
+    if (authServices != null && mounted) {
+      setState(() {
+        _hasTokenFuture = authServices.hasToken();
+      });
+    }
+  }
 
   @override
   void dispose() {
-    for (final controller in _scrollControllers) {
-      controller.dispose();
-    }
+    _authServices?.removeListener(_onAuthChanged);
     super.dispose();
   }
 
-  void _handleNavTap(int index) {
+  Future<void> _onDestinationClick(int index) async {
     final settings = context.read<SettingsController>().setting;
+    final isSameTab = _currentIndex == index;
 
-    if (_currentIndex == index) {
-      // 如果点击的是当前选中的 Tab，检查是否是双击
-      if (settings.doubleTapToTop) {
-        final now = DateTime.now();
-        if (_lastTapTime != null &&
-            now.difference(_lastTapTime!) < const Duration(milliseconds: 300)) {
-          // 触发双击回到顶部
-          final controller = _scrollControllers[index];
-          if (controller.hasClients) {
-            controller.animateTo(
-              0,
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeOutCubic,
-            );
-          }
-          _lastTapTime = null; // 重置时间
-          return;
-        }
-        _lastTapTime = now;
+    if (settings.doubleTapToTop) {
+      final now = DateTime.now();
+      final isDoubleTap =
+          isSameTab &&
+          _lastClickedIndex == index &&
+          _lastDestinationClickTime != null &&
+          now.difference(_lastDestinationClickTime!) <
+              Duration(milliseconds: settings.doubleTapSensitivity);
+
+      if (isDoubleTap) {
+        // The tab page owns the controller; the shell only triggers the action.
+        await context.read<TabScrollRegistry>().scrollToTop(index);
+        _lastDestinationClickTime = null;
+        _lastClickedIndex = null;
+        return;
       }
-    } else {
-      // 切换 Tab
-      setState(() => _currentIndex = index);
-      _lastTapTime = null;
+
+      _lastDestinationClickTime = now;
+      _lastClickedIndex = index;
+    }
+
+    if (!isSameTab) {
+      widget.navigationShell.goBranch(index);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    context.watch<AuthServices>();
     final postAuthSyncService = context.watch<PostAuthSyncService>();
     _handleSyncCompletion(postAuthSyncService);
 
     return FutureBuilder<bool>(
-      future: context.read<AuthServices>().hasToken(),
+      future: _hasTokenFuture,
       builder: (context, snapshot) {
         final hasToken = snapshot.data ?? false;
 
         final shellKey = ValueKey('AppShell-${hasToken ? "Auth" : "Guest"}');
 
-        final pages = [
-          JournalPage(scrollController: _scrollControllers[0]),
-          FavPage(scrollController: _scrollControllers[1]),
-          FeedPage(scrollController: _scrollControllers[2]),
-        ];
-
         return Scaffold(
           key: shellKey,
-          body: IndexedStack(index: _currentIndex, children: pages),
+          body: widget.navigationShell,
           bottomNavigationBar: NavigationBar(
             height: 64,
-            selectedIndex: _currentIndex,
+            selectedIndex: widget.navigationShell.currentIndex,
             labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-            onDestinationSelected: _handleNavTap,
+            onDestinationSelected: (index) async {
+              await _onDestinationClick(index);
+            },
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.book_outlined),

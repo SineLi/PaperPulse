@@ -105,7 +105,7 @@ class JournalDatabaseIO {
     final db = await dbHelper.database;
     final maps = await db.rawQuery(
       'SELECT DISTINCT ${Journal.colPublisher} FROM ${Journal.tableJournals} '
-      'WHERE ${Journal.colPublisher} IS NOT NULL AND ${Journal.colPublisher} != "" '
+      "WHERE ${Journal.colPublisher} IS NOT NULL AND ${Journal.colPublisher} != '' "
       'ORDER BY ${Journal.colPublisher} ASC',
     );
     return maps.map((m) => m[Journal.colPublisher] as String).toList();
@@ -117,7 +117,7 @@ class JournalDatabaseIO {
     final maps = await db.rawQuery(
       'SELECT DISTINCT SUBSTR(${Journal.colCASUp}, 1, LENGTH(${Journal.colCASUp}) - 2) AS cat '
       'FROM ${Journal.tableJournals} '
-      'WHERE ${Journal.colCASUp} IS NOT NULL AND ${Journal.colCASUp} != "" '
+      "WHERE ${Journal.colCASUp} IS NOT NULL AND ${Journal.colCASUp} != '' "
       'ORDER BY cat ASC',
     );
     return maps.map((m) => m['cat'] as String).toList();

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../data/auth/auth_services.dart';
 import '../data/service/post_auth_sync_service.dart';
+import '../router/app_router.dart';
 import '../widgets/policy_dialog.dart';
 
 class LoginPage extends StatefulWidget {
@@ -146,8 +148,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () =>
-                            Navigator.of(context).pushNamed('/register'),
+                        onPressed: () => context.push('/register'),
                         child: const Text('立即注册'),
                       ),
                     ],
@@ -245,7 +246,7 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
       // 登录成功，立即进入主界面
-      Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
+      context.go(homeFeedPath);
 
       // 后台异步完成同步，journals 就绪后触发主页刷新
       Future(() async {

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -166,10 +165,15 @@ class AuthServices extends ChangeNotifier {
       }
       // 其他 API 错误（如 500）不删 token，rethrow 给调用方处理
       rethrow;
-    } on SocketException {
-      // 无网络连接，不删 token，返回 null 表示无法验证
-      return null;
-    } catch (_) {
+    } catch (error) {
+      final errorText = error.toString().toLowerCase();
+      if (errorText.contains('socketexception') ||
+          errorText.contains('failed host lookup') ||
+          errorText.contains('connection refused') ||
+          errorText.contains('network is unreachable')) {
+        // 无网络连接，不删 token，返回 null 表示无法验证
+        return null;
+      }
       final hasLocalToken = await hasToken();
       if (!hasLocalToken && _isLoggedIn) {
         _isLoggedIn = false;

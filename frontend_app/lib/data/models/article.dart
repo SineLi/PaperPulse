@@ -148,6 +148,7 @@ class Article {
       journalName: map[colJournalName] as String,
       journalAbbreviation: map[colJournalAbbr] as String,
       doi: map[colDoi] as String,
+      publisher: (map['publisher'] as String?) ?? '',
       isFavorite: (map[colIsFavorite] as int) == 1,
       isRead: (map[colIsRead] as int) == 1,
     );

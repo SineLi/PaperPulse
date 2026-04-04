@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
-import '../pages/setting_page.dart';
+import '../navigation/tab_scroll_registry.dart';
 import 'login_required.dart';
 
 /// 加载数据的回调：返回指定分页的数据列表
@@ -18,7 +20,7 @@ typedef ItemRefresher = Future<int> Function();
 /// 刷新成功后的提示文案生成器（传入新增数量，返回 SnackBar 文案；返回 null 则不提示）
 typedef RefreshMessageBuilder = String? Function(int count);
 
-/// 列表项构建器：传入上下文、当前项、当前索引、全部已加载数据，以及原地更新某项的回调
+/// 列表项构建器：传入上下文、当前项、当前索引、全部已加载数据，以及更新回调(支持索引和 articleId)
 typedef ItemWidgetBuilder<T> =
     Widget Function(
       BuildContext context,
@@ -26,6 +28,7 @@ typedef ItemWidgetBuilder<T> =
       int index,
       List<T> allItems,
       void Function(int index, T newItem) updateItem,
+      void Function(int articleId, T Function(T) updater) updateItemById,
     );
 
 /// 骨架卡片构建器
@@ -103,6 +106,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 
   /// 暴露 ScrollController 给外部使用（可选）
   final ScrollController? scrollController;
+  final int? tabScrollIndex;
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
@@ -129,6 +133,7 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.emptyActionLabel,
     this.pageSize = 20,
     this.scrollController,
+    this.tabScrollIndex,
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
@@ -140,6 +145,7 @@ class UnifiedListPage<T> extends StatefulWidget {
 
 class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   late final ScrollController _scrollController;
+  TabScrollRegistry? _tabScrollRegistry;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _isRefreshing = false;
@@ -157,6 +163,11 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   void initState() {
     super.initState();
     _scrollController = widget.scrollController ?? ScrollController();
+    if (widget.tabScrollIndex != null) {
+      _tabScrollRegistry = context.read<TabScrollRegistry>();
+      // The page owns the controller, but the shell can still find it by tab.
+      _tabScrollRegistry!.register(widget.tabScrollIndex!, _scrollController);
+    }
     _loadMore();
     if (widget.autoRefreshOnInit && widget.onRefresh != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -228,6 +239,18 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     setState(() {
       _items[index] = newItem;
     });
+  }
+
+  /// 按条件查找并更新列表项（解决快照索引过期问题）
+  void _updateItemById(int articleId, T Function(T) updater) {
+    final index = _items.indexWhere((item) {
+      return (item as dynamic).articleId == articleId;
+    });
+    if (index >= 0) {
+      setState(() {
+        _items[index] = updater(_items[index]);
+      });
+    }
   }
 
   void _resetAndReload() {
@@ -327,6 +350,9 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   @override
   void dispose() {
+    if (widget.tabScrollIndex != null) {
+      _tabScrollRegistry?.unregister(widget.tabScrollIndex!, _scrollController);
+    }
     if (widget.scrollController == null) {
       _scrollController.dispose();
     }
@@ -386,9 +412,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           icon: const Icon(Icons.settings_outlined),
           tooltip: '设置',
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const SettingPage()),
-            );
+            context.push("/settings");
           },
         ),
       );
@@ -548,6 +572,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           index,
           List.unmodifiable(_items),
           _updateItem,
+          _updateItemById,
         );
       },
     );
