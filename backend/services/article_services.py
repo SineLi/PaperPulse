@@ -5,6 +5,7 @@ from typing import Optional, List, Union, TypedDict
 from sqlalchemy import text
 from db.database import get_db_connection
 from services.image_service import ImageService, ImageCache
+from utils.logging_utils import log_event
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,10 @@ class ArticleService:
 
     def article_filter(self, articles: List[dict]) -> List[dict]:
         if not articles:
+            log_event(logger, logging.INFO, "article_filter_skipped_empty_input")
             return []
+
+        input_count = len(articles)
 
         titles = [a.get("title") for a in articles if a.get("title")]
         links = [a.get("link") for a in articles if a.get("link")]
@@ -75,17 +79,29 @@ class ArticleService:
                 continue
             new_articles.append(article)
 
+        log_event(
+            logger,
+            logging.INFO,
+            "article_filter_completed",
+            input_count=input_count,
+            output_count=len(new_articles),
+            duplicate_title_count=len(existing_titles),
+            duplicate_link_count=len(existing_links),
+            duplicate_doi_count=len(existing_dois),
+        )
+
         return new_articles
 
     def insert_articles(self, articles: Union[List[dict], str]):
         if not articles:
+            log_event(logger, logging.INFO, "article_insert_skipped_empty_input")
             return
 
         if isinstance(articles, str):
             try:
                 articles = json.loads(articles)
             except json.JSONDecodeError as e:
-                logger.error("Error decoding JSON in insert_articles: %s", e)
+                logger.exception("event=article_insert_json_decode_failed detail=%s", e)
                 return
 
         with get_db_connection() as conn:
@@ -124,6 +140,7 @@ class ArticleService:
                         continue
 
                     if journal_id is None:
+                        log_event(logger, logging.WARNING, "non_article_skipped_missing_journal_id", title=title, link=link)
                         continue
 
                     non_article_rows.append(
@@ -157,7 +174,7 @@ class ArticleService:
                 )
 
             if data_to_insert:
-                conn.execute(
+                insert_result = conn.execute(
                     text(
                         """
                         INSERT INTO articles (
@@ -169,13 +186,41 @@ class ArticleService:
                           :editor_summary, :structured_abstract, :abstract, :graphical_abstract, :ga_cache_status, :status
                         )
                         ON CONFLICT DO NOTHING
+                        RETURNING id, graphical_abstract
                         """
                     ),
                     data_to_insert,
                 )
 
+                if insert_result.returns_rows:
+                    inserted_rows = [dict(row) for row in insert_result.mappings().all()]
+                else:
+                    links = [row["link"] for row in data_to_insert]
+                    inserted_rows = [
+                        dict(row)
+                        for row in conn.execute(
+                            text(
+                                """
+                                SELECT id, graphical_abstract
+                                FROM articles
+                                WHERE link = ANY(:links)
+                                """
+                            ),
+                            {"links": links},
+                        ).mappings().all()
+                    ]
+
+                self._cache_inserted_article_images(conn, inserted_rows)
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "article_insert_articles_completed",
+                    attempted=len(data_to_insert),
+                    rowcount=len(inserted_rows),
+                )
+
             if non_article_rows:
-                conn.execute(
+                non_article_result = conn.execute(
                     text(
                         """
                         INSERT INTO non_article_entries (title, link, date, journal_id, doi)
@@ -185,13 +230,29 @@ class ArticleService:
                     ),
                     non_article_rows,
                 )
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "article_insert_non_articles_completed",
+                    attempted=len(non_article_rows),
+                    rowcount=non_article_result.rowcount,
+                )
+
+            log_event(
+                logger,
+                logging.INFO,
+                "article_insert_completed",
+                article_rows=len(data_to_insert),
+                non_article_rows=len(non_article_rows),
+            )
 
     def insert_non_article_entry(self, entry: dict):
         if not entry.get("title") or not entry.get("link") or entry.get("journal_id") is None:
+            log_event(logger, logging.WARNING, "non_article_insert_skipped_invalid_input")
             return
 
         with get_db_connection() as conn:
-            conn.execute(
+            result = conn.execute(
                 text(
                     """
                     INSERT INTO non_article_entries (title, link, date, journal_id, doi)
@@ -206,8 +267,16 @@ class ArticleService:
                     "journal_id": entry.get("journal_id"),
                     "doi": entry.get("doi"),
                 },
-            )
 
+            )
+            log_event(
+                logger,
+                logging.INFO,
+                "non_article_insert_completed",
+                title=entry.get("title"),
+                link=entry.get("link"),
+                rowcount=result.rowcount,
+            )
 
     def _cache_inserted_article_images(self, conn, inserted_rows: list[dict]) -> None:
         if not inserted_rows:

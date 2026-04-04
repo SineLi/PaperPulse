@@ -18,17 +18,12 @@ import sys
 import dotenv
 import uvicorn
 
+from utils.logging_utils import configure_logging, log_event
+
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
-LOG_FORMAT = "%(asctime)s - [%(levelname)s] - [%(name)s] - %(message)s"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format=LOG_FORMAT,
-    handlers=[logging.StreamHandler(sys.stdout)],
-    force=True,
-)
+configure_logging(force=True)
 logger = logging.getLogger("run")
 
 
@@ -39,7 +34,7 @@ def load_env():
     env_file = os.path.join(os.path.dirname(__file__), ".env")
     if os.path.isfile(env_file):
         dotenv.load_dotenv(env_file, override=False)
-        logger.info("Loaded environment from .env")
+        log_event(logger, logging.INFO, "env_loaded", path=env_file)
 
 
 # ── Pre-flight checks ───────────────────────────────────────────────────────
@@ -71,17 +66,14 @@ def check_config():
     """
     missing = [v for v in REQUIRED_ENV_VARS if not os.getenv(v)]
     if missing:
-        logger.error("Missing REQUIRED environment variables: %s", ", ".join(missing))
+        log_event(logger, logging.ERROR, "config_missing_required", variables=",".join(missing))
         sys.exit(1)
 
     missing_optional = [v for v in OPTIONAL_ENV_VARS if not os.getenv(v)]
     if missing_optional:
-        logger.warning(
-            "Missing optional environment variables (some features may be disabled): %s",
-            ", ".join(missing_optional),
-        )
+        log_event(logger, logging.WARNING, "config_missing_optional", variables=",".join(missing_optional))
 
-    logger.info("Configuration check passed.")
+    log_event(logger, logging.INFO, "config_check_passed")
 
 
 # ── Service probes ───────────────────────────────────────────────────────────
@@ -162,15 +154,15 @@ def check_redis():
     from utils.redis_client import init_client
 
     redis_url = os.getenv("REDIS_URL", "")
-    logger.info("Probing Redis: %s", redis_url)
+    log_event(logger, logging.INFO, "redis_probe_started", url=redis_url)
     try:
         init_client()
-        logger.info("Redis connection OK.")
+        log_event(logger, logging.INFO, "redis_probe_succeeded", url=redis_url)
     except RuntimeError as e:
-        logger.error("Redis probe failed: %s", e)
+        log_event(logger, logging.ERROR, "redis_probe_failed", url=redis_url, detail=e)
         sys.exit(1)
     except Exception as e:
-        logger.error("Unexpected error probing Redis: %s", e)
+        log_event(logger, logging.ERROR, "redis_probe_failed", url=redis_url, detail=e)
         sys.exit(1)
 
 
@@ -279,6 +271,9 @@ def main():
         from scheduler import start_background_scheduler
 
         bg_scheduler = start_background_scheduler()
+        log_event(logger, logging.INFO, "scheduler_enabled")
+    else:
+        log_event(logger, logging.INFO, "scheduler_disabled")
 
     # 7. Show banner
     print_banner(args.host, args.port, scheduler_enabled=(bg_scheduler is not None))
@@ -294,10 +289,10 @@ def main():
         )
     finally:
         if bg_scheduler is not None:
-            logger.info("Shutting down scheduler...")
+            log_event(logger, logging.INFO, "scheduler_shutdown_started")
             bg_scheduler.shutdown(wait=False)
-            logger.info("Scheduler stopped.")
-        logger.info("PaperPulse Backend exited.")
+            log_event(logger, logging.INFO, "scheduler_shutdown_completed")
+        log_event(logger, logging.INFO, "backend_exited")
 
 
 if __name__ == "__main__":
