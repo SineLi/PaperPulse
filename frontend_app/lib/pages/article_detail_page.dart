@@ -91,6 +91,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       if (ids.isEmpty) {
         _articleIds = <int>[widget.articleId];
         await _showArticle(widget.articleId, position: 0, animate: false);
+        _markAsReadAsync();
         return;
       }
 
@@ -98,11 +99,13 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       if (position == -1) {
         _articleIds = <int>[widget.articleId];
         await _showArticle(widget.articleId, position: 0, animate: false);
+        _markAsReadAsync();
         return;
       }
 
       _articleIds = ids;
       await _showArticle(widget.articleId, position: position, animate: false);
+      _markAsReadAsync();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -308,6 +311,15 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
     return false;
   }
 
+  /// 分离的异步已读标记，失败时按异常类型处理而非阻塞主流程
+  void _markAsReadAsync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _markAsRead();
+      }
+    });
+  }
+
   Future<void> _markAsRead() async {
     if (!_hasData) return;
     if (_viewData.isRead || _markedAsRead.contains(_viewData.id)) return;
@@ -321,9 +333,14 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
       _articleViewCache[_viewData.id] = updatedView;
       _viewData = updatedView;
       widget.onArticleRead?.call(_viewData.id);
-    } catch (_) {
+    } catch (e) {
+      // 按异常类型分别处理，不阻塞阅读流程
       _markedAsRead.remove(_viewData.id);
-      rethrow;
+      if (e is Exception) {
+        // 网络、数据库等异常仅记录，不影响已显示内容
+        debugPrint('标记已读失败: $e');
+      }
+      // 不 rethrow，让已读失败成为非关键路径
     }
   }
 

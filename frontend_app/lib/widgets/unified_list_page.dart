@@ -20,7 +20,7 @@ typedef ItemRefresher = Future<int> Function();
 /// 刷新成功后的提示文案生成器（传入新增数量，返回 SnackBar 文案；返回 null 则不提示）
 typedef RefreshMessageBuilder = String? Function(int count);
 
-/// 列表项构建器：传入上下文、当前项、当前索引、全部已加载数据，以及原地更新某项的回调
+/// 列表项构建器：传入上下文、当前项、当前索引、全部已加载数据，以及更新回调(支持索引和 articleId)
 typedef ItemWidgetBuilder<T> =
     Widget Function(
       BuildContext context,
@@ -28,6 +28,7 @@ typedef ItemWidgetBuilder<T> =
       int index,
       List<T> allItems,
       void Function(int index, T newItem) updateItem,
+      void Function(int articleId, T Function(T) updater) updateItemById,
     );
 
 /// 骨架卡片构建器
@@ -238,6 +239,18 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     setState(() {
       _items[index] = newItem;
     });
+  }
+
+  /// 按条件查找并更新列表项（解决快照索引过期问题）
+  void _updateItemById(int articleId, T Function(T) updater) {
+    final index = _items.indexWhere((item) {
+      return (item as dynamic).articleId == articleId;
+    });
+    if (index >= 0) {
+      setState(() {
+        _items[index] = updater(_items[index]);
+      });
+    }
   }
 
   void _resetAndReload() {
@@ -559,6 +572,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           index,
           List.unmodifiable(_items),
           _updateItem,
+          _updateItemById,
         );
       },
     );

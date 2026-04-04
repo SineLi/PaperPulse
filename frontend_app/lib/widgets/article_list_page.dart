@@ -136,7 +136,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, article, index, allArticles, updateItem) {
+      itemBuilder: (ctx, article, index, allArticles, updateItem, updateItemById) {
         return FeedItemCard(
           article: article,
           onTap: () {
@@ -144,17 +144,12 @@ class _ArticleListPageState extends State<ArticleListPage> {
             // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
             ctx.push(
               '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
-              // 为详情页提供已读回调，使其在标记已读时立即更新当前列表项的状态。
+              // 为详情页提供已读回调，使其在标记已读时按 articleId 实时查找并更新当前列表项。
+              // 这样即使列表在打开详情期间发生变化，也能准确更新对应文章项。
               extra: (int readArticleId) {
-                // 如果 Article 支持 copyWith，可以在此标记为已读。
-                final readIndex = allArticles.indexWhere(
-                  (item) => item.articleId == readArticleId,
-                );
-                if (readIndex < 0) return;
-                final readArticle = allArticles[readIndex];
-                updateItem(
-                  readIndex,
-                  readArticle.copyWith(isRead: true),
+                updateItemById(
+                  readArticleId,
+                  (readArticle) => readArticle.copyWith(isRead: true),
                 );
               },
             );
