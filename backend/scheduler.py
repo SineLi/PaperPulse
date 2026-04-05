@@ -5,7 +5,11 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from utils.logging_utils import configure_logging, log_event
+
 logger = logging.getLogger(__name__)
+STEP_WARN_AFTER_SECS = 5 * 60
+CYCLE_WARN_AFTER_SECS = 50 * 60
 
 
 try:
@@ -13,37 +17,74 @@ try:
     from services.article_services import ArticleService
     from services.LLM_service import LLMService
 except ImportError as e:
-    logger.error(f"Failed to import modules: {e}")
+    log_event(logger, logging.ERROR, "scheduler_import_failed", detail=e)
     sys.exit(1)
 
+
+def _log_step_duration(step_name: str, started_at: float):
+    elapsed = time.monotonic() - started_at
+    log_level = logging.WARNING if elapsed >= STEP_WARN_AFTER_SECS else logging.INFO
+    log_event(logger, log_level, "scheduler_step_completed", step=step_name, elapsed_secs=elapsed)
+
+
 def cycle_job():
+    cycle_started_at = time.monotonic()
     service = LLMService()
-    logger.info("Checking LLM task status...")
+    log_event(logger, logging.INFO, "scheduler_cycle_started")
+
+    step_started_at = time.monotonic()
+    log_event(logger, logging.INFO, "scheduler_step_started", step="llm_update")
     try:
         service.run_update_cycle()
     except Exception as e:
-        logger.error(f"LLM update cycle failed: {e}", exc_info=True)
+        logger.exception("event=scheduler_step_failed step=llm_update detail=%s", e)
+    finally:
+        _log_step_duration("llm_update", step_started_at)
 
-    logger.info("Start fetching articles...")
+    step_started_at = time.monotonic()
+    log_event(logger, logging.INFO, "scheduler_step_started", step="article_fetch")
     try:
         run_enabled_fetchers()
-        logger.info("Finished fetching articles.")
+        log_event(logger, logging.INFO, "scheduler_step_succeeded", step="article_fetch")
     except Exception as e:
-        logger.error(f"Article fetch scheduler failed: {e}", exc_info=True)
+        logger.exception("event=scheduler_step_failed step=article_fetch detail=%s", e)
+    finally:
+        _log_step_duration("article_fetch", step_started_at)
 
+    step_started_at = time.monotonic()
+    log_event(logger, logging.INFO, "scheduler_step_started", step="llm_submission")
     try:
         service.run_submission_cycle()
     except Exception as e:
+
         logger.exception("event=scheduler_step_failed step=llm_submission detail=%s", e)
+    finally:
+        _log_step_duration("llm_submission", step_started_at)
+
+    cycle_elapsed = time.monotonic() - cycle_started_at
+    log_level = logging.WARNING if cycle_elapsed >= CYCLE_WARN_AFTER_SECS else logging.INFO
+    log_event(logger, log_level, "scheduler_cycle_completed", elapsed_secs=cycle_elapsed)
 
 
 def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
     started_at = time.monotonic()
     service = ArticleService()
+    log_event(
+        logger,
+        logging.INFO,
+        "scheduler_step_started",
+        step="image_cache_backfill",
+        limit=limit,
+        scan_limit=scan_limit,
+    )
     try:
         result = service.cache_missing_article_images(limit=limit, scan_limit=scan_limit)
+        log_event(logger, logging.INFO, "scheduler_step_succeeded", step="image_cache_backfill", **result)
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=image_cache_backfill detail=%s", e)
+    finally:
+        _log_step_duration("image_cache_backfill", started_at)
+
 
 
 def _add_jobs(scheduler):
@@ -79,31 +120,20 @@ def start_background_scheduler() -> BackgroundScheduler:
     # Schedule one immediate run in the background thread so it does NOT
     # block the main thread (uvicorn startup).
     scheduler.add_job(cycle_job, id='initial_cycle', name='Initial cycle on startup')
+    logger.info("Background scheduler started.")
     scheduler.add_job(
         image_cache_backfill_job,
         id="initial_image_cache_backfill",
         name="Initial image cache backfill on startup",
     )
+
     return scheduler
 
 
 def start_blocking_scheduler():
     """Start as a standalone blocking process (original behaviour)."""
     # 自定义 Handler 实现每条日志必刷新
-    class RealTimeFileHandler(logging.FileHandler):
-        def emit(self, record):
-            super().emit(record)
-            self.flush()
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - [%(levelname)s] - [%(name)s] - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            RealTimeFileHandler("scheduler.log", encoding='utf-8'),
-        ],
-        force=True,
-    )
+    configure_logging(logfile="scheduler.log", force=True)
 
     cycle_job()  # 先运行一次
 
@@ -115,7 +145,7 @@ def start_blocking_scheduler():
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Scheduler stopped.")
+        log_event(logger, logging.INFO, "scheduler_stopped", mode="blocking")
 
 
 if __name__ == "__main__":
