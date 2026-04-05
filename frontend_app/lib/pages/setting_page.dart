@@ -13,7 +13,7 @@ import '../settings/settings_controller.dart';
 import '../widgets/policy_dialog.dart';
 
 const _appName = 'PaperPulse';
-const _appVersion = '0.0.3';
+const _appVersion = '0.0.4';
 const _githubRepoUrl = 'https://github.com/SineLi/PaperPulse';
 
 // ---------------------------------------------------------------------------
@@ -28,48 +28,48 @@ class SettingPage extends StatelessWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('设置')),
-            SliverList(
-              delegate: SliverChildListDelegate([
-                ListTile(
-                  leading: const Icon(Icons.account_circle_outlined),
-                  title: const Text('账户'),
-                  subtitle: Text('账户信息，登录状态'),
-                  onTap: () => context.push('/settings/account'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.palette_outlined),
-                  title: const Text('外观'),
-                  subtitle: Text('颜色，字体'),
-                  onTap: () => context.push('/settings/theme'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.public_rounded),
-                  title: const Text('网络'),
-                  subtitle: Text('后端接口，图片下载'),
-                  onTap: () => context.push('/settings/network'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.gesture_outlined),
-                  title: const Text('操作'),
-                  subtitle: Text('手势，动画'),
-                  onTap: () => context.push('/settings/operation'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.code_outlined),
-                  title: Text('实验'),
-                  subtitle: Text('正在测试的新功能'),
-                  onTap: () => context.push('/settings/experimental'),
-                ),
-                ListTile(
-                  leading: Icon(Icons.info_outline_rounded),
-                  title: Text('关于'),
-                  subtitle: Text('$_appName v$_appVersion'),
-                  onTap: () => context.push('/settings/about'),
-                ),
-                SizedBox(height: 48),
-              ]),
-            ),
+          const SliverAppBar.large(title: Text('设置')),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              ListTile(
+                leading: const Icon(Icons.account_circle_outlined),
+                title: const Text('账户'),
+                subtitle: Text('账户信息，登录状态'),
+                onTap: () => context.push('/settings/account'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('外观'),
+                subtitle: Text('颜色，字体'),
+                onTap: () => context.push('/settings/theme'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.public_rounded),
+                title: const Text('网络'),
+                subtitle: Text('后端接口，图片下载'),
+                onTap: () => context.push('/settings/network'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.gesture_outlined),
+                title: const Text('操作'),
+                subtitle: Text('手势，动画'),
+                onTap: () => context.push('/settings/operation'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.code_outlined),
+                title: Text('实验'),
+                subtitle: Text('正在测试的新功能'),
+                onTap: () => context.push('/settings/experimental'),
+              ),
+              ListTile(
+                leading: Icon(Icons.info_outline_rounded),
+                title: Text('关于'),
+                subtitle: Text('$_appName v$_appVersion'),
+                onTap: () => context.push('/settings/about'),
+              ),
+              SizedBox(height: 48),
+            ]),
+          ),
         ],
       ),
     );
@@ -184,18 +184,18 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('账户')),
-            if (_loading)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else
-              SliverList(
-                delegate: SliverChildListDelegate(
-                  _user != null ? _buildLoggedIn() : _buildLoggedOut(),
-                ),
+          const SliverAppBar.large(title: Text('账户')),
+          if (_loading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            SliverList(
+              delegate: SliverChildListDelegate(
+                _user != null ? _buildLoggedIn() : _buildLoggedOut(),
               ),
+            ),
         ],
       ),
     );
@@ -294,121 +294,119 @@ class ThemeSettingsPage extends StatelessWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('外观')),
-            SliverList(
-              delegate: SliverChildListDelegate([
-                const _SettingsSectionHeader(title: '颜色'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment<int>(value: 0, label: Text('浅色')),
-                      ButtonSegment<int>(value: 1, label: Text('深色')),
-                      ButtonSegment<int>(value: 2, label: Text('跟随系统')),
-                    ],
-                    selected: <int>{settings.themeMode},
-                    onSelectionChanged: (selection) {
-                      context.read<SettingsController>().updateThemeMode(
-                        selection.first,
-                      );
-                    },
-                  ),
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.contrast),
-                  title: const Text('AMOLED 深黑'),
-                  subtitle: const Text('仅在深色主题下生效'),
-                  value: settings.amoled,
-                  onChanged: (value) {
-                    context.read<SettingsController>().updateAmoled(value);
+          const SliverAppBar.large(title: Text('外观')),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              const _SettingsSectionHeader(title: '颜色'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment<int>(value: 0, label: Text('浅色')),
+                    ButtonSegment<int>(value: 1, label: Text('深色')),
+                    ButtonSegment<int>(value: 2, label: Text('跟随系统')),
+                  ],
+                  selected: <int>{settings.themeMode},
+                  onSelectionChanged: (selection) {
+                    context.read<SettingsController>().updateThemeMode(
+                      selection.first,
+                    );
                   },
                 ),
-                const _SettingsSectionHeader(title: '字体'),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.contrast),
+                title: const Text('AMOLED 深黑'),
+                subtitle: const Text('仅在深色主题下生效'),
+                value: settings.amoled,
+                onChanged: (value) {
+                  context.read<SettingsController>().updateAmoled(value);
+                },
+              ),
+              const _SettingsSectionHeader(title: '字体'),
 
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Card(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '三体·黑暗森林',
-                              style: TextStyle(
-                                fontSize: settings.titleFontSize.toDouble(),
-                                fontWeight: settings.titleBold
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Card(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '三体·黑暗森林',
+                            style: TextStyle(
+                              fontSize: settings.titleFontSize.toDouble(),
+                              fontWeight: settings.titleBold
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '序章',
-                              style: TextStyle(
-                                fontSize: settings.headerFontSize.toDouble(),
-                                fontWeight: settings.headerBold
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: Theme.of(
-                                  context,
-                                ).textTheme.bodyMedium?.color,
-                              ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '序章',
+                            style: TextStyle(
+                              fontSize: settings.headerFontSize.toDouble(),
+                              fontWeight: settings.headerBold
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.color,
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              """褐蚁已经忘记这里曾是它的家园。这段时光对于暮色中的大地和刚刚出现的星星来说短得可以忽略不计，但对于它来说却是漫长的。
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            """褐蚁已经忘记这里曾是它的家园。这段时光对于暮色中的大地和刚刚出现的星星来说短得可以忽略不计，但对于它来说却是漫长的。
 在那个已被忘却的日子里，它的世界颠覆了。泥土飞走，出现了一条又深又宽的峡谷，然后泥土又轰隆隆地飞回来，峡谷消失了，在原来峡谷的尽头出现了一座黑色的孤峰。其实，在这片广阔的疆域上，这种事常常发生，泥土飞走又飞回，峡谷出现又消失，然后是孤峰降临，好像是给每次灾变打上一个醒目的标记。褐蚁和几百个同族带着幸存的蚁后向太阳落下的方向走了一段路，建立了新的帝国。""",
-                              style: TextStyle(
-                                fontSize: settings.contentFontSize.toDouble(),
-                              ),
+                            style: TextStyle(
+                              fontSize: settings.contentFontSize.toDouble(),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
-                SizedBox(height: 12),
-                _FontSizeRow(
-                  label: '正文',
-                  value: settings.contentFontSize,
-                  min: 12,
-                  max: 24,
-                  onSizeChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateContentFontSize(v),
-                ),
-                _FontSizeRow(
-                  label: '副标题',
-                  value: settings.headerFontSize,
-                  min: 16,
-                  max: 32,
-                  isBold: settings.headerBold,
-                  showBoldToggle: true,
-                  onSizeChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateHeaderFontSize(v),
-                  onBoldChanged: (b) =>
-                      context.read<SettingsController>().updateHeaderBold(b),
-                ),
-                _FontSizeRow(
-                  label: '标题',
-                  value: settings.titleFontSize,
-                  min: 20,
-                  max: 40,
-                  isBold: settings.titleBold,
-                  showBoldToggle: true,
-                  onSizeChanged: (v) =>
-                      context.read<SettingsController>().updateTitleFontSize(v),
-                  onBoldChanged: (b) =>
-                      context.read<SettingsController>().updateTitleBold(b),
-                ),
-                SizedBox(height: 64),
-              ]),
-            ),
+              ),
+              SizedBox(height: 12),
+              _FontSizeRow(
+                label: '正文',
+                value: settings.contentFontSize,
+                min: 12,
+                max: 24,
+                onSizeChanged: (v) =>
+                    context.read<SettingsController>().updateContentFontSize(v),
+              ),
+              _FontSizeRow(
+                label: '副标题',
+                value: settings.headerFontSize,
+                min: 16,
+                max: 32,
+                isBold: settings.headerBold,
+                showBoldToggle: true,
+                onSizeChanged: (v) =>
+                    context.read<SettingsController>().updateHeaderFontSize(v),
+                onBoldChanged: (b) =>
+                    context.read<SettingsController>().updateHeaderBold(b),
+              ),
+              _FontSizeRow(
+                label: '标题',
+                value: settings.titleFontSize,
+                min: 20,
+                max: 40,
+                isBold: settings.titleBold,
+                showBoldToggle: true,
+                onSizeChanged: (v) =>
+                    context.read<SettingsController>().updateTitleFontSize(v),
+                onBoldChanged: (b) =>
+                    context.read<SettingsController>().updateTitleBold(b),
+              ),
+              SizedBox(height: 64),
+            ]),
+          ),
         ],
       ),
     );
@@ -469,47 +467,46 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('网络')),
-            SliverList(
-              delegate: SliverChildListDelegate([
-                const _SettingsSectionHeader(title: 'API 接口'),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: _baseUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'API Base URL',
-                          hintText: '',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.url,
+          const SliverAppBar.large(title: Text('网络')),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              const _SettingsSectionHeader(title: 'API 接口'),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _baseUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'API Base URL',
+                        hintText: '',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton(
-                          onPressed: _saveBaseUrl,
-                          child: const Text('保存'),
-                        ),
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton(
+                        onPressed: _saveBaseUrl,
+                        child: const Text('保存'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const _SettingsSectionHeader(title: '图片下载'),
-                SwitchListTile(
-                  secondary: const Icon(Icons.wifi_rounded),
-                  title: const Text('仅在 Wi-Fi 下下载图片'),
-                  subtitle: const Text('移动网络下将不加载封面与图形摘要'),
-                  value: settings.wifiOnlyImages,
-                  onChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateWifiOnlyImages(v),
-                ),
-              ]),
-            ),
+              ),
+              const _SettingsSectionHeader(title: '图片下载'),
+              SwitchListTile(
+                secondary: const Icon(Icons.wifi_rounded),
+                title: const Text('仅在 Wi-Fi 下下载图片'),
+                subtitle: const Text('移动网络下将不加载封面与图形摘要'),
+                value: settings.wifiOnlyImages,
+                onChanged: (v) =>
+                    context.read<SettingsController>().updateWifiOnlyImages(v),
+              ),
+            ]),
+          ),
         ],
       ),
     );
@@ -533,62 +530,61 @@ class _OperationSettingsPageState extends State<OperationSettingsPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('操作')),
-            SliverList(
-              delegate: SliverChildListDelegate([
-                const _SettingsSectionHeader(title: '手势'),
-                SwitchListTile(
-                  secondary: const Icon(Icons.swipe_up_rounded),
-                  title: const Text('上滑切换文章'),
-                  subtitle: const Text('在底端继续向上滑动切换到下一篇文章'),
-                  value: settings.swipeToChangeArticleUp,
-                  onChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateSwipeToChangeArticleUp(v),
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.swipe_down_rounded),
-                  title: const Text('下滑切换文章'),
-                  subtitle: const Text('在顶端继续向下滑动切换到上一篇文章'),
-                  value: settings.swipeToChangeArticleDown,
-                  onChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateSwipeToChangeArticleDown(v),
-                ),
-                SizedBox(height: 12),
-                _FontSizeRow(
-                  label: '滑动切换灵敏度',
-                  value: settings.swipeSensitivity,
-                  min: 50,
-                  max: 200,
-                  onSizeChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateSwipeSensitivity(v),
-                ),
-                const _SettingsSectionHeader(title: '导航'),
-                SwitchListTile(
-                  secondary: const Icon(Icons.vertical_align_top_rounded),
-                  title: const Text('双击导航栏回到顶部'),
-                  subtitle: const Text('在主页双击底部导航栏的当前标签页，可以快速滚动到页面顶部'),
-                  value: settings.doubleTapToTop,
-                  onChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateDoubleTapToTop(v),
-                ),
-                SizedBox(height: 12),
-                _FontSizeRow(
-                  label: '双击灵敏度',
-                  value: settings.doubleTapSensitivity,
-                  min: 100,
-                  max: 1000,
-                  unit: 'ms',
-                  onSizeChanged: (v) => context
-                      .read<SettingsController>()
-                      .updateDoubleTapSensitivity(v),
-                ),
-                SizedBox(height: 20),
-              ]),
-            ),
+          const SliverAppBar.large(title: Text('操作')),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              const _SettingsSectionHeader(title: '手势'),
+              SwitchListTile(
+                secondary: const Icon(Icons.swipe_up_rounded),
+                title: const Text('上滑切换文章'),
+                subtitle: const Text('在底端继续向上滑动切换到下一篇文章'),
+                value: settings.swipeToChangeArticleUp,
+                onChanged: (v) => context
+                    .read<SettingsController>()
+                    .updateSwipeToChangeArticleUp(v),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.swipe_down_rounded),
+                title: const Text('下滑切换文章'),
+                subtitle: const Text('在顶端继续向下滑动切换到上一篇文章'),
+                value: settings.swipeToChangeArticleDown,
+                onChanged: (v) => context
+                    .read<SettingsController>()
+                    .updateSwipeToChangeArticleDown(v),
+              ),
+              SizedBox(height: 12),
+              _FontSizeRow(
+                label: '滑动切换灵敏度',
+                value: settings.swipeSensitivity,
+                min: 50,
+                max: 200,
+                onSizeChanged: (v) => context
+                    .read<SettingsController>()
+                    .updateSwipeSensitivity(v),
+              ),
+              const _SettingsSectionHeader(title: '导航'),
+              SwitchListTile(
+                secondary: const Icon(Icons.vertical_align_top_rounded),
+                title: const Text('双击导航栏回到顶部'),
+                subtitle: const Text('在主页双击底部导航栏的当前标签页，可以快速滚动到页面顶部'),
+                value: settings.doubleTapToTop,
+                onChanged: (v) =>
+                    context.read<SettingsController>().updateDoubleTapToTop(v),
+              ),
+              SizedBox(height: 12),
+              _FontSizeRow(
+                label: '双击灵敏度',
+                value: settings.doubleTapSensitivity,
+                min: 100,
+                max: 1000,
+                unit: 'ms',
+                onSizeChanged: (v) => context
+                    .read<SettingsController>()
+                    .updateDoubleTapSensitivity(v),
+              ),
+              SizedBox(height: 20),
+            ]),
+          ),
         ],
       ),
     );
@@ -608,130 +604,119 @@ class AboutPage extends StatelessWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('关于')),
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        shape: BoxShape.circle,
-                      ),
-                      child: SvgPicture.asset('assets/logo.svg', width: 64),
+          const SliverAppBar.large(title: Text('关于')),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(height: 24),
-                    Text(
-                      _appName,
-                      style: textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                        letterSpacing: -0.5,
-                      ),
+                    child: SvgPicture.asset('assets/logo.svg', width: 64),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    _appName,
+                    style: textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                      letterSpacing: -0.5,
                     ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(
+                        alpha: 0.5,
                       ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.secondaryContainer.withValues(
-                          alpha: 0.5,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.secondaryContainer,
-                        ),
-                      ),
-                      child: Text(
-                        'Version $_appVersion',
-                        style: textTheme.labelMedium?.copyWith(
-                          color: colorScheme.onSecondaryContainer,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colorScheme.secondaryContainer),
+                    ),
+                    child: Text(
+                      'Version $_appVersion',
+                      style: textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const Spacer(flex: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: () async {
-                            launchUrl(
-                              Uri.parse(_githubRepoUrl),
-                              mode: LaunchMode.externalApplication,
-                            );
-                          },
-                          onLongPress: () async {
-                            await Clipboard.setData(
-                              const ClipboardData(text: _githubRepoUrl),
-                            );
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('GitHub 链接已复制')),
-                            );
-                          },
-                          icon: const Icon(SimpleIcons.github, size: 20),
-                          label: const Text('GitHub 仓库'),
-                        ),
-                        const SizedBox(width: 16),
-                        FilledButton.tonalIcon(
-                          onPressed: () {
-                            context.push('/settings/about/licenses');
-                          },
-                          icon: const Icon(
-                            Icons.description_outlined,
-                            size: 20,
-                          ),
-                          label: const Text('开源许可'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FilledButton.tonalIcon(
-                          onPressed: () {
-                            showPolicyDialog(
-                              context,
-                              title: '用户协议',
-                              content: userAgreementContent,
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.description_outlined,
-                            size: 20,
-                          ),
-                          label: const Text('用户协议'),
-                        ),
-                        const SizedBox(width: 16),
-                        FilledButton.tonalIcon(
-                          onPressed: () {
-                            showPolicyDialog(
-                              context,
-                              title: '隐私政策',
-                              content: privacyPolicyContent,
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.privacy_tip_outlined,
-                            size: 20,
-                          ),
-                          label: const Text('隐私政策'),
-                        ),
-                      ],
-                    ),
-                    const Spacer(flex: 3),
-                  ],
-                ),
+                  ),
+                  const Spacer(flex: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () async {
+                          launchUrl(
+                            Uri.parse(_githubRepoUrl),
+                            mode: LaunchMode.externalApplication,
+                          );
+                        },
+                        onLongPress: () async {
+                          await Clipboard.setData(
+                            const ClipboardData(text: _githubRepoUrl),
+                          );
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('GitHub 链接已复制')),
+                          );
+                        },
+                        icon: const Icon(SimpleIcons.github, size: 20),
+                        label: const Text('GitHub 仓库'),
+                      ),
+                      const SizedBox(width: 16),
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          context.push('/settings/about/licenses');
+                        },
+                        icon: const Icon(Icons.description_outlined, size: 20),
+                        label: const Text('开源许可'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          showPolicyDialog(
+                            context,
+                            title: '用户协议',
+                            content: userAgreementContent,
+                          );
+                        },
+                        icon: const Icon(Icons.description_outlined, size: 20),
+                        label: const Text('用户协议'),
+                      ),
+                      const SizedBox(width: 16),
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          showPolicyDialog(
+                            context,
+                            title: '隐私政策',
+                            content: privacyPolicyContent,
+                          );
+                        },
+                        icon: const Icon(Icons.privacy_tip_outlined, size: 20),
+                        label: const Text('隐私政策'),
+                      ),
+                    ],
+                  ),
+                  const Spacer(flex: 3),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
@@ -907,11 +892,11 @@ class ExperimentalPage extends StatelessWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-            const SliverAppBar.large(title: Text('实验功能')),
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: Text('暂无实验功能，敬请期待！')),
-            ),
+          const SliverAppBar.large(title: Text('实验功能')),
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('暂无实验功能，敬请期待！')),
+          ),
         ],
       ),
     );
