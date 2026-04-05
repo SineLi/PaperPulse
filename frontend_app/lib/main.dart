@@ -145,6 +145,8 @@ class MyApp extends StatelessWidget {
   static const _defaultColorSeed = Colors.blue;
   static const _amoledBlack = Color(0xFF000000);
   static const _amoledRaised = Color(0xFF0D0D0D);
+  static const _appFontFamily = 'AppSans';
+  static const _appFontFallback = <String>['AppCJK'];
   static final _router = createAppRouter();
 
   ColorScheme _withAmoledSurfaces(ColorScheme base) {
@@ -219,12 +221,16 @@ class MyApp extends StatelessWidget {
                                     colorScheme: lightColorScheme,
                                     useMaterial3: true,
                                     snackBarTheme: snackBarTheme,
+                                    fontFamily: _appFontFamily,
+                                    fontFamilyFallback: _appFontFallback,
                                   ),
                                   darkTheme: ThemeData(
                                     colorScheme: effectiveDarkColorScheme,
                                     useMaterial3: true,
                                     snackBarTheme: snackBarTheme,
                                     platform: TargetPlatform.android,
+                                    fontFamily: _appFontFamily,
+                                    fontFamilyFallback: _appFontFallback,
                                     scaffoldBackgroundColor: amoledEnabled
                                         ? _amoledBlack
                                         : null,
