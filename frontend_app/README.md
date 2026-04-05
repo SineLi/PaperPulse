@@ -1,7 +1,8 @@
 # Frontend App
-  <img alt="Frontend Licence" src="https://img.shields.io/badge/Licence-Apache_2.0-blue?logo=apache
-    "/>
+  <img alt="Frontend Licence" src="https://img.shields.io/badge/Licence-Apache_2.0-blue?logo=apache"/>
   
+当前客户端同时面向 Android 和 Flutter Web；主导航、登录/注册、设置子页和文章详情都已纳入路由体系，文章详情通过 `articleId + source` 从本地数据库重建，并在无效或不存在的文章链接下显示提示页。
+
 本目录是 PaperPulse 的 Flutter 客户端，负责登录、期刊浏览、文章流展示、收藏/已读、本地缓存和离线同步。
 
 ## 当前功能
@@ -42,6 +43,8 @@ flutter run
 ```powershell
 flutter run -d chrome
 ```
+
+Web 端使用 Path URL 策略，并依赖 `sqflite_common_ffi_web` 与 `sqlite3.wasm` 提供浏览器内的本地数据库能力。
 
 ## 首次启动说明
 
