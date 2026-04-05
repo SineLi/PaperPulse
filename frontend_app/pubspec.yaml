@@ -106,12 +106,12 @@ flutter:
   #         weight: 700
   #
   fonts:
-  - family: AppSans
-    fonts:
-      - asset: assets/fonts/Inter-Variable.ttf
-  - family: AppCJK
-    fonts:
-      - asset: assets/fonts/NotoSansSC-Regular.subset.ttf
+    - family: AppSans
+      fonts:
+        - asset: assets/fonts/Inter-Variable.ttf
+    - family: AppCJK
+      fonts:
+        - asset: assets/fonts/NotoSansSC-Regular.subset.ttf
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
   assets:
