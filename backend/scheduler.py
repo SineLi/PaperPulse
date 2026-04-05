@@ -39,7 +39,7 @@ def cycle_job():
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=llm_update detail=%s", e)
     finally:
-        _log_step_duration("LLM update cycle", step_started_at)
+        _log_step_duration("llm_update", step_started_at)
 
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="article_fetch")
@@ -49,7 +49,7 @@ def cycle_job():
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=article_fetch detail=%s", e)
     finally:
-        _log_step_duration("Article fetch cycle", step_started_at)
+        _log_step_duration("article_fetch", step_started_at)
 
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="llm_submission")
@@ -59,7 +59,7 @@ def cycle_job():
 
         logger.exception("event=scheduler_step_failed step=llm_submission detail=%s", e)
     finally:
-        _log_step_duration("LLM submission cycle", step_started_at)
+        _log_step_duration("llm_submission", step_started_at)
 
     cycle_elapsed = time.monotonic() - cycle_started_at
     log_level = logging.WARNING if cycle_elapsed >= CYCLE_WARN_AFTER_SECS else logging.INFO
@@ -83,7 +83,7 @@ def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=image_cache_backfill detail=%s", e)
     finally:
-        _log_step_duration("Image cache backfill", started_at)
+        _log_step_duration("image_cache_backfill", started_at)
 
 
 
