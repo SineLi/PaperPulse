@@ -10,6 +10,5 @@ _flutter.loader.load({
     renderer: 'canvaskit',
     useLocalCanvasKit: true,
     canvasKitBaseUrl: 'canvaskit/',
-    fontFallbackBaseUrl: 'assets/fonts/',
   },
 });
