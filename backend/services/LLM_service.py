@@ -7,11 +7,15 @@ import jsonlines
 import io
 from openai import OpenAI
 import textwrap
+from utils.logging_utils import log_event
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("LLM_BASE_URL")
 LM_API_KEY = os.getenv("LM_API_KEY")
+LLM_HTTP_TIMEOUT_SECS = float(os.getenv("LLM_HTTP_TIMEOUT_SECS", "120"))
+DEFAULT_SUBMISSION_LIMIT = int(os.getenv("LLM_SUBMISSION_LIMIT", "-1"))
+LLM_BATCH_WARN_AFTER_SECS = 2 * 60
 PROMPT = textwrap.dedent("""\
 你是一名专业学术助理，请基于以下摘要原文生成**中文**解释。
 **核心原则**：
@@ -154,39 +158,68 @@ class LLMService:
     def __init__(self):
         self.app = OpenAI(
             api_key=LM_API_KEY,
-            base_url=BASE_URL
+            base_url=BASE_URL,
+            timeout=LLM_HTTP_TIMEOUT_SECS,
         )
         self.repo = ArticleRepository() # 注入依赖
 
     def run_submission_cycle(self, limit=None):
         """执行一次完整的提交周期"""
         # 1. 获取数据
-        rows, ids = self.repo.get_pending_articles(limit=limit)
+        cycle_started_at = time.monotonic()
+        effective_limit = limit if limit is not None else DEFAULT_SUBMISSION_LIMIT
+        if effective_limit == -1:
+            effective_limit = None
+        rows, ids = self.repo.get_pending_articles(limit=effective_limit)
         if not ids:
-            logger.info("No pending articles found.")
+            log_event(logger, logging.INFO, "llm_submission_skipped_no_pending_articles")
             return
+
+        log_event(logger, logging.INFO, "llm_submission_started", article_count=len(ids), limit=effective_limit)
 
         # 2. 构建数据 (这里可以保留 filter/join 逻辑)
         abstracts = self._format_abstracts(rows) 
         batch_file = self._build_batch_file(abstracts, ids)
 
         # 3. 提交任务
+        submit_started_at = time.monotonic()
         batch_id = self._submit_to_api(batch_file)
+        submit_elapsed = time.monotonic() - submit_started_at
+        log_event(
+            logger,
+            logging.WARNING if submit_elapsed >= LLM_BATCH_WARN_AFTER_SECS else logging.INFO,
+            "llm_batch_submitted_to_provider",
+            batch_id=batch_id,
+            elapsed_secs=submit_elapsed,
+            article_count=len(ids),
+        )
         
         # 4. 更新状态
         self.repo.mark_articles_as_submitted(ids, batch_id)
-        logger.info(f"Submitted batch {batch_id}")
+        log_event(logger, logging.INFO, "llm_submission_completed", batch_id=batch_id, elapsed_secs=time.monotonic() - cycle_started_at)
 
     def run_update_cycle(self):
         """执行一次完整的检查更新周期"""
+        cycle_started_at = time.monotonic()
         active_batches = self.repo.get_active_batch_ids()
+        log_event(logger, logging.INFO, "llm_update_started", active_batch_count=len(active_batches))
         for batch_id in active_batches:
+            batch_started_at = time.monotonic()
             results = self._fetch_results_from_api(batch_id)
             if results:
                 # 解析并更新
                 updates = self._parse_results(results) # 返回 [(summary, 'processed', id), ...]
                 self.repo.update_article_summaries(updates)
-                logger.info(f"Batch {batch_id} processed.")
+                log_event(logger, logging.INFO, "llm_batch_processed", batch_id=batch_id, update_count=len(updates))
+            batch_elapsed = time.monotonic() - batch_started_at
+            log_event(
+                logger,
+                logging.WARNING if batch_elapsed >= LLM_BATCH_WARN_AFTER_SECS else logging.INFO,
+                "llm_batch_update_completed",
+                batch_id=batch_id,
+                elapsed_secs=batch_elapsed,
+            )
+        log_event(logger, logging.INFO, "llm_update_completed", elapsed_secs=time.monotonic() - cycle_started_at)
 
     def _format_abstracts(self, rows):
         """格式化摘要数据为 API 所需的结构"""
@@ -218,19 +251,21 @@ class LLMService:
                 }
             }
             jsons.append(json.dumps(entry, ensure_ascii=False))
-        logger.info(f"Built batch file with {len(jsons)} entries.")
+        log_event(logger, logging.INFO, "llm_batch_file_built", entry_count=len(jsons))
         jsonl_content = "\n".join(jsons).encode("utf-8")
         return io.BytesIO(jsonl_content)
 
     def _submit_to_api(self, batch_file):
         """提交批处理任务并记录 ID"""
         file_info = self.app.files.create(file=("batch_input.jsonl", batch_file), purpose="batch")
+        log_event(logger, logging.INFO, "llm_input_file_uploaded", file_id=file_info.id)
         batch_job = self.app.batches.create(
             input_file_id=file_info.id,
             endpoint="/v1/chat/completions",
             completion_window="24h"
         )
-        
+        log_event(logger, logging.INFO, "llm_batch_created", batch_id=batch_job.id, input_file_id=file_info.id)
+
         return batch_job.id
     
     def _fetch_results_from_api(self, batch_id):
@@ -238,16 +273,19 @@ class LLMService:
         batch = self.app.batches.retrieve(batch_id)
         if batch.status == "completed":
             if batch.output_file_id:
+                log_event(logger, logging.INFO, "llm_batch_result_download_started", batch_id=batch_id, output_file_id=batch.output_file_id)
                 return self.app.files.content(batch.output_file_id).text
             else:
-                logger.error(f"Batch {batch_id} status is 'completed' but output_file_id is None. Clearing status for retry.")
+                log_event(logger, logging.ERROR, "llm_batch_completed_missing_output", batch_id=batch_id)
                 self.repo.clear_batch_llm_status(batch_id)
                 return None
         elif batch.status in ["failed", "expired", "cancelled"]:
             self.repo.clear_batch_llm_status(batch_id)
-            logger.error(f"Batch {batch_id} ended with status: {batch.status}")
+            log_event(logger, logging.ERROR, "llm_batch_terminal_error", batch_id=batch_id, status=batch.status)
             return None
+        log_event(logger, logging.INFO, "llm_batch_still_running", batch_id=batch_id, status=batch.status)
         return None # 仍在处理中
+
 
     def _parse_results(self, res_jsonl):
         """解析 API 返回的结果"""
@@ -266,13 +304,16 @@ class LLMService:
                         
                         summaries.append(clean_content)
                         result_ids.append(custom_id)
+                        log_event(logger, logging.DEBUG, "llm_result_parsed", article_id=custom_id, parsed_json=True)
                     except json.JSONDecodeError as e:
-                        logger.error(f"解析摘要 JSON 内容失败 (ID: {custom_id}): {e}")
+                        logger.exception("event=llm_result_parse_failed article_id=%s detail=%s", custom_id, e)
                         summaries.append(content_raw)
                         result_ids.append(custom_id)
 
         # 返回 [(summary, 'processed', id), ...]
-        return [(summaries[i], "processed", result_ids[i]) for i in range(len(result_ids))]
+        updates = [(summaries[i], "processed", result_ids[i]) for i in range(len(result_ids))]
+        log_event(logger, logging.INFO, "llm_results_parsed", update_count=len(updates))
+        return updates
 
 if __name__ == "__main__":
     service = LLMService()

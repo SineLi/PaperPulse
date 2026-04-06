@@ -1,6 +1,8 @@
 import logging
+import time
 from db.database import get_db_connection
 from sqlalchemy import text
+from utils.logging_utils import log_event
 
 from utils.fetcher.AAAS_fetcher import ScienceFetcher
 from utils.fetcher.ACS_fetcher import ACSFetcher
@@ -14,8 +16,8 @@ from utils.fetcher.Taylor_fetcher import TaylorFetcher
 from utils.fetcher.Wiely_fetcher import WileyFetcher
 
 # 日志配置
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("MainFetcher")
+logger = logging.getLogger(__name__)
+FETCHER_WARN_AFTER_SECS = 5 * 60
 
 # 出版商与抓取器类的映射关系
 PUBLISHER_FETCHER_MAP = {
@@ -33,7 +35,8 @@ PUBLISHER_FETCHER_MAP = {
 }
 
 def run_enabled_fetchers():
-    logger.info("Starting run_enabled_fetchers...")
+    total_started_at = time.monotonic()
+    log_event(logger, logging.INFO, "fetchers_started")
     
     with get_db_connection() as conn:
         active_journals = conn.execute(
@@ -47,8 +50,10 @@ def run_enabled_fetchers():
         ).mappings().all()
 
     if not active_journals:
-        logger.info("No active journals found with crawler_enabled=1.")
+        log_event(logger, logging.INFO, "fetchers_no_active_journals")
         return
+
+    log_event(logger, logging.INFO, "fetchers_loaded", journal_count=len(active_journals))
 
     for journal in active_journals:
         journal = dict(journal)
@@ -60,27 +65,48 @@ def run_enabled_fetchers():
         j_url = journal['rss_url'] if journal['rss_url'] else journal['official_url']
 
         if not j_url:
-            logger.warning(f"No URL found for {j_name}. Skipping.")
+            log_event(logger, logging.WARNING, "journal_skipped_missing_url", journal=j_name, publisher=j_publisher)
             continue
 
-        logger.info(f"Processing journal: {j_name} (Publisher: {j_publisher})")
+        log_event(logger, logging.INFO, "journal_processing_started", journal=j_name, publisher=j_publisher)
 
         # 查找匹配的抓取器类
         fetcher_class = PUBLISHER_FETCHER_MAP.get(j_publisher)
 
         if not fetcher_class:
-            logger.warning(f"No fetcher found for publisher: {j_publisher}. Skipping {j_name}.")
+            log_event(logger, logging.WARNING, "journal_skipped_missing_fetcher", journal=j_name, publisher=j_publisher)
             continue
 
+        journal_started_at = time.monotonic()
         try:
             # 实例化抓取器 (已将所有 fetcher 更新为支持 url 和 name 参数)
             fetcher = fetcher_class(url=j_url, name=j_name, max_workers=5, journal_id=j_id)
             
-            logger.info(f"Running {fetcher.__class__.__name__} for {j_name}...")
+            log_event(
+                logger,
+                logging.INFO,
+                "journal_fetcher_started",
+                journal=j_name,
+                publisher=j_publisher,
+                fetcher=fetcher.__class__.__name__,
+                url=j_url,
+            )
             fetcher.run()
             
         except Exception as e:
-            logger.error(f"Error running fetcher for {j_name}: {e}")
+            logger.exception(
+                "event=journal_fetcher_failed journal=%s publisher=%s detail=%s",
+                j_name,
+                j_publisher,
+                e,
+            )
+        finally:
+            elapsed = time.monotonic() - journal_started_at
+            log_level = logging.WARNING if elapsed >= FETCHER_WARN_AFTER_SECS else logging.INFO
+            log_event(logger, log_level, "journal_processing_completed", journal=j_name, publisher=j_publisher, elapsed_secs=elapsed)
+
+    total_elapsed = time.monotonic() - total_started_at
+    log_event(logger, logging.INFO, "fetchers_completed", elapsed_secs=total_elapsed)
 
 if __name__ == "__main__":
     run_enabled_fetchers()

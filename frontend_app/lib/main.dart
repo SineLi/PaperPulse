@@ -18,15 +18,16 @@ import 'data/service/post_auth_sync_service.dart';
 import 'data/service/sync_service.dart';
 import 'data/service/user_services.dart';
 import 'data/service/image_cache_service.dart';
-
-import 'pages/login_page.dart';
-import 'pages/bootstrap_page.dart';
-import 'pages/app_shell_page.dart';
-import 'pages/setting_page.dart';
-import 'pages/signup_page.dart';
+import 'navigation/tab_scroll_registry.dart';
+import 'settings/settings_controller.dart';
+import 'router/app_router.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:go_router/go_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  usePathUrlStrategy();
+  GoRouter.optionURLReflectsImperativeAPIs = true;
 
   final settingsController = SettingsController(SettingStorage());
   await settingsController.load();
@@ -83,17 +84,20 @@ Future<void> main() async {
     feedRepo: feedRepo,
     syncService: syncService,
   );
+  final tabScrollRegistry = TabScrollRegistry();
 
   // Initialize wifiOnly from loaded settings, then keep in sync via listener.
   // The listener is intentionally never removed: all three objects
   // (settingsController, apiClient, imageCacheService) share the same
   // application lifetime, so there is no risk of a memory leak.
   imageCacheService.wifiOnly = settingsController.setting.wifiOnlyImages;
+  imageCacheService.baseUrl = settingsController.setting.baseURL;
   settingsController.addListener(() {
     final url = settingsController.setting.baseURL.trim();
     if (url.isNotEmpty) {
       apiClient.baseUrl = url;
     }
+    imageCacheService.baseUrl = settingsController.setting.baseURL;
     imageCacheService.wifiOnly = settingsController.setting.wifiOnlyImages;
   });
 
@@ -108,6 +112,7 @@ Future<void> main() async {
       syncService: syncService,
       imageCacheService: imageCacheService,
       postAuthSyncService: postAuthSyncService,
+      tabScrollRegistry: tabScrollRegistry,
     ),
   );
 }
@@ -122,6 +127,7 @@ class MyApp extends StatelessWidget {
   final SyncService syncService;
   final ImageCacheService imageCacheService;
   final PostAuthSyncService postAuthSyncService;
+  final TabScrollRegistry tabScrollRegistry;
   const MyApp({
     super.key,
     required this.settingsController,
@@ -133,11 +139,15 @@ class MyApp extends StatelessWidget {
     required this.syncService,
     required this.imageCacheService,
     required this.postAuthSyncService,
+    required this.tabScrollRegistry,
   });
 
   static const _defaultColorSeed = Colors.blue;
   static const _amoledBlack = Color(0xFF000000);
   static const _amoledRaised = Color(0xFF0D0D0D);
+  static const _appFontFamily = 'AppSans';
+  static const _appFontFallback = <String>['AppCJK'];
+  static final _router = createAppRouter();
 
   ColorScheme _withAmoledSurfaces(ColorScheme base) {
     return base.copyWith(
@@ -194,54 +204,57 @@ class MyApp extends StatelessWidget {
                         value: postAuthSyncService,
                         child: Provider<ImageCacheService>.value(
                           value: imageCacheService,
-                          child: Consumer<SettingsController>(
-                            builder: (context, settingsCtrl, _) {
-                              final amoledEnabled = settingsCtrl.setting.amoled;
-                              final effectiveDarkColorScheme = amoledEnabled
-                                  ? _withAmoledSurfaces(darkColorScheme)
-                                  : darkColorScheme;
-                              return MaterialApp(
-                                title: 'PaperPulse',
-                                theme: ThemeData(
-                                  colorScheme: lightColorScheme,
-                                  useMaterial3: true,
-                                  snackBarTheme: snackBarTheme,
-                                ),
-                                darkTheme: ThemeData(
-                                  colorScheme: effectiveDarkColorScheme,
-                                  useMaterial3: true,
-                                  snackBarTheme: snackBarTheme,
-                                  scaffoldBackgroundColor: amoledEnabled
-                                      ? _amoledBlack
-                                      : null,
-                                  canvasColor: amoledEnabled
-                                      ? _amoledBlack
-                                      : null,
-                                  cardColor: amoledEnabled
-                                      ? _amoledBlack
-                                      : null,
-                                  appBarTheme: AppBarTheme(
-                                    backgroundColor: amoledEnabled
+                          child: Provider<TabScrollRegistry>.value(
+                            value: tabScrollRegistry,
+                            child: Consumer<SettingsController>(
+                              builder: (context, settingsCtrl, _) {
+                                final amoledEnabled =
+                                    settingsCtrl.setting.amoled;
+                                final effectiveDarkColorScheme = amoledEnabled
+                                    ? _withAmoledSurfaces(darkColorScheme)
+                                    : darkColorScheme;
+                                return MaterialApp.router(
+                                  title: 'PaperPulse',
+                                  routerConfig: _router,
+                                  theme: ThemeData(
+                                    platform: TargetPlatform.android,
+                                    colorScheme: lightColorScheme,
+                                    useMaterial3: true,
+                                    snackBarTheme: snackBarTheme,
+                                    fontFamily: _appFontFamily,
+                                    fontFamilyFallback: _appFontFallback,
+                                  ),
+                                  darkTheme: ThemeData(
+                                    colorScheme: effectiveDarkColorScheme,
+                                    useMaterial3: true,
+                                    snackBarTheme: snackBarTheme,
+                                    platform: TargetPlatform.android,
+                                    fontFamily: _appFontFamily,
+                                    fontFamilyFallback: _appFontFallback,
+                                    scaffoldBackgroundColor: amoledEnabled
                                         ? _amoledBlack
                                         : null,
-                                    surfaceTintColor: amoledEnabled
-                                        ? Colors.transparent
+                                    canvasColor: amoledEnabled
+                                        ? _amoledBlack
                                         : null,
+                                    cardColor: amoledEnabled
+                                        ? _amoledBlack
+                                        : null,
+                                    appBarTheme: AppBarTheme(
+                                      backgroundColor: amoledEnabled
+                                          ? _amoledBlack
+                                          : null,
+                                      surfaceTintColor: amoledEnabled
+                                          ? Colors.transparent
+                                          : null,
+                                    ),
                                   ),
-                                ),
-                                themeMode: context
-                                    .watch<SettingsController>()
-                                    .themeMode,
-                                home: const BootstrapPage(),
-                                routes: {
-                                  '/feed': (context) => const AppShellPage(),
-                                  '/login': (context) => const LoginPage(),
-                                  '/register': (context) =>
-                                      const RegisterPage(),
-                                  '/settings': (context) => const SettingPage(),
-                                },
-                              );
-                            },
+                                  themeMode: context
+                                      .watch<SettingsController>()
+                                      .themeMode,
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),

@@ -238,3 +238,4 @@ backend/db/advNewsFeed.db-wal
 frontend_app/android/key.properties
 frontend_app/android/keystores/
 .env.compose
+backend/media/

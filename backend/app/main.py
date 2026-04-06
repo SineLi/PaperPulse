@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.routers import auth, journals, users, articles, status
 
 from fastapi.responses import FileResponse
@@ -33,6 +35,10 @@ app.include_router(users.router)
 app.include_router(journals.router)
 app.include_router(articles.router)
 app.include_router(status.router)
+
+media_dir = Path(__file__).resolve().parents[1] / "media"
+media_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
 
 @app.get("/")
 def root():

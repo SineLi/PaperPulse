@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../data/models/article.dart';
 import '../data/models/article_filter.dart';
-import '../pages/article_detail_page.dart';
 import 'article_filter_sheet.dart';
 import 'feed_card.dart';
 import 'unified_list_page.dart';
@@ -32,6 +32,9 @@ class ArticleListPage extends StatefulWidget {
   final String? emptyActionLabel;
   final int pageSize;
   final ScrollController? scrollController;
+  final int? tabScrollIndex;
+  // 标记详情页是从哪个顶层列表进入的，例如 feed 或 favorites。
+  final String routeSource;
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
@@ -59,6 +62,8 @@ class ArticleListPage extends StatefulWidget {
     this.emptyActionLabel = '刷新',
     this.pageSize = 20,
     this.scrollController,
+    this.tabScrollIndex,
+    required this.routeSource,
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
@@ -125,30 +130,28 @@ class _ArticleListPageState extends State<ArticleListPage> {
       emptyActionLabel: widget.emptyActionLabel,
       pageSize: widget.pageSize,
       scrollController: widget.scrollController,
+      tabScrollIndex: widget.tabScrollIndex,
       autoRefreshOnInit: widget.autoRefreshOnInit,
       showExternalRefreshing: widget.showExternalRefreshing,
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, article, index, allArticles, updateItem) {
+      itemBuilder: (ctx, article, index, allArticles, updateItem, updateItemById) {
         return FeedItemCard(
           article: article,
           onTap: () {
-            Navigator.of(ctx).push(
-              MaterialPageRoute(
-                builder: (_) => ArticleDetailPage(
-                  articles: allArticles,
-                  initialIndex: index,
-                  onArticleRead: (articleId) {
-                    final idx = allArticles.indexWhere(
-                      (a) => a.articleId == articleId,
-                    );
-                    if (idx != -1) {
-                      updateItem(idx, allArticles[idx].copyWith(isRead: true));
-                    }
-                  },
-                ),
-              ),
+            // 路由里只放稳定、可刷新的状态。详情页会根据 articleId 查当前文章，
+            // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
+            ctx.push(
+              '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
+              // 为详情页提供已读回调，使其在标记已读时按 articleId 实时查找并更新当前列表项。
+              // 这样即使列表在打开详情期间发生变化，也能准确更新对应文章项。
+              extra: (int readArticleId) {
+                updateItemById(
+                  readArticleId,
+                  (readArticle) => readArticle.copyWith(isRead: true),
+                );
+              },
             );
           },
         );

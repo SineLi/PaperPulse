@@ -1,5 +1,10 @@
+import logging
+
 from sqlalchemy import text
 from db.database import get_db_connection
+from utils.logging_utils import log_event
+
+logger = logging.getLogger(__name__)
 
 
 class ArticleRepository:
@@ -30,37 +35,48 @@ class ArticleRepository:
 
             rows = [dict(r) for r in rows]
             ids = [r["id"] for r in rows]
+            log_event(logger, logging.INFO, "repo_pending_articles_loaded", count=len(ids), limit=limit)
             return rows, ids
 
     def mark_articles_as_submitted(self, article_ids: list[int], batch_id: str) -> None:
         with get_db_connection() as conn:
-            conn.execute(
+            result = conn.execute(
                 text("UPDATE articles SET llm_status = :batch WHERE id = :id"),
                 [{"batch": batch_id, "id": int(aid)} for aid in article_ids],
+            )
+            log_event(
+                logger,
+                logging.INFO,
+                "repo_articles_marked_submitted",
+                batch_id=batch_id,
+                article_count=len(article_ids),
+                rowcount=result.rowcount,
             )
 
     def clear_article_llm_status(self, article_id: int) -> None:
         with get_db_connection() as conn:
-            conn.execute(
+            result = conn.execute(
                 text(
                     "UPDATE articles SET llm_status = NULL, llm_summary = NULL WHERE id = :id"),
                 {"id": int(article_id)},
             )
+            log_event(logger, logging.INFO, "repo_article_status_cleared", article_id=article_id, rowcount=result.rowcount)
 
     def clear_batch_llm_status(self, batch_id:str) -> None:
         with get_db_connection() as conn:
-            conn.execute(
+            result = conn.execute(
                 text(
                     "UPDATE articles SET llm_status = NULL, llm_summary = NULL WHERE llm_status = :b"),
                 {"b": batch_id},
             )
+            log_event(logger, logging.INFO, "repo_batch_status_cleared", batch_id=batch_id, rowcount=result.rowcount)
 
     def update_article_summaries(self, updates: list[tuple[str, str, int]]) -> None:
         # updates = [(summary, status, id), ...]
         payload = [{"summary": s, "status": st,
                     "id": int(i)} for (s, st, i) in updates]
         with get_db_connection() as conn:
-            conn.execute(
+            result = conn.execute(
                 text(
                     """
                     UPDATE articles
@@ -72,6 +88,7 @@ class ArticleRepository:
                 ),
                 payload,
             )
+            log_event(logger, logging.INFO, "repo_article_summaries_updated", update_count=len(payload), rowcount=result.rowcount)
 
     def get_active_batch_ids(self) -> list[str]:
         with get_db_connection() as conn:
@@ -86,4 +103,6 @@ class ArticleRepository:
                     """
                 )
             ).scalars().all()
-            return list(ids)
+            result = list(ids)
+            log_event(logger, logging.INFO, "repo_active_batches_loaded", count=len(result))
+            return result

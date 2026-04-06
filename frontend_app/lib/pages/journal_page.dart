@@ -7,6 +7,7 @@ import '../data/models/journal.dart';
 import '../data/repositories/journal_repo.dart';
 import '../data/repositories/user_repo.dart';
 import '../data/service/post_auth_sync_service.dart';
+import '../navigation/tab_scroll_registry.dart';
 import '../widgets/journal_list_page.dart';
 
 class JournalPage extends StatefulWidget {
@@ -84,6 +85,7 @@ class _JournalPageState extends State<JournalPage> {
     return JournalListPage(
       title: '期刊',
       scrollController: widget.scrollController,
+      tabScrollIndex: journalsTabIndex,
       loadJournals: (limit, offset, filter) => journalRepo.getLocalJournals(
         limit: limit,
         offset: offset,

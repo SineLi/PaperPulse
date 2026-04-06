@@ -4,6 +4,9 @@ from typing import Optional, List, Union, TypedDict
 
 from sqlalchemy import text
 from db.database import get_db_connection
+from services.image_service import ImageService, ImageCache
+from utils.logging_utils import log_event
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +26,15 @@ class Article(TypedDict):
 
 
 class ArticleService:
+    def __init__(self):
+        self.image_service = ImageService()
+
     def article_filter(self, articles: List[dict]) -> List[dict]:
         if not articles:
+            log_event(logger, logging.INFO, "article_filter_skipped_empty_input")
             return []
+
+        input_count = len(articles)
 
         titles = [a.get("title") for a in articles if a.get("title")]
         links = [a.get("link") for a in articles if a.get("link")]
@@ -70,17 +79,29 @@ class ArticleService:
                 continue
             new_articles.append(article)
 
+        log_event(
+            logger,
+            logging.INFO,
+            "article_filter_completed",
+            input_count=input_count,
+            output_count=len(new_articles),
+            duplicate_title_count=len(existing_titles),
+            duplicate_link_count=len(existing_links),
+            duplicate_doi_count=len(existing_dois),
+        )
+
         return new_articles
 
     def insert_articles(self, articles: Union[List[dict], str]):
         if not articles:
+            log_event(logger, logging.INFO, "article_insert_skipped_empty_input")
             return
 
         if isinstance(articles, str):
             try:
                 articles = json.loads(articles)
             except json.JSONDecodeError as e:
-                logger.error("Error decoding JSON in insert_articles: %s", e)
+                logger.exception("event=article_insert_json_decode_failed detail=%s", e)
                 return
 
         with get_db_connection() as conn:
@@ -119,6 +140,7 @@ class ArticleService:
                         continue
 
                     if journal_id is None:
+                        log_event(logger, logging.WARNING, "non_article_skipped_missing_journal_id", title=title, link=link)
                         continue
 
                     non_article_rows.append(
@@ -146,30 +168,59 @@ class ArticleService:
                         "structured_abstract": a.get("structured_abstract"),
                         "abstract": a.get("abstract"),
                         "graphical_abstract": a.get("graphical_abstract"),
+                        "ga_cache_status": "pending" if a.get("graphical_abstract") else None,
                         "status": a.get("status", "pending"),
                     }
                 )
 
             if data_to_insert:
-                conn.execute(
+                insert_result = conn.execute(
                     text(
                         """
                         INSERT INTO articles (
                           title, link, doi, date, journal_id, authors,
-                          editor_summary, structured_abstract, abstract, graphical_abstract, status
+                          editor_summary, structured_abstract, abstract, graphical_abstract, ga_cache_status, status
                         )
                         VALUES (
                           :title, :link, :doi, :date, :journal_id, :authors,
-                          :editor_summary, :structured_abstract, :abstract, :graphical_abstract, :status
+                          :editor_summary, :structured_abstract, :abstract, :graphical_abstract, :ga_cache_status, :status
                         )
                         ON CONFLICT DO NOTHING
+                        RETURNING id, graphical_abstract
                         """
                     ),
                     data_to_insert,
                 )
 
+                if insert_result.returns_rows:
+                    inserted_rows = [dict(row) for row in insert_result.mappings().all()]
+                else:
+                    links = [row["link"] for row in data_to_insert]
+                    inserted_rows = [
+                        dict(row)
+                        for row in conn.execute(
+                            text(
+                                """
+                                SELECT id, graphical_abstract
+                                FROM articles
+                                WHERE link = ANY(:links)
+                                """
+                            ),
+                            {"links": links},
+                        ).mappings().all()
+                    ]
+
+                self._cache_inserted_article_images(conn, inserted_rows)
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "article_insert_articles_completed",
+                    attempted=len(data_to_insert),
+                    rowcount=len(inserted_rows),
+                )
+
             if non_article_rows:
-                conn.execute(
+                non_article_result = conn.execute(
                     text(
                         """
                         INSERT INTO non_article_entries (title, link, date, journal_id, doi)
@@ -179,13 +230,29 @@ class ArticleService:
                     ),
                     non_article_rows,
                 )
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "article_insert_non_articles_completed",
+                    attempted=len(non_article_rows),
+                    rowcount=non_article_result.rowcount,
+                )
+
+            log_event(
+                logger,
+                logging.INFO,
+                "article_insert_completed",
+                article_rows=len(data_to_insert),
+                non_article_rows=len(non_article_rows),
+            )
 
     def insert_non_article_entry(self, entry: dict):
         if not entry.get("title") or not entry.get("link") or entry.get("journal_id") is None:
+            log_event(logger, logging.WARNING, "non_article_insert_skipped_invalid_input")
             return
 
         with get_db_connection() as conn:
-            conn.execute(
+            result = conn.execute(
                 text(
                     """
                     INSERT INTO non_article_entries (title, link, date, journal_id, doi)
@@ -200,4 +267,137 @@ class ArticleService:
                     "journal_id": entry.get("journal_id"),
                     "doi": entry.get("doi"),
                 },
+
             )
+            log_event(
+                logger,
+                logging.INFO,
+                "non_article_insert_completed",
+                title=entry.get("title"),
+                link=entry.get("link"),
+                rowcount=result.rowcount,
+            )
+
+    def _cache_inserted_article_images(self, conn, inserted_rows: list[dict]) -> None:
+        if not inserted_rows:
+            return
+
+        status_updates: list[dict] = []
+        for row in inserted_rows:
+            article_id = int(row["id"])
+            image_url = row.get("graphical_abstract")
+            if not image_url:
+                continue
+
+            cache_result = self._cache_article_image(article_id, image_url)
+            status_updates.append(
+                {
+                    "id": article_id,
+                    "ga_cache_status": "cached" if cache_result and cache_result.get("path") else "failed",
+                }
+            )
+
+        self._update_ga_cache_statuses(status_updates, conn=conn)
+
+    def cache_missing_article_images(self, limit: int = 100, scan_limit: int | None = None) -> dict:
+        if limit <= 0:
+            result = {"scanned": 0, "attempted": 0, "cached": 0, "failed": 0, "skipped": 0}
+            log_event(logger, logging.INFO, "article_image_backfill_skipped_invalid_limit", limit=limit)
+            return result
+
+        effective_scan_limit = scan_limit if scan_limit is not None else max(limit * 10, limit)
+        with get_db_connection() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT id, graphical_abstract, ga_cache_status
+                    FROM articles
+                    WHERE ga_cache_status IN ('pending', 'failed')
+                    ORDER BY
+                      CASE ga_cache_status
+                        WHEN 'pending' THEN 0
+                        WHEN 'failed' THEN 1
+                        ELSE 2
+                      END,
+                      id ASC
+                    LIMIT :limit
+                    """
+                ),
+                {"limit": effective_scan_limit},
+            ).mappings().all()
+
+        scanned = len(rows)
+        attempted = 0
+        cached = 0
+        failed = 0
+        skipped = 0
+        status_updates: list[dict] = []
+
+        for row in rows:
+            article_id = int(row["id"])
+            image_url = row.get("graphical_abstract")
+            if not image_url:
+                skipped += 1
+                continue
+
+            if self.image_service.has_cached_image(article_id):
+                cached += 1
+                status_updates.append({"id": article_id, "ga_cache_status": "cached"})
+                continue
+
+            if attempted >= limit:
+                break
+
+            attempted += 1
+            cache_result = self._cache_article_image(article_id, image_url)
+            if cache_result and cache_result.get("path"):
+                cached += 1
+                status_updates.append({"id": article_id, "ga_cache_status": "cached"})
+            else:
+                failed += 1
+                status_updates.append({"id": article_id, "ga_cache_status": "failed"})
+
+        self._update_ga_cache_statuses(status_updates)
+
+        result = {
+            "scanned": scanned,
+            "attempted": attempted,
+            "cached": cached,
+            "failed": failed,
+            "skipped": skipped,
+        }
+        log_event(logger, logging.INFO, "article_image_backfill_completed", **result)
+        return result
+
+    def _cache_article_image(self, article_id: int, image_url: str) -> ImageCache | None:
+        cache_result = self.image_service.cache_image(image_url, article_id=article_id)
+        if cache_result.get("path"):
+            return cache_result
+
+        logger.warning(
+            "Image cache skipped for article_id=%s url=%s status=%s error=%s",
+            article_id,
+            image_url,
+            cache_result.get("status"),
+            cache_result.get("error"),
+        )
+        return None
+
+    def _update_ga_cache_statuses(self, updates: list[dict], conn=None) -> None:
+        if not updates:
+            return
+
+        query = text(
+            """
+            UPDATE articles
+            SET ga_cache_status = :ga_cache_status
+            WHERE id = :id
+            """
+        )
+
+        if conn is not None:
+            conn.execute(query, updates)
+            return
+
+        with get_db_connection() as update_conn:
+            update_conn.execute(query, updates)
