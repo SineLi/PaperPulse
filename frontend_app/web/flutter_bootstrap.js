@@ -3,7 +3,7 @@
 
 _flutter.loader.load({
   serviceWorkerSettings: {
-    serviceWorkerVersion: "{{flutter_service_worker_version}}",
+    serviceWorkerVersion: flutter_service_worker_version,
   },
   config: {
     // Force local-only web assets; avoid runtime fallback to external CDNs.
