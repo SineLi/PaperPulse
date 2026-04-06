@@ -1,11 +1,11 @@
 {
-    "name": "frontend_app",
-    "short_name": "frontend_app",
+    "name": "PaperPulse",
+    "short_name": "PaperPulse",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "A cross-platform academic news reader for tracking journals, feeds, and saved articles.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
