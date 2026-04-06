@@ -11,6 +11,7 @@
 - APScheduler 定时任务
 - 多个期刊抓取器
 - 基于 OpenAI 兼容接口的批量摘要任务
+- 自动缓存文章图片
 
 ## 环境要求
 
@@ -18,7 +19,7 @@
 - PostgreSQL
 - Redis
 
-部分抓取器依赖 Playwright，首次安装后可能还需要执行:
+部分抓取器依赖 Playwright，首次安装后可能还需要执行：
 
 ```powershell
 playwright install chromium
@@ -103,9 +104,11 @@ python run.py
 - 加载 `.env`
 - 检查必需环境变量
 - 探测 PostgreSQL 连通性
+- 探测 Redis 连通性
 - 执行 `alembic upgrade head`
-- 启动 Redis 依赖的 FastAPI 应用
+- 启动 FastAPI 应用
 - 启动后台调度器
+- 输出结构化日志；调度器额外写入 `scheduler.log`
 
 可选参数:
 
@@ -114,10 +117,11 @@ python run.py --host 127.0.0.1 --port 9000
 python run.py --no-scheduler
 ```
 
-文档地址:
+默认地址:
 
-- 健康检查: `GET /`
-- Redis 状态: `GET /status/redis`
+- 健康检查 `GET /`
+- Redis 状态 `GET /status/redis`
+- 媒体静态文件 `GET /media/...`
 
 ## API 概览
 
