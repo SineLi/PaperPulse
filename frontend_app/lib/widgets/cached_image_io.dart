@@ -40,6 +40,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
   bool _fallbackLoading = false;
   bool _showFallbackNetwork = false;
   bool _sourceCacheQueued = false;
+  bool _fallbackCacheQueued = false;
   int _fallbackRetryCount = 0;
 
   @override
@@ -60,6 +61,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackLoading = false;
       _showFallbackNetwork = false;
       _sourceCacheQueued = false;
+      _fallbackCacheQueued = false;
       _fallbackRetryCount = 0;
       _initializeImage();
     }
@@ -154,6 +156,20 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
     });
   }
 
+  void _queueFallbackCache() {
+    if (_fallbackCacheQueued || _localPath != null) {
+      return;
+    }
+
+    _fallbackCacheQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _localPath != null) {
+        return;
+      }
+      _resolveImage(preferFallback: true);
+    });
+  }
+
   void _retry() {
     setState(() {
       _localPath = null;
@@ -163,6 +179,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
       _fallbackLoading = false;
       _showFallbackNetwork = false;
       _sourceCacheQueued = false;
+      _fallbackCacheQueued = false;
       _fallbackRetryCount = 0;
     });
     _initializeImage();
@@ -252,6 +269,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
         },
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
+            _queueFallbackCache();
             return child;
           }
           return _buildLoading(colorScheme);
@@ -285,6 +303,7 @@ class _CachedArticleImageState extends State<CachedArticleImage> {
               _fallbackAttempted = true;
               _fallbackLoading = true;
               _showFallbackNetwork = true;
+              _fallbackCacheQueued = false;
               _fallbackRetryCount = 0;
             });
             _resolveImage(preferFallback: true).whenComplete(() {
