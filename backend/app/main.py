@@ -6,7 +6,6 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import auth, journals, users, articles, status
 
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 import os
 
