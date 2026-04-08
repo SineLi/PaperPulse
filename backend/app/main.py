@@ -35,10 +35,16 @@ app.include_router(users.router)
 app.include_router(journals.router)
 app.include_router(articles.router)
 app.include_router(status.router)
+class CachedStaticFiles(StaticFiles):
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 media_dir = Path(__file__).resolve().parents[1] / "media"
 media_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
+
+app.mount("/media", CachedStaticFiles(directory=str(media_dir)), name="media")
 
 @app.get("/")
 def root():
