@@ -18,7 +18,7 @@ import sys
 import dotenv
 import uvicorn
 
-from utils.logging_utils import configure_logging, log_event
+from utils.logging_utils import build_uvicorn_log_config, configure_logging, log_event
 
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -286,6 +286,7 @@ def main():
             port=args.port,
             log_level="info",
             access_log=True,
+            log_config=build_uvicorn_log_config(),
         )
     finally:
         if bg_scheduler is not None:

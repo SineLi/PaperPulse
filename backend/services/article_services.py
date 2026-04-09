@@ -131,11 +131,13 @@ class ArticleService:
 
                 if not abstract:
                     if fetch_status != "ok":
-                        logger.warning(
-                            "Skip non-article classification due fetch status: title=%s, status=%s, reason=%s",
-                            title,
-                            fetch_status,
-                            fetch_fail_reason,
+                        log_event(
+                            logger,
+                            logging.WARNING,
+                            "non_article_classification_skipped_due_fetch_status",
+                            title=title,
+                            status=fetch_status,
+                            reason=fetch_fail_reason,
                         )
                         continue
 
@@ -374,12 +376,14 @@ class ArticleService:
         if cache_result.get("path"):
             return cache_result
 
-        logger.warning(
-            "Image cache skipped for article_id=%s url=%s status=%s error=%s",
-            article_id,
-            image_url,
-            cache_result.get("status"),
-            cache_result.get("error"),
+        log_event(
+            logger,
+            logging.WARNING,
+            "article_image_cache_skipped",
+            article_id=article_id,
+            url=image_url,
+            status=cache_result.get("status"),
+            error=cache_result.get("error"),
         )
         return None
 
