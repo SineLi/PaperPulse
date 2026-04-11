@@ -115,6 +115,19 @@ class BaseFetcher(ABC):
     def _article_label(self, article: Dict) -> str:
         return article.get("title") or article.get("link") or "unknown"
 
+    def _fetch_details_with_logging(self, article: Dict) -> Dict:
+        article_label = self._article_label(article)
+        link = article.get("link", "")
+        log_event(
+            logger,
+            logging.INFO,
+            "article_fetch_started",
+            journal=self.journal_name,
+            article=article_label,
+            url=link,
+        )
+        return self.fetch_details(article)
+
     def _get_playwright_content(
         self,
         url: str,
@@ -131,52 +144,82 @@ class BaseFetcher(ABC):
             selector=selector,
             wait_until=wait_until,
         )
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
-            context = browser.new_context(user_agent=self.user_agent)
-            page = context.new_page()
-            
-            content = ""
-            for i in range(PLAYWRIGHT_ATTEMPTS):
-                try:
-                    page.goto(url, timeout=PLAYWRIGHT_GOTO_TIMEOUT_MS, wait_until=wait_until)  # ty:ignore[invalid-argument-type]
-                    if selector:
-                        page.wait_for_selector(selector, timeout=timeout)
-                    else:
-                        page.wait_for_timeout(PLAYWRIGHT_IDLE_WAIT_MS)
-                    content = page.content()
-                    block_reason = self._detect_block_reason(content, page.url)
-                    if block_reason:
-                        self._set_fetch_meta(url, "blocked", block_reason)
-                    elif content.strip():
-                        self._set_fetch_meta(url, "ok")
-                    else:
-                        self._set_fetch_meta(url, "unknown", "empty_content")
-                    log_event(
-                        logger,
-                        logging.INFO,
-                        "playwright_fetch_succeeded",
-                        journal=self.journal_name,
-                        url=url,
-                        final_url=page.url,
-                        attempt=i + 1,
-                        status=self._fetch_meta.get(url, {}).get("status"),
-                    )
-                    break
-                except Exception as e:
-                    logger.exception(
-                        "event=playwright_fetch_attempt_failed journal=%s url=%s attempt=%s detail=%s",
-                        self.journal_name,
-                        url,
-                        i + 1,
-                        e,
-                    )
-                    status = "blocked" if self._is_blocked_message(str(e)) else "error"
-                    self._set_fetch_meta(url, status, str(e))
-                    if i == PLAYWRIGHT_ATTEMPTS - 1:
-                        break
-                    time.sleep(2)
+        browser = None
+        context = None
+        page = None
+        content = ""
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
+                context = browser.new_context(user_agent=self.user_agent)
+                page = context.new_page()
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "playwright_browser_ready",
+                    journal=self.journal_name,
+                    url=url,
+                    attempts=PLAYWRIGHT_ATTEMPTS,
+                )
 
+                for i in range(PLAYWRIGHT_ATTEMPTS):
+                    try:
+                        log_event(
+                            logger,
+                            logging.INFO,
+                            "playwright_fetch_attempt_started",
+                            journal=self.journal_name,
+                            url=url,
+                            attempt=i + 1,
+                        )
+                        page.goto(url, timeout=PLAYWRIGHT_GOTO_TIMEOUT_MS, wait_until=wait_until)  # ty:ignore[invalid-argument-type]
+                        if selector:
+                            page.wait_for_selector(selector, timeout=timeout)
+                        else:
+                            page.wait_for_timeout(PLAYWRIGHT_IDLE_WAIT_MS)
+                        content = page.content()
+                        block_reason = self._detect_block_reason(content, page.url)
+                        if block_reason:
+                            self._set_fetch_meta(url, "blocked", block_reason)
+                        elif content.strip():
+                            self._set_fetch_meta(url, "ok")
+                        else:
+                            self._set_fetch_meta(url, "unknown", "empty_content")
+                        log_event(
+                            logger,
+                            logging.INFO,
+                            "playwright_fetch_succeeded",
+                            journal=self.journal_name,
+                            url=url,
+                            final_url=page.url,
+                            attempt=i + 1,
+                            status=self._fetch_meta.get(url, {}).get("status"),
+                            content_length=len(content),
+                        )
+                        break
+                    except Exception as e:
+                        logger.exception(
+                            "event=playwright_fetch_attempt_failed journal=%s url=%s attempt=%s detail=%s",
+                            self.journal_name,
+                            url,
+                            i + 1,
+                            e,
+                        )
+                        status = "blocked" if self._is_blocked_message(str(e)) else "error"
+                        self._set_fetch_meta(url, status, str(e))
+                        if i == PLAYWRIGHT_ATTEMPTS - 1:
+                            break
+                        time.sleep(2)
+        except Exception as e:
+            logger.exception(
+                "event=playwright_fetch_unhandled_failure journal=%s url=%s detail=%s",
+                self.journal_name,
+                url,
+                e,
+            )
+            self._set_fetch_meta(url, "error", str(e))
+            raise
+        finally:
             # If no explicit status was set in the loop, mark unknown.
             if url:
                 current_meta = self._pop_fetch_meta(url)
@@ -186,10 +229,22 @@ class BaseFetcher(ABC):
                     else:
                         self._set_fetch_meta(url, "unknown", "empty_content")
                 else:
-                    # Put it back for run() to consume.
                     self._set_fetch_meta(url, current_meta.get("status", "unknown"), current_meta.get("reason"))  # ty:ignore[invalid-argument-type]
 
-            browser.close()
+            for resource_name, resource in (("page", page), ("context", context), ("browser", browser)):
+                if resource is None:
+                    continue
+                try:
+                    resource.close()
+                except Exception as close_exc:
+                    logger.exception(
+                        "event=playwright_resource_close_failed journal=%s url=%s resource=%s detail=%s",
+                        self.journal_name,
+                        url,
+                        resource_name,
+                        close_exc,
+                    )
+
             final_meta = self._fetch_meta.get(url, {})
             log_event(
                 logger,
@@ -201,7 +256,7 @@ class BaseFetcher(ABC):
                 reason=final_meta.get("reason"),
                 content_length=len(content),
             )
-            return content
+        return content
 
     def run(self):
         # 执行完整的抓取流程
@@ -214,167 +269,219 @@ class BaseFetcher(ABC):
             journal_id=self.journal_id,
             max_workers=self.max_workers,
         )
-        
-        # 1. 获取初步列表
-        phase_started_at = time.monotonic()
-        papers = self.fetch_list()
-        log_event(
-            logger,
-            logging.INFO,
-            "fetcher_list_completed",
-            journal=self.journal_name,
-            elapsed_secs=time.monotonic() - phase_started_at,
-            article_count=len(papers),
-        )
-        if not papers:
-            log_event(logger, logging.WARNING, "fetcher_no_articles", journal=self.journal_name)
-            return
-
-        # 2. 过滤已存在的文章
-        phase_started_at = time.monotonic()
-        papers_to_fetch = self.service.article_filter(papers)
-        log_event(
-            logger,
-            logging.INFO,
-            "fetcher_filter_completed",
-            journal=self.journal_name,
-            elapsed_secs=time.monotonic() - phase_started_at,
-            candidate_count=len(papers),
-            new_count=len(papers_to_fetch),
-        )
-
-        if not papers_to_fetch:
-            log_event(logger, logging.INFO, "fetcher_no_new_articles", journal=self.journal_name)
-            return
-
-        # 3. 并发抓取详情
-        phase_started_at = time.monotonic()
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self.fetch_details, p): i for i, p in enumerate(papers_to_fetch)}
-            for future in as_completed(futures):
-                idx = futures[future]
-                link = papers_to_fetch[idx].get("link", "")
-                article_label = self._article_label(papers_to_fetch[idx])
-                try:
-                    details = future.result()
-                    if details:
-                        papers_to_fetch[idx].update(details)
-
-                    fetch_meta = self._pop_fetch_meta(link)
-                    if fetch_meta:
-                        papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "unknown")
-                        reason = fetch_meta.get("reason")
-                        if reason:
-                            papers_to_fetch[idx]["_fetch_fail_reason"] = reason
-                    elif details:
-                        papers_to_fetch[idx]["_fetch_status"] = "ok"
-                    else:
-                        papers_to_fetch[idx]["_fetch_status"] = "unknown"
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = "empty_details"
-                    log_event(
-                        logger,
-                        logging.INFO,
-                        "article_fetch_completed",
-                        journal=self.journal_name,
-                        article=article_label,
-                        url=link,
-                        status=papers_to_fetch[idx].get("_fetch_status"),
-                        detail_fields=len(details) if isinstance(details, dict) else 0,
-                        has_abstract=bool(papers_to_fetch[idx].get("abstract")),
-                        has_graphical_abstract=bool(papers_to_fetch[idx].get("graphical_abstract")),
-                    )
-                except Exception as e:
-                    fetch_meta = self._pop_fetch_meta(link)
-                    if fetch_meta:
-                        papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "error")
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = fetch_meta.get("reason") or str(e)
-                    else:
-                        status = "blocked" if self._is_blocked_message(str(e)) else "error"
-                        papers_to_fetch[idx]["_fetch_status"] = status
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = str(e)
-
-                    logger.exception(
-                        "event=article_fetch_failed journal=%s article=%s url=%s detail=%s",
-                        self.journal_name,
-                        article_label,
-                        link,
-                        e,
-                    )
-
-                if self.sleep_time > 0:
-                    time.sleep(self.sleep_time)
-        detail_elapsed = time.monotonic() - phase_started_at
-        log_event(
-            logger,
-            logging.WARNING if detail_elapsed >= FETCH_PHASE_WARN_AFTER_SECS else logging.INFO,
-            "fetcher_details_completed",
-            journal=self.journal_name,
-            elapsed_secs=detail_elapsed,
-            processed_count=len(papers_to_fetch),
-        )
-
-        # 4. 统一日期格式
-        phase_started_at = time.monotonic()
-        for paper in papers_to_fetch:
-            raw_date = paper.get('date')
-            if raw_date:
-                try:
-                    # 传入 tzinfos 参数来识别 PST 等缩写
-                    dt = parser.parse(str(raw_date), tzinfos=TZ_INFOS)
-                    paper['date'] = dt.strftime('%Y-%m-%d')
-                except Exception as e:
-                    logger.exception(
-                        "event=article_date_normalize_failed journal=%s article=%s raw_date=%s detail=%s",
-                        self.journal_name,
-                        self._article_label(paper),
-                        raw_date,
-                        e,
-                    )
-        log_event(
-            logger,
-            logging.INFO,
-            "fetcher_date_normalization_completed",
-            journal=self.journal_name,
-            elapsed_secs=time.monotonic() - phase_started_at,
-        )
-
-        # 5. 插入数据库
-        phase_started_at = time.monotonic()
+        papers: List[Dict] = []
+        papers_to_fetch: List[Dict] = []
         try:
-            articles_json = json.dumps(papers_to_fetch, ensure_ascii=True, indent=2)
-            self.service.insert_articles(articles_json)
+            # 1. 获取初步列表
+            phase_started_at = time.monotonic()
+            log_event(logger, logging.INFO, "fetcher_list_started", journal=self.journal_name)
+            try:
+                papers = self.fetch_list()
+            except Exception as e:
+                logger.exception("event=fetcher_list_failed journal=%s detail=%s", self.journal_name, e)
+                return
             log_event(
                 logger,
                 logging.INFO,
-                "fetcher_insert_succeeded",
+                "fetcher_list_completed",
+                journal=self.journal_name,
+                elapsed_secs=time.monotonic() - phase_started_at,
+                article_count=len(papers),
+            )
+            if not papers:
+                log_event(logger, logging.WARNING, "fetcher_no_articles", journal=self.journal_name)
+                return
+
+            # 2. 过滤已存在的文章
+            phase_started_at = time.monotonic()
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_filter_started",
+                journal=self.journal_name,
+                candidate_count=len(papers),
+            )
+            try:
+                papers_to_fetch = self.service.article_filter(papers)
+            except Exception as e:
+                logger.exception("event=fetcher_filter_failed journal=%s detail=%s", self.journal_name, e)
+                return
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_filter_completed",
+                journal=self.journal_name,
+                elapsed_secs=time.monotonic() - phase_started_at,
+                candidate_count=len(papers),
+                new_count=len(papers_to_fetch),
+            )
+
+            if not papers_to_fetch:
+                log_event(logger, logging.INFO, "fetcher_no_new_articles", journal=self.journal_name)
+                return
+
+            # 3. 并发抓取详情
+            phase_started_at = time.monotonic()
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_details_started",
+                journal=self.journal_name,
+                article_count=len(papers_to_fetch),
+                max_workers=self.max_workers,
+            )
+            try:
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    futures = {
+                        executor.submit(self._fetch_details_with_logging, p): i
+                        for i, p in enumerate(papers_to_fetch)
+                    }
+                    for future in as_completed(futures):
+                        idx = futures[future]
+                        link = papers_to_fetch[idx].get("link", "")
+                        article_label = self._article_label(papers_to_fetch[idx])
+                        try:
+                            details = future.result()
+                            if details:
+                                papers_to_fetch[idx].update(details)
+
+                            fetch_meta = self._pop_fetch_meta(link)
+                            if fetch_meta:
+                                papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "unknown")
+                                reason = fetch_meta.get("reason")
+                                if reason:
+                                    papers_to_fetch[idx]["_fetch_fail_reason"] = reason
+                            elif details:
+                                papers_to_fetch[idx]["_fetch_status"] = "ok"
+                            else:
+                                papers_to_fetch[idx]["_fetch_status"] = "unknown"
+                                papers_to_fetch[idx]["_fetch_fail_reason"] = "empty_details"
+                            log_event(
+                                logger,
+                                logging.INFO,
+                                "article_fetch_completed",
+                                journal=self.journal_name,
+                                article=article_label,
+                                url=link,
+                                status=papers_to_fetch[idx].get("_fetch_status"),
+                                detail_fields=len(details) if isinstance(details, dict) else 0,
+                                has_abstract=bool(papers_to_fetch[idx].get("abstract")),
+                                has_graphical_abstract=bool(papers_to_fetch[idx].get("graphical_abstract")),
+                            )
+                        except Exception as e:
+                            fetch_meta = self._pop_fetch_meta(link)
+                            if fetch_meta:
+                                papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "error")
+                                papers_to_fetch[idx]["_fetch_fail_reason"] = fetch_meta.get("reason") or str(e)
+                            else:
+                                status = "blocked" if self._is_blocked_message(str(e)) else "error"
+                                papers_to_fetch[idx]["_fetch_status"] = status
+                                papers_to_fetch[idx]["_fetch_fail_reason"] = str(e)
+
+                            logger.exception(
+                                "event=article_fetch_failed journal=%s article=%s url=%s detail=%s",
+                                self.journal_name,
+                                article_label,
+                                link,
+                                e,
+                            )
+
+                        if self.sleep_time > 0:
+                            time.sleep(self.sleep_time)
+            except Exception as e:
+                logger.exception("event=fetcher_details_phase_failed journal=%s detail=%s", self.journal_name, e)
+                return
+            detail_elapsed = time.monotonic() - phase_started_at
+            log_event(
+                logger,
+                logging.WARNING if detail_elapsed >= FETCH_PHASE_WARN_AFTER_SECS else logging.INFO,
+                "fetcher_details_completed",
+                journal=self.journal_name,
+                elapsed_secs=detail_elapsed,
+                processed_count=len(papers_to_fetch),
+            )
+
+            # 4. 统一日期格式
+            phase_started_at = time.monotonic()
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_date_normalization_started",
                 journal=self.journal_name,
                 article_count=len(papers_to_fetch),
             )
-            try: 
-                json.loads(articles_json) 
-            except Exception as e:
-                logger.exception(
-                    "event=fetcher_json_validation_failed journal=%s detail=%s",
-                    self.journal_name,
-                    e,
+            for paper in papers_to_fetch:
+                raw_date = paper.get('date')
+                if raw_date:
+                    try:
+                        # 传入 tzinfos 参数来识别 PST 等缩写
+                        dt = parser.parse(str(raw_date), tzinfos=TZ_INFOS)
+                        paper['date'] = dt.strftime('%Y-%m-%d')
+                    except Exception as e:
+                        logger.exception(
+                            "event=article_date_normalize_failed journal=%s article=%s raw_date=%s detail=%s",
+                            self.journal_name,
+                            self._article_label(paper),
+                            raw_date,
+                            e,
+                        )
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_date_normalization_completed",
+                journal=self.journal_name,
+                elapsed_secs=time.monotonic() - phase_started_at,
+            )
+
+            # 5. 插入数据库
+            phase_started_at = time.monotonic()
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_insert_started",
+                journal=self.journal_name,
+                article_count=len(papers_to_fetch),
+            )
+            try:
+                articles_json = json.dumps(papers_to_fetch, ensure_ascii=True, indent=2)
+                self.service.insert_articles(articles_json)
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "fetcher_insert_succeeded",
+                    journal=self.journal_name,
+                    article_count=len(papers_to_fetch),
                 )
+                try:
+                    json.loads(articles_json)
+                except Exception as e:
+                    logger.exception(
+                        "event=fetcher_json_validation_failed journal=%s detail=%s",
+                        self.journal_name,
+                        e,
+                    )
+            except Exception as e:
+                logger.exception("event=fetcher_insert_failed journal=%s detail=%s", self.journal_name, e)
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_insert_completed",
+                journal=self.journal_name,
+                elapsed_secs=time.monotonic() - phase_started_at,
+            )
         except Exception as e:
-            logger.exception("event=fetcher_insert_failed journal=%s detail=%s", self.journal_name, e)
-        log_event(
-            logger,
-            logging.INFO,
-            "fetcher_insert_completed",
-            journal=self.journal_name,
-            elapsed_secs=time.monotonic() - phase_started_at,
-        )
-        total_elapsed = time.monotonic() - total_started_at
-        log_event(
-            logger,
-            logging.WARNING if total_elapsed >= FETCH_PHASE_WARN_AFTER_SECS else logging.INFO,
-            "fetcher_completed",
-            journal=self.journal_name,
-            elapsed_secs=total_elapsed,
-        )
+            logger.exception("event=fetcher_run_unhandled_failed journal=%s detail=%s", self.journal_name, e)
+        finally:
+            total_elapsed = time.monotonic() - total_started_at
+            log_event(
+                logger,
+                logging.WARNING if total_elapsed >= FETCH_PHASE_WARN_AFTER_SECS else logging.INFO,
+                "fetcher_completed",
+                journal=self.journal_name,
+                elapsed_secs=total_elapsed,
+                fetched_count=len(papers),
+                new_count=len(papers_to_fetch),
+            )
 
 class RSSFetcher(BaseFetcher):
     # 专门处理 RSS 源的基类
@@ -408,7 +515,16 @@ class RSSFetcher(BaseFetcher):
         papers = []
         for entry in feed.entries:
             # 调用钩子方法解析单条 entry
-            paper = self._parse_entry(entry)
+            try:
+                paper = self._parse_entry(entry)
+            except Exception as e:
+                logger.exception(
+                    "event=rss_entry_parse_failed journal=%s url=%s detail=%s",
+                    self.journal_name,
+                    self.feed_url,
+                    e,
+                )
+                continue
             if paper:
                 papers.append(paper)
         log_event(

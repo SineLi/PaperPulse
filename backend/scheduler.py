@@ -1,6 +1,7 @@
 import logging
 import sys
 import time
+from datetime import datetime
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -98,6 +99,15 @@ def _add_jobs(scheduler):
         max_instances=1,
         coalesce=True,
     )
+    log_event(
+        logger,
+        logging.INFO,
+        "scheduler_job_registered",
+        job_id="run_all_cycle",
+        schedule="cron minute=0",
+        name="Fetch articles and process LLM summaries every hour",
+        max_instances=1,
+    )
     scheduler.add_job(
         image_cache_backfill_job,
         trigger=CronTrigger(minute="*/15"),
@@ -106,6 +116,15 @@ def _add_jobs(scheduler):
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+    log_event(
+        logger,
+        logging.INFO,
+        "scheduler_job_registered",
+        job_id="image_cache_backfill",
+        schedule="cron minute=*/15",
+        name="Backfill missing cached images every 15 minutes",
+        max_instances=1,
     )
 
 
@@ -117,13 +136,31 @@ def start_background_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler()
     _add_jobs(scheduler)
     scheduler.start()
+    log_event(logger, logging.INFO, "scheduler_background_started")
     # Schedule one immediate run in the background thread so it does NOT
     # block the main thread (uvicorn startup).
-    scheduler.add_job(cycle_job, id='initial_cycle', name='Initial cycle on startup')
-    logger.info("Background scheduler started.")
+    scheduler.add_job(
+        cycle_job,
+        trigger="date",
+        run_date=datetime.now(),
+        id='initial_cycle',
+        name='Initial cycle on startup',
+        replace_existing=True,
+    )
+    log_event(logger, logging.INFO, "scheduler_startup_job_queued", job_id="initial_cycle", name="Initial cycle on startup")
     scheduler.add_job(
         image_cache_backfill_job,
+        trigger="date",
+        run_date=datetime.now(),
         id="initial_image_cache_backfill",
+        name="Initial image cache backfill on startup",
+        replace_existing=True,
+    )
+    log_event(
+        logger,
+        logging.INFO,
+        "scheduler_startup_job_queued",
+        job_id="initial_image_cache_backfill",
         name="Initial image cache backfill on startup",
     )
 

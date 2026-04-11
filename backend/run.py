@@ -264,6 +264,10 @@ def main():
 
     # 5. Initialize / migrate schema
     init_db()
+    # Alembic env.py calls fileConfig(), which resets root logging.
+    # Re-apply the application logging config before starting the scheduler.
+    configure_logging(force=True)
+    log_event(logger, logging.INFO, "logging_reconfigured_after_migrations")
 
     # 6. Optionally start background scheduler
     bg_scheduler = None

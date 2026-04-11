@@ -1,7 +1,13 @@
+import json
+import logging
 import os
+
 import redis
 from redis import Redis
-import json
+
+from utils.logging_utils import log_event
+
+logger = logging.getLogger(__name__)
 
 
 class RedisClient:
@@ -26,15 +32,13 @@ class RedisClient:
             if value is not None:
                 return str(value)
             return None
-
         except redis.RedisError:
             return None
 
     def set_value(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
-        key = self._key(key)
+        redis_key = self._key(key)
         try:
-            return bool(self.client.set(key, value, ex=ex, nx=nx))
-
+            return bool(self.client.set(redis_key, value, ex=ex, nx=nx))
         except redis.RedisError:
             return False
 
@@ -73,8 +77,7 @@ class RedisClient:
 
     def ttl(self, key: str) -> int:
         try:
-           
-            return int(self.client.ttl(self._key(key)))     # ty:ignore[invalid-argument-type]
+            return int(self.client.ttl(self._key(key)))  # ty:ignore[invalid-argument-type]
         except redis.RedisError:
             return -2
 
@@ -95,8 +98,8 @@ class RedisClient:
 
     def set_value_or_raise(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
         try:
-            key = self._key(key)
-            return bool(self.client.set(key, value, ex=ex, nx=nx))
+            redis_key = self._key(key)
+            return bool(self.client.set(redis_key, value, ex=ex, nx=nx))
         except redis.RedisError as exc:
             raise RuntimeError("Failed to write to Redis") from exc
 
@@ -108,7 +111,7 @@ class RedisClient:
 
     def ttl_or_raise(self, key: str) -> int:
         try:
-            return int(self.client.ttl(self._key(key)))     # ty:ignore[invalid-argument-type]
+            return int(self.client.ttl(self._key(key)))  # ty:ignore[invalid-argument-type]
         except redis.RedisError as exc:
             raise RuntimeError("Failed to read TTL from Redis") from exc
 
@@ -121,7 +124,7 @@ class RedisClient:
     def _incr_value(self, key: str, amount: int = 1, ttl: int | None = None) -> int:
         redis_key = self._key(key)
         if ttl is None:
-            return int(self.client.incr(redis_key, amount))      # ty:ignore[invalid-argument-type]
+            return int(self.client.incr(redis_key, amount))  # ty:ignore[invalid-argument-type]
 
         # Keep the original TTL once the counter is created.
         result = self.client.eval(
@@ -149,16 +152,18 @@ def init_client() -> RedisClient:
         try:
             _client = RedisClient(redis_url=str(os.getenv("REDIS_URL")))
         except Exception as e:
+            logger.exception("event=redis_client_init_failed detail=%s", e)
             raise RuntimeError(f"Failed to initialize Redis client: {e}")
 
-        if not _client.ping():  # 确保连接可用
+        if not _client.ping():
             _client = None
+            log_event(logger, logging.ERROR, "redis_client_ping_failed")
             raise RuntimeError("Failed to connect to Redis server")
     return _client
 
 
 def get_client() -> RedisClient:
     if _client is None:
-        raise RuntimeError(
-            "Redis client not initialized. Call init_client() first.")
+        log_event(logger, logging.ERROR, "redis_client_not_initialized")
+        raise RuntimeError("Redis client not initialized. Call init_client() first.")
     return _client
