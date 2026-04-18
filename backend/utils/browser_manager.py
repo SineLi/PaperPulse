@@ -2,6 +2,7 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 from playwright.async_api import async_playwright
+from playwright.async_api._generated import Playwright as AsyncPlaywright
 import threading
 
 from utils.logging_utils import log_event
@@ -17,11 +18,16 @@ class Browser:
         self.id = id(self)
         self.activate_pages = 0
         self.status = "idle"  # idle, active, error
+        self.playwright: AsyncPlaywright | None = None
         
 
-    async def launch(self):
-        p = await async_playwright().start()
-        self.browser = await p.chromium.launch(headless=True)
+    async def launch(self, playwright: AsyncPlaywright | None = None):
+        if playwright:
+            self.playwright = playwright
+        if not self.playwright:
+            raise Exception("Playwright instance is not initialized")
+        self.browser = await self.playwright.chromium.launch(headless=True)
+
 
     async def close(self):
         if self.browser:
@@ -29,7 +35,7 @@ class Browser:
 
     async def get_browser_context(self):
         if not self.browser:
-            await self.launch()
+            await self.launch(self.playwright)
         
         if not self.browser:
             raise Exception("Failed to launch browser")
@@ -43,11 +49,13 @@ class BrowserManager:
         self.browser_pool = []
         self.max_browser_pages = 32
         self.semaphore = asyncio.Semaphore(self.max_browsers * self.max_browser_pages)
+        self.playwright : AsyncPlaywright | None = None
 
     async def init_browser_pool(self):
+        self.playwright = await async_playwright().start()
         # 并发启动浏览器实例
         self.browser_pool = [Browser() for _ in range(self.max_browsers)]
-        await asyncio.gather(*(browser.launch() for browser in self.browser_pool))
+        await asyncio.gather(*(browser.launch(self.playwright) for browser in self.browser_pool))
 
     @asynccontextmanager
     async def get_browser(self):
@@ -97,5 +105,12 @@ class BrowserManager:
         await browser.close()
         self.browser_pool.remove(browser)
         new_browser = Browser()
-        await new_browser.launch()
+        await new_browser.launch(self.playwright)
         self.browser_pool.append(new_browser)
+
+    async def close_all_browsers(self):
+        for browser in self.browser_pool:
+            await browser.close()
+        self.browser_pool.clear()
+        if self.playwright:
+            await self.playwright.stop()
