@@ -46,71 +46,100 @@ class BrowserManager:
     # BrowserManager类，负责管理多个Browser实例的池化，提供获取和释放浏览器实例的方法，以支持并发访问。
     def __init__(self):
         self.max_browsers = 5
-        self.browser_pool = []
+        self.browser_pool: list[Browser] = []  # 明确类型
         self.max_browser_pages = 32
         self.semaphore = asyncio.Semaphore(self.max_browsers * self.max_browser_pages)
         self.playwright : AsyncPlaywright | None = None
+        self.lock = asyncio.Lock()
 
     async def init_browser_pool(self):
-        self.playwright = await async_playwright().start()
-        # 并发启动浏览器实例
-        self.browser_pool = [Browser() for _ in range(self.max_browsers)]
-        await asyncio.gather(*(browser.launch(self.playwright) for browser in self.browser_pool))
+        async with self.lock:  # 使用锁确保在初始化浏览器池时的线程安全
+            if self.playwright is not None and self.browser_pool:
+                return
+            self.playwright = await async_playwright().start()
+            # 并发启动浏览器实例
+            self.browser_pool = [Browser() for _ in range(self.max_browsers)]
+            await asyncio.gather(*(browser.launch(self.playwright) for browser in self.browser_pool))
 
     @asynccontextmanager
-    async def get_browser(self):
+    async def _get_browser(self):
+        browser: Browser | None = None
+
         if not self.browser_pool:
             await self.init_browser_pool()
+        
+        async with self.lock:  # 使用锁确保在获取浏览器实例时的线程安全
+            idle_browsers = [b for b in self.browser_pool if b.status == "idle"]
+            if idle_browsers:
+                browser = min(idle_browsers, key=lambda b: b.activate_pages)
+            else:
+                available_browsers = [b for b in self.browser_pool if b.activate_pages < self.max_browser_pages]
+                browser = min(available_browsers, key=lambda b: b.activate_pages) if available_browsers else None
 
-        idle_browsers = [b for b in self.browser_pool if b.status == "idle"]
-        if idle_browsers:
-            browser = min(idle_browsers, key=lambda b: b.activate_pages)
-        else:
-            available_browsers = [b for b in self.browser_pool if b.activate_pages < self.max_browser_pages]
-            browser = min(available_browsers, key=lambda b: b.activate_pages) if available_browsers else None
+            if browser is None:  # 先判空，再访问属性
+                raise Exception("No available browsers in the pool")
 
-        if not browser:
-            raise Exception("No available browsers in the pool")
+            browser.activate_pages += 1
+            browser.status = "active"
+
         try:
             yield browser
         finally:            pass
 
     @asynccontextmanager
     async def add_page(self, url):
+        context = None
+        page = None
         async with self.semaphore:  # 使用信号量控制并发访问，确保同时访问的浏览器实例数量不超过设定的最大值。
-            async with self.get_browser() as browser:
+            async with self._get_browser() as browser:
                 try:
                     context = await browser.get_browser_context()
                     page = await context.new_page()
-                    browser.activate_pages += 1
                     await page.goto(url)
-                    browser.status = "active"
+
                     try:
                         yield page
                     finally:
                         await page.close()
                         await context.close()
-                        browser.activate_pages -= 1
-                        if browser.activate_pages == 0:
-                            browser.status = "idle"
+                        async with self.lock:
+                            if browser.activate_pages > 0:
+                                browser.activate_pages -= 1
+                            if browser.activate_pages == 0:
+                                browser.status = "idle"
                 except Exception as e:
+                    if page:
+                        await page.close()
+                    if context:
+                        await context.close()
+                    async with self.lock:
+                        if browser.activate_pages > 0:
+                            browser.activate_pages -= 1
+                            browser.status = "error"
                     logger.error(f"Error in add_page: {e}")
-                    browser.status = "error"
+                    raise
     
     async def refresh_browser(self, browser:Browser):
-        if browser.activate_pages > 0:
-            logger.warning(f"Browser {browser.id} is active with {browser.activate_pages} pages, cannot refresh now.")
-            return
-
+        async with self.lock:
+            if browser.activate_pages > 0:
+                logger.warning(f"Browser {browser.id} is active with {browser.activate_pages} pages, cannot refresh now.")
+                return
+            browser.status = "refreshing"
         await browser.close()
-        self.browser_pool.remove(browser)
-        new_browser = Browser()
+        async with self.lock:
+            self.browser_pool.remove(browser)
+            new_browser = Browser()
         await new_browser.launch(self.playwright)
-        self.browser_pool.append(new_browser)
+        
+        async with self.lock:
+            new_browser.status = "idle"        
+            self.browser_pool.append(new_browser)
+
 
     async def close_all_browsers(self):
-        for browser in self.browser_pool:
-            await browser.close()
-        self.browser_pool.clear()
+        async with self.lock:
+            for browser in self.browser_pool:
+                await browser.close()  
+            self.browser_pool.clear()
         if self.playwright:
             await self.playwright.stop()
