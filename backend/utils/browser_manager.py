@@ -53,13 +53,36 @@ class BrowserManager:
         self.lock = asyncio.Lock()
 
     async def init_browser_pool(self):
-        async with self.lock:  # 使用锁确保在初始化浏览器池时的线程安全
+        async with self.lock:
             if self.playwright is not None and self.browser_pool:
                 return
-            self.playwright = await async_playwright().start()
-            # 并发启动浏览器实例
-            self.browser_pool = [Browser() for _ in range(self.max_browsers)]
-            await asyncio.gather(*(browser.launch(self.playwright) for browser in self.browser_pool))
+
+            playwright: AsyncPlaywright | None = None
+            browsers: list[Browser] = []
+            try:
+                playwright = await async_playwright().start()
+                browsers = [Browser() for _ in range(self.max_browsers)]
+                await asyncio.gather(*(browser.launch(playwright) for browser in browsers))
+
+                self.playwright = playwright
+                self.browser_pool = browsers
+            except Exception:
+                # 如果在初始化过程中发生异常，确保所有已启动的浏览器实例都被正确关闭，并且Playwright实例也被停止，以避免资源泄漏。
+                for browser in browsers:
+                    try:
+                        await browser.close()
+                    except Exception:
+                        pass
+
+                if playwright is not None:
+                    try:
+                        await playwright.stop()
+                    except Exception:
+                        pass
+
+                self.playwright = None
+                self.browser_pool = []
+                raise
 
     @asynccontextmanager
     async def _get_browser(self):
@@ -115,7 +138,7 @@ class BrowserManager:
                     async with self.lock:
                         if browser.activate_pages > 0:
                             browser.activate_pages -= 1
-                            browser.status = "error"
+                        browser.status = "error"
                     logger.error(f"Error in add_page: {e}")
                     raise
     
@@ -137,9 +160,13 @@ class BrowserManager:
 
 
     async def close_all_browsers(self):
+        pool = self.browser_pool.copy()  # 复制列表以避免在迭代时修改原列表
         async with self.lock:
-            for browser in self.browser_pool:
-                await browser.close()  
-            self.browser_pool.clear()
+            self.browser_pool.clear()  # 清空浏览器池，防止在关闭过程中有新的浏览器被添加
+        for browser in pool:
+            try:
+                await browser.close()
+            except Exception as e:
+                logger.error(f"Error closing browser {browser.id}: {e}")
         if self.playwright:
             await self.playwright.stop()
