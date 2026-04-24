@@ -26,7 +26,7 @@ class Browser:
             self.playwright = playwright
         if not self.playwright:
             raise Exception("Playwright instance is not initialized")
-        self.browser = await self.playwright.chromium.launch(headless=True)
+        self.browser = await self.playwright.chromium.launch(headless=True,args=['--disable-blink-features=AutomationControlled'])
 
 
     async def close(self):
@@ -110,7 +110,7 @@ class BrowserManager:
         finally:            pass
 
     @asynccontextmanager
-    async def add_page(self, url):
+    async def add_page(self):
         context = None
         page = None
         async with self.semaphore:  # 使用信号量控制并发访问，确保同时访问的浏览器实例数量不超过设定的最大值。
@@ -118,7 +118,7 @@ class BrowserManager:
                 try:
                     context = await browser.get_browser_context()
                     page = await context.new_page()
-                    await page.goto(url)
+                    # await page.goto(url)
 
                     try:
                         yield page
