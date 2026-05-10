@@ -36,7 +36,7 @@ def cycle_job():
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="llm_update")
     try:
-        service.run_update_cycle()
+        service.run_update_cycle(timeout_secs=600)
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=llm_update detail=%s", e)
     finally:
@@ -45,7 +45,7 @@ def cycle_job():
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="article_fetch")
     try:
-        run_enabled_fetchers()
+        run_enabled_fetchers(journal_timeout_secs=600)
         log_event(logger, logging.INFO, "scheduler_step_succeeded", step="article_fetch")
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=article_fetch detail=%s", e)

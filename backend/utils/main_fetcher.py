@@ -35,7 +35,7 @@ PUBLISHER_FETCHER_MAP = {
     "Frontiers": FrontiersFetcher
 }
 
-async def run_enabled_fetchers_async():
+async def run_enabled_fetchers_async(journal_timeout_secs=1800):
     total_started_at = time.monotonic()
     log_event(logger, logging.INFO, "fetchers_started")
     
@@ -92,7 +92,20 @@ async def run_enabled_fetchers_async():
                 fetcher=fetcher.__class__.__name__,
                 url=j_url,
             )
-            await fetcher.run()
+
+            try:
+                await asyncio.wait_for(fetcher.run(), timeout=journal_timeout_secs)
+            except asyncio.TimeoutError:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "journal_fetcher_timeout",
+                    journal=j_name,
+                    publisher=j_publisher,
+                    fetcher=fetcher.__class__.__name__,
+                    url=j_url,
+                    elapsed_secs=time.monotonic() - journal_started_at,
+                )
             
         except Exception as e:
             logger.exception(
@@ -110,8 +123,8 @@ async def run_enabled_fetchers_async():
     log_event(logger, logging.INFO, "fetchers_completed", elapsed_secs=total_elapsed)
 
 
-def run_enabled_fetchers():
-    asyncio.run(run_enabled_fetchers_async())
+def run_enabled_fetchers(journal_timeout_secs=1800):
+    asyncio.run(run_enabled_fetchers_async(journal_timeout_secs=journal_timeout_secs))
 
 
 if __name__ == "__main__":

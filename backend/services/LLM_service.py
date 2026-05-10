@@ -198,7 +198,7 @@ class LLMService:
         self.repo.mark_articles_as_submitted(ids, batch_id)
         log_event(logger, logging.INFO, "llm_submission_completed", batch_id=batch_id, elapsed_secs=time.monotonic() - cycle_started_at)
 
-    def run_update_cycle(self):
+    def run_update_cycle(self, timeout_secs=600):
         """执行一次完整的检查更新周期"""
         cycle_started_at = time.monotonic()
         active_batches = self.repo.get_active_batch_ids()
@@ -219,6 +219,9 @@ class LLMService:
                 batch_id=batch_id,
                 elapsed_secs=batch_elapsed,
             )
+            if time.monotonic() - cycle_started_at >= timeout_secs:
+                log_event(logger, logging.WARNING, "llm_update_cycle_timeout", elapsed_secs=time.monotonic() - cycle_started_at)
+                break
         log_event(logger, logging.INFO, "llm_update_completed", elapsed_secs=time.monotonic() - cycle_started_at)
 
     def _format_abstracts(self, rows):
