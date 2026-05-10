@@ -4,22 +4,18 @@ import os
 import time
 import html
 import logging
+import inspect
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
-from asyncio import Semaphore
-from contextlib import asynccontextmanager
 from typing import List, Dict, Optional
 
 import feedparser
 import requests
-from lxml import etree, html as lhtml
-# from playwright.sync_api import sync_playwright
 from dateutil import parser, tz
 
 from utils.browser_manager import BrowserManager
 
-from services.article_services import ArticleService, Article
+from services.article_services import ArticleService
 from utils.logging_utils import log_event
 
 logger = logging.getLogger(__name__)
@@ -62,7 +58,7 @@ class BaseFetcher(ABC):
         pass
 
     @abstractmethod
-    def fetch_details(self, article: Dict) -> Dict:
+    async def fetch_details(self, article: Dict) -> Dict:
         pass
 
     def _set_fetch_meta(self, url: str, status: str, reason: Optional[str] = None):
@@ -121,7 +117,7 @@ class BaseFetcher(ABC):
     def _article_label(self, article: Dict) -> str:
         return article.get("title") or article.get("link") or "unknown"
 
-    def _fetch_details_with_logging(self, article: Dict) -> Dict:
+    async def _fetch_details_with_logging(self, article: Dict) -> Dict:
         article_label = self._article_label(article)
         link = article.get("link", "")
         log_event(
@@ -132,7 +128,7 @@ class BaseFetcher(ABC):
             article=article_label,
             url=link,
         )
-        return self.fetch_details(article)
+        return await self.fetch_details(article)
 
     async def _get_playwright_content(
         self,
@@ -225,20 +221,6 @@ class BaseFetcher(ABC):
                 else:
                     self._set_fetch_meta(url, current_meta.get("status", "unknown"), current_meta.get("reason"))  # ty:ignore[invalid-argument-type]
 
-            for resource_name, resource in (("page", page), ("context", context), ("browser", browser)):
-                if resource is None:
-                    continue
-                try:
-                    await resource.close()
-                except Exception as close_exc:
-                    logger.exception(
-                        "event=playwright_resource_close_failed journal=%s url=%s resource=%s detail=%s",
-                        self.journal_name,
-                        url,
-                        resource_name,
-                        close_exc,
-                    )
-
             final_meta = self._fetch_meta.get(url, {})
             log_event(
                 logger,
@@ -252,74 +234,75 @@ class BaseFetcher(ABC):
             )
         return content
 
+    async def _fetch_list(self) -> List[Dict]:
+        if inspect.iscoroutinefunction(self.fetch_list):
+            return await self.fetch_list()
+        return await asyncio.to_thread(self.fetch_list)
+
     async def _fetch_details_concurrently(self, papers_to_fetch: List[Dict]):
-        loop = asyncio.get_running_loop()
+        semaphore = asyncio.Semaphore(self.max_workers)
 
         async def run_one(idx: int, paper: Dict):
-            try:
-                details = await loop.run_in_executor(
-                    executor,
-                    self._fetch_details_with_logging,
-                    paper,
-                )
-                return idx, details, None
-            except Exception as e:
-                return idx, None, e
+            async with semaphore:
+                try:
+                    details = await self._fetch_details_with_logging(paper)
+                    return idx, details, None
+                except Exception as e:
+                    return idx, None, e
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            tasks = [run_one(i, p) for i, p in enumerate(papers_to_fetch)]
-            for task in asyncio.as_completed(tasks):
-                idx, details, err = await task
-                link = papers_to_fetch[idx].get("link", "")
-                article_label = self._article_label(papers_to_fetch[idx])
+        tasks = [asyncio.create_task(run_one(i, p)) for i, p in enumerate(papers_to_fetch)]
+        for task in asyncio.as_completed(tasks):
+            idx, details, err = await task
+            link = papers_to_fetch[idx].get("link", "")
+            article_label = self._article_label(papers_to_fetch[idx])
 
-                if err is None:
-                    if details:
-                        papers_to_fetch[idx].update(details)
+            if err is None:
+                if details:
+                    papers_to_fetch[idx].update(details)
 
-                    fetch_meta = self._pop_fetch_meta(link)
-                    if fetch_meta:
-                        papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "unknown")
-                        reason = fetch_meta.get("reason")
-                        if reason:
-                            papers_to_fetch[idx]["_fetch_fail_reason"] = reason
-                    elif details:
-                        papers_to_fetch[idx]["_fetch_status"] = "ok"
-                    else:
-                        papers_to_fetch[idx]["_fetch_status"] = "unknown"
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = "empty_details"
-                    log_event(
-                        logger,
-                        logging.INFO,
-                        "article_fetch_completed",
-                        journal=self.journal_name,
-                        article=article_label,
-                        url=link,
-                        status=papers_to_fetch[idx].get("_fetch_status"),
-                        detail_fields=len(details) if isinstance(details, dict) else 0,
-                        has_abstract=bool(papers_to_fetch[idx].get("abstract")),
-                        has_graphical_abstract=bool(papers_to_fetch[idx].get("graphical_abstract")),
-                    )
+                fetch_meta = self._pop_fetch_meta(link)
+                if fetch_meta:
+                    papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "unknown")
+                    reason = fetch_meta.get("reason")
+                    if reason:
+                        papers_to_fetch[idx]["_fetch_fail_reason"] = reason
+                elif details:
+                    papers_to_fetch[idx]["_fetch_status"] = "ok"
                 else:
-                    fetch_meta = self._pop_fetch_meta(link)
-                    if fetch_meta:
-                        papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "error")
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = fetch_meta.get("reason") or str(err)
-                    else:
-                        status = "blocked" if self._is_blocked_message(str(err)) else "error"
-                        papers_to_fetch[idx]["_fetch_status"] = status
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = str(err)
+                    papers_to_fetch[idx]["_fetch_status"] = "unknown"
+                    papers_to_fetch[idx]["_fetch_fail_reason"] = "empty_details"
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "article_fetch_completed",
+                    journal=self.journal_name,
+                    article=article_label,
+                    url=link,
+                    status=papers_to_fetch[idx].get("_fetch_status"),
+                    detail_fields=len(details) if isinstance(details, dict) else 0,
+                    has_abstract=bool(papers_to_fetch[idx].get("abstract")),
+                    has_graphical_abstract=bool(papers_to_fetch[idx].get("graphical_abstract")),
+                )
+            else:
+                fetch_meta = self._pop_fetch_meta(link)
+                if fetch_meta:
+                    papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "error")
+                    papers_to_fetch[idx]["_fetch_fail_reason"] = fetch_meta.get("reason") or str(err)
+                else:
+                    status = "blocked" if self._is_blocked_message(str(err)) else "error"
+                    papers_to_fetch[idx]["_fetch_status"] = status
+                    papers_to_fetch[idx]["_fetch_fail_reason"] = str(err)
 
-                    logger.exception(
-                        "event=article_fetch_failed journal=%s article=%s url=%s detail=%s",
-                        self.journal_name,
-                        article_label,
-                        link,
-                        err,
-                    )
+                logger.exception(
+                    "event=article_fetch_failed journal=%s article=%s url=%s detail=%s",
+                    self.journal_name,
+                    article_label,
+                    link,
+                    err,
+                )
 
-                if self.sleep_time > 0:
-                    await asyncio.sleep(self.sleep_time)
+            if self.sleep_time > 0:
+                await asyncio.sleep(self.sleep_time)
 
     async def run(self):
         # 执行完整的抓取流程
@@ -339,7 +322,7 @@ class BaseFetcher(ABC):
             phase_started_at = time.monotonic()
             log_event(logger, logging.INFO, "fetcher_list_started", journal=self.journal_name)
             try:
-                papers = self.fetch_list()
+                papers = await self._fetch_list()
             except Exception as e:
                 logger.exception("event=fetcher_list_failed journal=%s detail=%s", self.journal_name, e)
                 return
@@ -365,7 +348,7 @@ class BaseFetcher(ABC):
                 candidate_count=len(papers),
             )
             try:
-                papers_to_fetch = self.service.article_filter(papers)
+                papers_to_fetch = await asyncio.to_thread(self.service.article_filter, papers)
             except Exception as e:
                 logger.exception("event=fetcher_filter_failed journal=%s detail=%s", self.journal_name, e)
                 return
@@ -451,7 +434,7 @@ class BaseFetcher(ABC):
             )
             try:
                 articles_json = json.dumps(papers_to_fetch, ensure_ascii=True, indent=2)
-                self.service.insert_articles(articles_json)
+                await asyncio.to_thread(self.service.insert_articles, articles_json)
                 log_event(
                     logger,
                     logging.INFO,
@@ -479,6 +462,10 @@ class BaseFetcher(ABC):
         except Exception as e:
             logger.exception("event=fetcher_run_unhandled_failed journal=%s detail=%s", self.journal_name, e)
         finally:
+            try:
+                await self.browser_manager.close_all_browsers()
+            except Exception as e:
+                logger.exception("event=fetcher_browser_pool_close_failed journal=%s detail=%s", self.journal_name, e)
             total_elapsed = time.monotonic() - total_started_at
             log_event(
                 logger,
@@ -580,4 +567,3 @@ class RSSFetcher(BaseFetcher):
             doi = entry.id.split('doi.org/')[-1]
             return doi
         return None
-
