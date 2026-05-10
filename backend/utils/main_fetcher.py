@@ -1,5 +1,6 @@
 import logging
 import time
+import asyncio
 from db.database import get_db_connection
 from sqlalchemy import text
 from utils.logging_utils import log_event
@@ -34,7 +35,7 @@ PUBLISHER_FETCHER_MAP = {
     "Frontiers": FrontiersFetcher
 }
 
-def run_enabled_fetchers():
+async def run_enabled_fetchers_async():
     total_started_at = time.monotonic()
     log_event(logger, logging.INFO, "fetchers_started")
     
@@ -91,7 +92,7 @@ def run_enabled_fetchers():
                 fetcher=fetcher.__class__.__name__,
                 url=j_url,
             )
-            fetcher.run()
+            await fetcher.run()
             
         except Exception as e:
             logger.exception(
@@ -107,6 +108,11 @@ def run_enabled_fetchers():
 
     total_elapsed = time.monotonic() - total_started_at
     log_event(logger, logging.INFO, "fetchers_completed", elapsed_secs=total_elapsed)
+
+
+def run_enabled_fetchers():
+    asyncio.run(run_enabled_fetchers_async())
+
 
 if __name__ == "__main__":
     run_enabled_fetchers()

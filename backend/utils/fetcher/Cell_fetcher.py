@@ -11,8 +11,8 @@ class CellFetcher(BaseFetcher):
         
         self.list_url = url
 
-    def fetch_list(self):
-        content = self._get_playwright_content(self.list_url, selector="//*[@id=\"frmSearch\"]/div[1]/div/div[2]/div[2]")
+    async def fetch_list(self):
+        content = await self._get_playwright_content(self.list_url, selector="//*[@id=\"frmSearch\"]/div[1]/div/div[2]/div[2]")
         if not content: return []
 
         tree = lhtml.fromstring(content)
@@ -43,9 +43,9 @@ class CellFetcher(BaseFetcher):
                 })
         return papers
 
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
-        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
         if not content: return {}
 
         tree = lhtml.fromstring(content)
@@ -75,4 +75,5 @@ class CellFetcher(BaseFetcher):
         return info
 
 if __name__ == "__main__":
-    CellFetcher().run()
+    import asyncio
+    asyncio.run(CellFetcher().run())
