@@ -38,7 +38,7 @@ FETCH_PHASE_WARN_AFTER_SECS = 5 * 60
 
 
 class BaseFetcher(ABC):
-    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0, max_pages: int = 10, user_agent: str = UA):
+    def __init__(self, journal_name: str, journal_id: Optional[int] = None, max_workers: int = 5, sleep_time: int = 0, max_pages: int = 10, user_agent: str = UA, browser_manager: BrowserManager | None = None):
         self.journal_name = journal_name
         self.journal_id = journal_id
         self.max_workers = max_workers
@@ -46,7 +46,8 @@ class BaseFetcher(ABC):
         self.sleep_time = sleep_time
         self.service = ArticleService()
         self.user_agent = user_agent
-        self.browser_manager = BrowserManager()
+        self.browser_manager = browser_manager or BrowserManager()
+        self._owns_browser_manager = browser_manager is None
 
         # Per-link fetch diagnostics used by run() to classify blocked/error/unknown.
         self._fetch_meta: dict[str, dict[str, Optional[str]]] = {}
@@ -304,28 +305,23 @@ class BaseFetcher(ABC):
             if self.sleep_time > 0:
                 await asyncio.sleep(self.sleep_time)
 
-    async def run(self):
-        # 执行完整的抓取流程
+    async def collect(self) -> List[Dict] | None:
+        """阶段1：获取RSS列表 + 过滤已存在文章，返回待抓取详情的文章列表"""
         total_started_at = time.monotonic()
+        papers_to_fetch: List[Dict] | None = None
         log_event(
             logger,
             logging.INFO,
-            "fetcher_started",
+            "fetcher_collect_started",
             journal=self.journal_name,
             journal_id=self.journal_id,
             max_workers=self.max_workers,
         )
-        papers: List[Dict] = []
-        papers_to_fetch: List[Dict] = []
         try:
             # 1. 获取初步列表
             phase_started_at = time.monotonic()
             log_event(logger, logging.INFO, "fetcher_list_started", journal=self.journal_name)
-            try:
-                papers = await self._fetch_list()
-            except Exception as e:
-                logger.exception("event=fetcher_list_failed journal=%s detail=%s", self.journal_name, e)
-                return
+            papers = await self._fetch_list()
             log_event(
                 logger,
                 logging.INFO,
@@ -336,7 +332,7 @@ class BaseFetcher(ABC):
             )
             if not papers:
                 log_event(logger, logging.WARNING, "fetcher_no_articles", journal=self.journal_name)
-                return
+                return None
 
             # 2. 过滤已存在的文章
             phase_started_at = time.monotonic()
@@ -347,11 +343,7 @@ class BaseFetcher(ABC):
                 journal=self.journal_name,
                 candidate_count=len(papers),
             )
-            try:
-                papers_to_fetch = await asyncio.to_thread(self.service.article_filter, papers)
-            except Exception as e:
-                logger.exception("event=fetcher_filter_failed journal=%s detail=%s", self.journal_name, e)
-                return
+            papers_to_fetch = await asyncio.to_thread(self.service.article_filter, papers)
             log_event(
                 logger,
                 logging.INFO,
@@ -364,118 +356,94 @@ class BaseFetcher(ABC):
 
             if not papers_to_fetch:
                 log_event(logger, logging.INFO, "fetcher_no_new_articles", journal=self.journal_name)
-                return
+                return None
 
-            # 3. 并发抓取详情
-            phase_started_at = time.monotonic()
-            log_event(
-                logger,
-                logging.INFO,
-                "fetcher_details_started",
-                journal=self.journal_name,
-                article_count=len(papers_to_fetch),
-                max_workers=self.max_workers,
-            )
-            try:
-                await self._fetch_details_concurrently(papers_to_fetch)
-            except Exception as e:
-                logger.exception("event=fetcher_details_phase_failed journal=%s detail=%s", self.journal_name, e)
-                return
-            detail_elapsed = time.monotonic() - phase_started_at
-            log_event(
-                logger,
-                logging.WARNING if detail_elapsed >= FETCH_PHASE_WARN_AFTER_SECS else logging.INFO,
-                "fetcher_details_completed",
-                journal=self.journal_name,
-                elapsed_secs=detail_elapsed,
-                processed_count=len(papers_to_fetch),
-            )
-
-            # 4. 统一日期格式
-            phase_started_at = time.monotonic()
-            log_event(
-                logger,
-                logging.INFO,
-                "fetcher_date_normalization_started",
-                journal=self.journal_name,
-                article_count=len(papers_to_fetch),
-            )
-            for paper in papers_to_fetch:
-                raw_date = paper.get('date')
-                if raw_date:
-                    try:
-                        # 传入 tzinfos 参数来识别 PST 等缩写
-                        dt = parser.parse(str(raw_date), tzinfos=TZ_INFOS)
-                        paper['date'] = dt.strftime('%Y-%m-%d')
-                    except Exception as e:
-                        logger.exception(
-                            "event=article_date_normalize_failed journal=%s article=%s raw_date=%s detail=%s",
-                            self.journal_name,
-                            self._article_label(paper),
-                            raw_date,
-                            e,
-                        )
-            log_event(
-                logger,
-                logging.INFO,
-                "fetcher_date_normalization_completed",
-                journal=self.journal_name,
-                elapsed_secs=time.monotonic() - phase_started_at,
-            )
-
-            # 5. 插入数据库
-            phase_started_at = time.monotonic()
-            log_event(
-                logger,
-                logging.INFO,
-                "fetcher_insert_started",
-                journal=self.journal_name,
-                article_count=len(papers_to_fetch),
-            )
-            try:
-                articles_json = json.dumps(papers_to_fetch, ensure_ascii=True, indent=2)
-                await asyncio.to_thread(self.service.insert_articles, articles_json)
-                log_event(
-                    logger,
-                    logging.INFO,
-                    "fetcher_insert_succeeded",
-                    journal=self.journal_name,
-                    article_count=len(papers_to_fetch),
-                )
-                try:
-                    json.loads(articles_json)
-                except Exception as e:
-                    logger.exception(
-                        "event=fetcher_json_validation_failed journal=%s detail=%s",
-                        self.journal_name,
-                        e,
-                    )
-            except Exception as e:
-                logger.exception("event=fetcher_insert_failed journal=%s detail=%s", self.journal_name, e)
-            log_event(
-                logger,
-                logging.INFO,
-                "fetcher_insert_completed",
-                journal=self.journal_name,
-                elapsed_secs=time.monotonic() - phase_started_at,
-            )
+            return papers_to_fetch
         except Exception as e:
-            logger.exception("event=fetcher_run_unhandled_failed journal=%s detail=%s", self.journal_name, e)
+            logger.exception("event=fetcher_collect_failed journal=%s detail=%s", self.journal_name, e)
+            return None
         finally:
-            try:
-                await self.browser_manager.close_all_browsers()
-            except Exception as e:
-                logger.exception("event=fetcher_browser_pool_close_failed journal=%s detail=%s", self.journal_name, e)
             total_elapsed = time.monotonic() - total_started_at
+            
             log_event(
                 logger,
                 logging.WARNING if total_elapsed >= FETCH_PHASE_WARN_AFTER_SECS else logging.INFO,
-                "fetcher_completed",
+                "fetcher_collect_completed",
                 journal=self.journal_name,
                 elapsed_secs=total_elapsed,
-                fetched_count=len(papers),
-                new_count=len(papers_to_fetch),
             )
+        
+
+    async def finalize(self, papers_to_record: List[Dict]):
+        # 4. 统一日期格式
+        phase_started_at = time.monotonic()
+        log_event(
+            logger,
+            logging.INFO,
+            "fetcher_date_normalization_started",
+            journal=self.journal_name,
+            article_count=len(papers_to_record),
+        )
+        for paper in papers_to_record:
+            raw_date = paper.get('date')
+            if raw_date:
+                try:
+                    # 传入 tzinfos 参数来识别 PST 等缩写
+                    dt = parser.parse(str(raw_date), tzinfos=TZ_INFOS)
+                    paper['date'] = dt.strftime('%Y-%m-%d')
+                except Exception as e:
+                    logger.exception(
+                        "event=article_date_normalize_failed journal=%s article=%s raw_date=%s detail=%s",
+                        self.journal_name,
+                        self._article_label(paper),
+                        raw_date,
+                        e,
+                    )
+        log_event(
+            logger,
+            logging.INFO,
+            "fetcher_date_normalization_completed",
+            journal=self.journal_name,
+            elapsed_secs=time.monotonic() - phase_started_at,
+        )
+
+        # 5. 插入数据库
+        phase_started_at = time.monotonic()
+        log_event(
+            logger,
+            logging.INFO,
+            "fetcher_insert_started",
+            journal=self.journal_name,
+            article_count=len(papers_to_record),
+        )
+        try:
+            articles_json = json.dumps(papers_to_record, ensure_ascii=True, indent=2)
+            await asyncio.to_thread(self.service.insert_articles, articles_json)
+            log_event(
+                logger,
+                logging.INFO,
+                "fetcher_insert_succeeded",
+                journal=self.journal_name,
+                article_count=len(papers_to_record),
+            )
+            try:
+                json.loads(articles_json)
+            except Exception as e:
+                logger.exception(
+                    "event=fetcher_json_validation_failed journal=%s detail=%s",
+                    self.journal_name,
+                    e,
+                )
+        except Exception as e:
+            logger.exception("event=fetcher_insert_failed journal=%s detail=%s", self.journal_name, e)
+        log_event(
+            logger,
+            logging.INFO,
+            "fetcher_insert_completed",
+            journal=self.journal_name,
+            elapsed_secs=time.monotonic() - phase_started_at,
+        )
+
 
 class RSSFetcher(BaseFetcher):
     # 专门处理 RSS 源的基类
