@@ -170,3 +170,11 @@ class BrowserManager:
                 logger.error(f"Error closing browser {browser.id}: {e}")
         if self.playwright:
             await self.playwright.stop()
+
+
+_browser_manager: BrowserManager | None = None
+def get_browser_manager() -> BrowserManager:
+    global _browser_manager
+    if _browser_manager is None:
+        _browser_manager = BrowserManager()
+    return _browser_manager
