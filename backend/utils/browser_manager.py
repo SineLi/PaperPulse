@@ -3,9 +3,6 @@ import asyncio
 from contextlib import asynccontextmanager
 from playwright.async_api import async_playwright
 from playwright.async_api._generated import Playwright as AsyncPlaywright
-import threading
-
-from utils.logging_utils import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -119,28 +116,47 @@ class BrowserManager:
                     context = await browser.get_browser_context()
                     page = await context.new_page()
                     # await page.goto(url)
-
-                    try:
-                        yield page
-                    finally:
-                        await page.close()
-                        await context.close()
-                        async with self.lock:
-                            if browser.activate_pages > 0:
-                                browser.activate_pages -= 1
-                            if browser.activate_pages == 0:
-                                browser.status = "idle"
                 except Exception as e:
-                    if page:
-                        await page.close()
-                    if context:
-                        await context.close()
                     async with self.lock:
                         if browser.activate_pages > 0:
                             browser.activate_pages -= 1
                         browser.status = "error"
+                    if page:
+                        try:
+                            await page.close()
+                        except Exception as close_error:
+                            logger.error(f"Error closing page after add_page failure: {close_error}")
+                    if context:
+                        try:
+                            await context.close()
+                        except Exception as close_error:
+                            logger.error(f"Error closing context after add_page failure: {close_error}")
                     logger.error(f"Error in add_page: {e}")
                     raise
+
+                try:
+                    yield page
+                finally:
+                    resource_error = False
+                    if page:
+                        try:
+                            await page.close()
+                        except Exception as e:
+                            resource_error = True
+                            logger.error(f"Error closing page in add_page: {e}")
+                    if context:
+                        try:
+                            await context.close()
+                        except Exception as e:
+                            resource_error = True
+                            logger.error(f"Error closing context in add_page: {e}")
+                    async with self.lock:
+                        if browser.activate_pages > 0:
+                            browser.activate_pages -= 1
+                        if resource_error:
+                            browser.status = "error"
+                        elif browser.activate_pages == 0:
+                            browser.status = "idle"
     
     async def refresh_browser(self, browser:Browser):
         async with self.lock:
