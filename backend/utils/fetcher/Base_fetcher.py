@@ -1,5 +1,4 @@
 ﻿from threading import Lock
-import json
 import os
 import time
 import html
@@ -370,7 +369,8 @@ class BaseFetcher(ABC):
             return papers_to_fetch
         except Exception as e:
             logger.exception("event=fetcher_collect_failed journal=%s detail=%s", self.journal_name, e)
-            return None
+            # 空列表是正常业务结果，异常则交给主调度记录为期刊抓取失败。
+            raise
         finally:
             total_elapsed = time.monotonic() - total_started_at
             
@@ -426,8 +426,7 @@ class BaseFetcher(ABC):
             article_count=len(papers_to_record),
         )
         try:
-            articles_json = json.dumps(papers_to_record, ensure_ascii=True, indent=2)
-            await asyncio.to_thread(self.service.insert_articles, articles_json)
+            await asyncio.to_thread(self.service.insert_articles, papers_to_record)
             log_event(
                 logger,
                 logging.INFO,
@@ -435,16 +434,9 @@ class BaseFetcher(ABC):
                 journal=self.journal_name,
                 article_count=len(papers_to_record),
             )
-            try:
-                json.loads(articles_json)
-            except Exception as e:
-                logger.exception(
-                    "event=fetcher_json_validation_failed journal=%s detail=%s",
-                    self.journal_name,
-                    e,
-                )
         except Exception as e:
             logger.exception("event=fetcher_insert_failed journal=%s detail=%s", self.journal_name, e)
+            raise
         log_event(
             logger,
             logging.INFO,
