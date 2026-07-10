@@ -20,7 +20,7 @@ from utils.fetcher.RSC_fetcher import RSCFetcher
 from utils.fetcher.Taylor_fetcher import TaylorFetcher
 from utils.fetcher.Wiely_fetcher import WileyFetcher
 
-from utils.browser_manager import BrowserManager
+from utils.browser_manager import get_browser_manager
 from utils.task_executor import ArticleFetchTask, TaskExecutor
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ async def run_enabled_fetchers_async(
     executor_timeout_secs: float | None = None,
 ):
     total_started_at = time.monotonic()
-    browser_manager = BrowserManager()
+    browser_manager = get_browser_manager()
     if executor_timeout_secs is None:
         executor_timeout_secs = ARTICLE_FETCH_EXECUTOR_TIMEOUT_SECS
     if journal_timeout_secs <= 0 or executor_timeout_secs <= 0:

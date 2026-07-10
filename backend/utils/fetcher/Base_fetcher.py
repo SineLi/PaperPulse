@@ -12,7 +12,7 @@ import feedparser
 import requests
 from dateutil import parser, tz
 
-from utils.browser_manager import BrowserManager
+from utils.browser_manager import BrowserManager, get_browser_manager
 
 from services.article_services import ArticleService
 from utils.logging_utils import log_event
@@ -45,8 +45,7 @@ class BaseFetcher(ABC):
         self.sleep_time = sleep_time
         self.service = ArticleService()
         self.user_agent = user_agent
-        self.browser_manager = browser_manager or BrowserManager()
-        self._owns_browser_manager = browser_manager is None
+        self.browser_manager = browser_manager or get_browser_manager()
 
         # 按链接暂存 Playwright 抓取诊断，供详情任务区分被拦截、普通错误和未知失败。
         self._fetch_meta: dict[str, dict[str, Optional[str]]] = {}

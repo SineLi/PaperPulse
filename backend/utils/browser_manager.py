@@ -1,196 +1,320 @@
-import logging
 import asyncio
+import logging
+import os
+import threading
 from contextlib import asynccontextmanager
-from playwright.async_api import async_playwright
-from playwright.async_api._generated import Playwright as AsyncPlaywright
+from typing import Any
+
+from playwright.async_api import Browser as PlaywrightBrowser
+from playwright.async_api import Playwright, async_playwright
 
 logger = logging.getLogger(__name__)
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+BROWSER_POOL_SIZE = int(os.getenv("BROWSER_POOL_SIZE", "2"))
+BROWSER_MAX_PAGES = int(os.getenv("BROWSER_MAX_PAGES", "4"))
+
 
 class Browser:
-    # Browser类，负责管理Playwright浏览器实例的生命周期，包括启动、关闭和获取浏览器实例。
+    """管理一个 Playwright 浏览器实例及其当前页面计数。"""
+
     def __init__(self):
-        self.browser = None
+        self.browser: PlaywrightBrowser | None = None
         self.id = id(self)
         self.activate_pages = 0
-        self.status = "idle"  # idle, active, error
-        self.playwright: AsyncPlaywright | None = None
-        
+        self.status = "idle"
+        self.playwright: Playwright | None = None
 
-    async def launch(self, playwright: AsyncPlaywright | None = None):
-        if playwright:
+    @property
+    def is_connected(self) -> bool:
+        return self.browser is not None and self.browser.is_connected()
+
+    async def launch(self, playwright: Playwright | None = None) -> None:
+        if playwright is not None:
             self.playwright = playwright
-        if not self.playwright:
-            raise Exception("Playwright instance is not initialized")
-        self.browser = await self.playwright.chromium.launch(headless=True,args=['--disable-blink-features=AutomationControlled'])
+        if self.playwright is None:
+            raise RuntimeError("Playwright instance is not initialized")
+        if self.is_connected:
+            return
 
+        self.browser = await self.playwright.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        self.status = "idle"
 
-    async def close(self):
-        if self.browser:
-            await self.browser.close()
+    async def close(self) -> None:
+        browser = self.browser
+        self.browser = None
+        self.activate_pages = 0
+        self.status = "closed"
+        if browser is not None:
+            await browser.close()
 
     async def get_browser_context(self):
-        if not self.browser:
+        if not self.is_connected:
             await self.launch(self.playwright)
-        
-        if not self.browser:
-            raise Exception("Failed to launch browser")
-
+        if self.browser is None:
+            raise RuntimeError("Failed to launch browser")
         return await self.browser.new_context()
 
-class BrowserManager:
-    # BrowserManager类，负责管理多个Browser实例的池化，提供获取和释放浏览器实例的方法，以支持并发访问。
-    def __init__(self):
-        self.max_browsers = 5
-        self.browser_pool: list[Browser] = []  # 明确类型
-        self.max_browser_pages = 32
-        self.semaphore = asyncio.Semaphore(self.max_browsers * self.max_browser_pages)
-        self.playwright : AsyncPlaywright | None = None
-        self.lock = asyncio.Lock()
 
-    async def init_browser_pool(self):
-        async with self.lock:
+class BrowserManager:
+    """在一次抓取周期内共享并限制 Playwright 浏览器资源。"""
+
+    def __init__(
+        self,
+        max_browsers: int = BROWSER_POOL_SIZE,
+        max_browser_pages: int = BROWSER_MAX_PAGES,
+    ):
+        if max_browsers <= 0 or max_browser_pages <= 0:
+            raise ValueError("browser pool limits must be positive")
+
+        self.max_browsers = max_browsers
+        self.max_browser_pages = max_browser_pages
+        self.browser_pool: list[Browser] = []
+        self.playwright: Playwright | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._lock: asyncio.Lock | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+
+    def _bind_running_loop(self) -> None:
+        loop = asyncio.get_running_loop()
+        if self._loop is loop:
+            return
+        if self.browser_pool or self.playwright is not None:
+            raise RuntimeError("BrowserManager cannot be shared by active event loops")
+
+        # APScheduler 每轮通过 asyncio.run 创建新事件循环，因此关闭后需要重建异步原语。
+        self._loop = loop
+        self._lock = asyncio.Lock()
+        self._semaphore = asyncio.Semaphore(self.max_browsers * self.max_browser_pages)
+
+    async def init_browser_pool(self) -> None:
+        self._bind_running_loop()
+        lock = self._lock
+        if lock is None:
+            raise RuntimeError("BrowserManager lock is not initialized")
+
+        async with lock:
             if self.playwright is not None and self.browser_pool:
                 return
 
-            playwright: AsyncPlaywright | None = None
+            playwright: Playwright | None = None
             browsers: list[Browser] = []
             try:
                 playwright = await async_playwright().start()
                 browsers = [Browser() for _ in range(self.max_browsers)]
-                await asyncio.gather(*(browser.launch(playwright) for browser in browsers))
+                launch_results = await asyncio.gather(
+                    *(browser.launch(playwright) for browser in browsers),
+                    return_exceptions=True,
+                )
+                launch_error = next(
+                    (result for result in launch_results if isinstance(result, BaseException)),
+                    None,
+                )
+                if launch_error is not None:
+                    raise RuntimeError("Failed to initialize browser pool") from launch_error
 
                 self.playwright = playwright
                 self.browser_pool = browsers
-            except Exception:
-                # 如果在初始化过程中发生异常，确保所有已启动的浏览器实例都被正确关闭，并且Playwright实例也被停止，以避免资源泄漏。
-                for browser in browsers:
-                    try:
-                        await browser.close()
-                    except Exception:
-                        pass
-
+            except BaseException:
+                # 初始化必须整体成功；部分启动的实例也要全部回收。
+                await asyncio.gather(
+                    *(browser.close() for browser in browsers),
+                    return_exceptions=True,
+                )
                 if playwright is not None:
                     try:
                         await playwright.stop()
                     except Exception:
-                        pass
-
+                        logger.exception("event=playwright_stop_failed_after_init")
                 self.playwright = None
                 self.browser_pool = []
                 raise
 
+    async def _acquire_browser(self) -> Browser:
+        await self.init_browser_pool()
+        lock = self._lock
+        if lock is None:
+            raise RuntimeError("BrowserManager lock is not initialized")
+
+        while True:
+            refreshable: Browser | None = None
+            refreshing = False
+            async with lock:
+                available = [
+                    browser
+                    for browser in self.browser_pool
+                    if browser.status in {"idle", "active"}
+                    and browser.is_connected
+                    and browser.activate_pages < self.max_browser_pages
+                ]
+                if available:
+                    browser = min(available, key=lambda item: item.activate_pages)
+                    browser.activate_pages += 1
+                    browser.status = "active"
+                    return browser
+
+                refreshable = next(
+                    (
+                        browser
+                        for browser in self.browser_pool
+                        if browser.activate_pages == 0
+                        and (browser.status == "error" or not browser.is_connected)
+                    ),
+                    None,
+                )
+                refreshing = any(browser.status == "refreshing" for browser in self.browser_pool)
+
+            if refreshable is not None:
+                await self.refresh_browser(refreshable)
+                continue
+            if refreshing:
+                await asyncio.sleep(0.05)
+                continue
+            raise RuntimeError("No available browsers in the pool")
+
     @asynccontextmanager
     async def _get_browser(self):
-        browser: Browser | None = None
-
-        if not self.browser_pool:
-            await self.init_browser_pool()
-        
-        async with self.lock:  # 使用锁确保在获取浏览器实例时的线程安全
-            idle_browsers = [b for b in self.browser_pool if b.status == "idle"]
-            if idle_browsers:
-                browser = min(idle_browsers, key=lambda b: b.activate_pages)
-            else:
-                available_browsers = [b for b in self.browser_pool if b.activate_pages < self.max_browser_pages]
-                browser = min(available_browsers, key=lambda b: b.activate_pages) if available_browsers else None
-
-            if browser is None:  # 先判空，再访问属性
-                raise Exception("No available browsers in the pool")
-
-            browser.activate_pages += 1
-            browser.status = "active"
-
-        try:
-            yield browser
-        finally:            pass
+        yield await self._acquire_browser()
 
     @asynccontextmanager
     async def add_page(self):
-        context = None
-        page = None
-        async with self.semaphore:  # 使用信号量控制并发访问，确保同时访问的浏览器实例数量不超过设定的最大值。
+        await self.init_browser_pool()
+        semaphore = self._semaphore
+        if semaphore is None:
+            raise RuntimeError("BrowserManager semaphore is not initialized")
+
+        context: Any = None
+        page: Any = None
+        async with semaphore:
             async with self._get_browser() as browser:
                 try:
                     context = await browser.get_browser_context()
                     page = await context.new_page()
-                    # await page.goto(url)
-                except Exception as e:
-                    async with self.lock:
-                        if browser.activate_pages > 0:
-                            browser.activate_pages -= 1
-                        browser.status = "error"
-                    if page:
-                        try:
-                            await page.close()
-                        except Exception as close_error:
-                            logger.error(f"Error closing page after add_page failure: {close_error}")
-                    if context:
-                        try:
-                            await context.close()
-                        except Exception as close_error:
-                            logger.error(f"Error closing context after add_page failure: {close_error}")
-                    logger.error(f"Error in add_page: {e}")
+                except BaseException as exc:
+                    await self._close_page_resources(page, context)
+                    should_refresh = await self._release_browser(browser, has_error=True)
+                    if should_refresh:
+                        await self.refresh_browser(browser)
+                    if not isinstance(exc, asyncio.CancelledError):
+                        logger.exception("event=browser_page_create_failed browser_id=%s", browser.id)
                     raise
 
                 try:
                     yield page
                 finally:
-                    resource_error = False
-                    if page:
-                        try:
-                            await page.close()
-                        except Exception as e:
-                            resource_error = True
-                            logger.error(f"Error closing page in add_page: {e}")
-                    if context:
-                        try:
-                            await context.close()
-                        except Exception as e:
-                            resource_error = True
-                            logger.error(f"Error closing context in add_page: {e}")
-                    async with self.lock:
-                        if browser.activate_pages > 0:
-                            browser.activate_pages -= 1
-                        if resource_error:
-                            browser.status = "error"
-                        elif browser.activate_pages == 0:
-                            browser.status = "idle"
-    
-    async def refresh_browser(self, browser:Browser):
-        async with self.lock:
+                    resource_error = await self._close_page_resources(page, context)
+                    should_refresh = await self._release_browser(browser, has_error=resource_error)
+                    if should_refresh:
+                        await self.refresh_browser(browser)
+
+    async def _close_page_resources(self, page: Any, context: Any) -> bool:
+        resource_error = False
+        if page is not None:
+            try:
+                await page.close()
+            except Exception:
+                resource_error = True
+                logger.exception("event=browser_page_close_failed")
+        if context is not None:
+            try:
+                await context.close()
+            except Exception:
+                resource_error = True
+                logger.exception("event=browser_context_close_failed")
+        return resource_error
+
+    async def _release_browser(self, browser: Browser, has_error: bool) -> bool:
+        lock = self._lock
+        if lock is None:
+            return False
+
+        async with lock:
             if browser.activate_pages > 0:
-                logger.warning(f"Browser {browser.id} is active with {browser.activate_pages} pages, cannot refresh now.")
+                browser.activate_pages -= 1
+            if has_error or not browser.is_connected:
+                browser.status = "error"
+            elif browser.status != "error":
+                browser.status = "idle" if browser.activate_pages == 0 else "active"
+            return browser.status == "error" and browser.activate_pages == 0
+
+    async def refresh_browser(self, browser: Browser) -> None:
+        lock = self._lock
+        if lock is None:
+            return
+
+        async with lock:
+            if browser not in self.browser_pool or browser.activate_pages > 0:
+                return
+            if browser.status == "refreshing":
                 return
             browser.status = "refreshing"
-        await browser.close()
-        async with self.lock:
-            self.browser_pool.remove(browser)
-            new_browser = Browser()
-        await new_browser.launch(self.playwright)
-        
-        async with self.lock:
-            new_browser.status = "idle"        
-            self.browser_pool.append(new_browser)
+            playwright = self.playwright
 
+        replacement = Browser()
+        try:
+            await browser.close()
+            await replacement.launch(playwright)
+        except BaseException as exc:
+            if not isinstance(exc, asyncio.CancelledError):
+                logger.exception("event=browser_refresh_failed browser_id=%s", browser.id)
+            async with lock:
+                if browser in self.browser_pool:
+                    browser.status = "error"
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            return
 
-    async def close_all_browsers(self):
-        pool = self.browser_pool.copy()  # 复制列表以避免在迭代时修改原列表
-        async with self.lock:
-            self.browser_pool.clear()  # 清空浏览器池，防止在关闭过程中有新的浏览器被添加
-        for browser in pool:
-            try:
-                await browser.close()
-            except Exception as e:
-                logger.error(f"Error closing browser {browser.id}: {e}")
-        if self.playwright:
-            await self.playwright.stop()
+        close_replacement = False
+        async with lock:
+            if browser in self.browser_pool:
+                index = self.browser_pool.index(browser)
+                self.browser_pool[index] = replacement
+            else:
+                close_replacement = True
+        if close_replacement:
+            await replacement.close()
+
+    async def close_all_browsers(self) -> None:
+        self._bind_running_loop()
+        lock = self._lock
+        if lock is None:
+            return
+
+        async with lock:
+            pool = self.browser_pool
+            playwright = self.playwright
+            self.browser_pool = []
+            self.playwright = None
+
+        try:
+            close_results = await asyncio.gather(
+                *(browser.close() for browser in pool),
+                return_exceptions=True,
+            )
+            for browser, result in zip(pool, close_results):
+                if isinstance(result, BaseException):
+                    logger.error("event=browser_close_failed browser_id=%s detail=%s", browser.id, result)
+            if playwright is not None:
+                await playwright.stop()
+        finally:
+            # 彻底解除旧事件循环状态，允许下一轮 asyncio.run 复用全局管理器。
+            self._loop = None
+            self._lock = None
+            self._semaphore = None
 
 
 _browser_manager: BrowserManager | None = None
+_browser_manager_lock = threading.Lock()
+
+
 def get_browser_manager() -> BrowserManager:
+    """返回进程内共享的浏览器管理器。"""
+
     global _browser_manager
     if _browser_manager is None:
-        _browser_manager = BrowserManager()
+        with _browser_manager_lock:
+            if _browser_manager is None:
+                _browser_manager = BrowserManager()
     return _browser_manager
