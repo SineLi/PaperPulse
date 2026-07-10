@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 STEP_WARN_AFTER_SECS = 5 * 60
 CYCLE_WARN_AFTER_SECS = 50 * 60
 _cycle_active = threading.Event()
+_cycle_lock = threading.Lock()
 
 
 try:
@@ -32,11 +33,21 @@ def _log_step_duration(step_name: str, started_at: float):
 
 
 def cycle_job():
+    if not _cycle_lock.acquire(blocking=False):
+        log_event(
+            logger,
+            logging.INFO,
+            "scheduler_cycle_skipped",
+            reason="cycle_already_active",
+        )
+        return
+
     _cycle_active.set()
     try:
         _run_cycle_job()
     finally:
         _cycle_active.clear()
+        _cycle_lock.release()
 
 
 def _run_cycle_job():
