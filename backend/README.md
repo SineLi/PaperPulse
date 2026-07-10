@@ -58,6 +58,12 @@ SMTP_USERNAME=your-smtp-user
 SMTP_KEY=your-smtp-password
 SOURCE_EMAIL=donotreply@example.com
 CORS_ORIGINS=https://app.example.com,https://admin.example.com
+ARTICLE_FETCH_EXECUTOR_WORKERS=8
+ARTICLE_FETCH_EXECUTOR_TIMEOUT_SECS=1800
+IMAGE_CACHE_EXECUTOR_WORKERS=2
+IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS=600
+BROWSER_POOL_SIZE=2
+BROWSER_MAX_PAGES=4
 ```
 
 说明:
@@ -65,6 +71,10 @@ CORS_ORIGINS=https://app.example.com,https://admin.example.com
 - 缺少 `LM_API_KEY` 或 `Elsevier_KEY` 时，部分摘要/抓取能力会受限
 - 缺少 SMTP 配置时，验证码邮件无法发送
 - 当前代码里虽然读取了 `CORS_ORIGINS`，但还没有接入白名单逻辑，发布前需要补齐
+- 文章详情的实际并发上限取 `ARTICLE_FETCH_EXECUTOR_WORKERS` 与
+  `BROWSER_POOL_SIZE * BROWSER_MAX_PAGES` 中的较小值
+- 执行器超时会取消尚未开始或尚未完成的任务；文章只入库已完成部分，图片保持
+  `pending` 并等待下一轮回填
 
 ## 本地依赖服务
 
@@ -172,6 +182,25 @@ python run.py --no-scheduler
 1. 检查并拉取已完成的 LLM 批处理结果
 2. 抓取当前启用期刊的新文章
 3. 提交新的摘要批处理任务
+
+文章抓取分为三个阶段:
+
+1. 依次收集各期刊 RSS/列表并过滤数据库中已有文章
+2. 将所有期刊的文章详情任务交给同一个限流执行器
+3. 执行器结束或超时后，按期刊将已完成任务统一写入数据库
+
+图形摘要不会在文章插入事务中同步下载。新记录先标记为 `pending`，图片回填任务在
+每小时的第 15、30、45 分钟运行；如果主调度周期仍在执行，本轮图片回填会跳过，
+等待下一轮继续处理。
+
+## 测试
+
+后端调度和资源生命周期测试使用 Python 标准库 `unittest`，无需额外测试依赖:
+
+```powershell
+cd backend
+python -m unittest discover -s tests -v
+```
 
 ## 期刊数据说明
 
