@@ -49,7 +49,7 @@ class BaseFetcher(ABC):
         self.browser_manager = browser_manager or BrowserManager()
         self._owns_browser_manager = browser_manager is None
 
-        # Per-link fetch diagnostics used by run() to classify blocked/error/unknown.
+        # 按链接暂存 Playwright 抓取诊断，供详情任务区分被拦截、普通错误和未知失败。
         self._fetch_meta: dict[str, dict[str, Optional[str]]] = {}
         self._fetch_meta_lock = Lock()
 
@@ -211,7 +211,7 @@ class BaseFetcher(ABC):
             self._set_fetch_meta(url, "error", str(e))
             raise
         finally:
-            # If no explicit status was set in the loop, mark unknown.
+            # 循环内没有明确记录状态时，用页面内容兜底标记，避免后续把失败误判为成功。
             if url:
                 current_meta = self._pop_fetch_meta(url)
                 if current_meta is None:
@@ -240,70 +240,79 @@ class BaseFetcher(ABC):
             return await self.fetch_list()
         return await asyncio.to_thread(self.fetch_list)
 
+    async def fetch_detail_at_index(self, papers_to_fetch: List[Dict], idx: int):
+        """抓取一篇文章详情，并将详情及诊断状态原地写回批次数组。
+
+        该方法同时供旧的 fetcher 内部并发路径和新的全局任务队列复用。文章级异常
+        会转换为 _fetch_status/_fetch_fail_reason 而不继续抛出，确保一篇失败不会中断
+        整批抓取；队列据此仍可完成批次，最终由入库逻辑决定是否保存该条记录。
+        """
+
+        paper = papers_to_fetch[idx]
+        link = paper.get("link", "")
+        article_label = self._article_label(paper)
+
+        try:
+            details = await self._fetch_details_with_logging(paper)
+        except Exception as err:
+            fetch_meta = self._pop_fetch_meta(link)
+            if fetch_meta:
+                paper["_fetch_status"] = fetch_meta.get("status", "error")
+                paper["_fetch_fail_reason"] = fetch_meta.get("reason") or str(err)
+            else:
+                status = "blocked" if self._is_blocked_message(str(err)) else "error"
+                paper["_fetch_status"] = status
+                paper["_fetch_fail_reason"] = str(err)
+
+            logger.exception(
+                "event=article_fetch_failed journal=%s article=%s url=%s detail=%s",
+                self.journal_name,
+                article_label,
+                link,
+                err,
+            )
+        else:
+            if details:
+                paper.update(details)
+
+            fetch_meta = self._pop_fetch_meta(link)
+            if fetch_meta:
+                paper["_fetch_status"] = fetch_meta.get("status", "unknown")
+                reason = fetch_meta.get("reason")
+                if reason:
+                    paper["_fetch_fail_reason"] = reason
+            elif details:
+                paper["_fetch_status"] = "ok"
+            else:
+                paper["_fetch_status"] = "unknown"
+                paper["_fetch_fail_reason"] = "empty_details"
+
+            log_event(
+                logger,
+                logging.INFO,
+                "article_fetch_completed",
+                journal=self.journal_name,
+                article=article_label,
+                url=link,
+                status=paper.get("_fetch_status"),
+                detail_fields=len(details) if isinstance(details, dict) else 0,
+                has_abstract=bool(paper.get("abstract")),
+                has_graphical_abstract=bool(paper.get("graphical_abstract")),
+            )
+        finally:
+            if self.sleep_time > 0:
+                await asyncio.sleep(self.sleep_time)
+
     async def _fetch_details_concurrently(self, papers_to_fetch: List[Dict]):
         semaphore = asyncio.Semaphore(self.max_workers)
 
-        async def run_one(idx: int, paper: Dict):
+        async def run_one(idx: int):
             async with semaphore:
-                try:
-                    details = await self._fetch_details_with_logging(paper)
-                    return idx, details, None
-                except Exception as e:
-                    return idx, None, e
+                await self.fetch_detail_at_index(papers_to_fetch, idx)
 
-        tasks = [asyncio.create_task(run_one(i, p)) for i, p in enumerate(papers_to_fetch)]
+        tasks = [asyncio.create_task(run_one(i)) for i in range(len(papers_to_fetch))]
         for task in asyncio.as_completed(tasks):
-            idx, details, err = await task
-            link = papers_to_fetch[idx].get("link", "")
-            article_label = self._article_label(papers_to_fetch[idx])
-
-            if err is None:
-                if details:
-                    papers_to_fetch[idx].update(details)
-
-                fetch_meta = self._pop_fetch_meta(link)
-                if fetch_meta:
-                    papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "unknown")
-                    reason = fetch_meta.get("reason")
-                    if reason:
-                        papers_to_fetch[idx]["_fetch_fail_reason"] = reason
-                elif details:
-                    papers_to_fetch[idx]["_fetch_status"] = "ok"
-                else:
-                    papers_to_fetch[idx]["_fetch_status"] = "unknown"
-                    papers_to_fetch[idx]["_fetch_fail_reason"] = "empty_details"
-                log_event(
-                    logger,
-                    logging.INFO,
-                    "article_fetch_completed",
-                    journal=self.journal_name,
-                    article=article_label,
-                    url=link,
-                    status=papers_to_fetch[idx].get("_fetch_status"),
-                    detail_fields=len(details) if isinstance(details, dict) else 0,
-                    has_abstract=bool(papers_to_fetch[idx].get("abstract")),
-                    has_graphical_abstract=bool(papers_to_fetch[idx].get("graphical_abstract")),
-                )
-            else:
-                fetch_meta = self._pop_fetch_meta(link)
-                if fetch_meta:
-                    papers_to_fetch[idx]["_fetch_status"] = fetch_meta.get("status", "error")
-                    papers_to_fetch[idx]["_fetch_fail_reason"] = fetch_meta.get("reason") or str(err)
-                else:
-                    status = "blocked" if self._is_blocked_message(str(err)) else "error"
-                    papers_to_fetch[idx]["_fetch_status"] = status
-                    papers_to_fetch[idx]["_fetch_fail_reason"] = str(err)
-
-                logger.exception(
-                    "event=article_fetch_failed journal=%s article=%s url=%s detail=%s",
-                    self.journal_name,
-                    article_label,
-                    link,
-                    err,
-                )
-
-            if self.sleep_time > 0:
-                await asyncio.sleep(self.sleep_time)
+            await task
 
     async def collect(self) -> List[Dict] | None:
         """阶段1：获取RSS列表 + 过滤已存在文章，返回待抓取详情的文章列表"""
