@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import unittest
 
 from utils.task_executor import ArticleFetchTask, ImageCacheTask, TaskExecutor
@@ -33,6 +34,17 @@ class FakeImageService:
         if self.succeeds:
             return {"url": url, "path": f"{article_id}.webp", "status": "cached", "error": None}
         return {"url": url, "path": None, "status": "failed", "error": "download_failed"}
+
+
+class BlockingImageService:
+    def __init__(self):
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def cache_image(self, url: str, article_id: int) -> dict:
+        self.started.set()
+        self.release.wait()
+        return {"url": url, "path": f"{article_id}.webp", "status": "cached", "error": None}
 
 
 class TaskExecutorTests(unittest.IsolatedAsyncioTestCase):
@@ -76,6 +88,40 @@ class TaskExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(success_task.result and success_task.result.success)
         self.assertEqual(failed_stats["failed"], 1)
         self.assertEqual(failed_task.result.error, "download_failed")
+
+    async def test_cancellation_waits_for_image_thread_and_records_result(self):
+        service = BlockingImageService()
+        task = ImageCacheTask(article_id=1, url="https://example.com/1.png")
+        runner = asyncio.create_task(TaskExecutor(max_workers=1, image_service=service).run([task]))
+
+        await asyncio.to_thread(service.started.wait)
+        runner.cancel()
+        await asyncio.sleep(0)
+        self.assertFalse(runner.done())
+
+        service.release.set()
+        with self.assertRaises(asyncio.CancelledError):
+            await runner
+
+        self.assertTrue(task.result and task.result.success)
+        self.assertFalse(task.result.cancelled)
+
+    async def test_soft_timeout_keeps_image_task_running_until_real_result(self):
+        service = BlockingImageService()
+        task = ImageCacheTask(article_id=1, url="https://example.com/1.png")
+        execution = asyncio.create_task(TaskExecutor(max_workers=1, image_service=service).run([task]))
+
+        await asyncio.to_thread(service.started.wait)
+        with self.assertRaises(asyncio.TimeoutError):
+            await asyncio.wait_for(asyncio.shield(execution), timeout=0.01)
+
+        self.assertFalse(execution.done())
+        self.assertIsNone(task.result)
+        service.release.set()
+        await execution
+
+        self.assertTrue(task.result and task.result.success)
+        self.assertFalse(task.result.cancelled)
 
     async def test_marks_unfinished_tasks_cancelled(self):
         papers = [{"link": f"https://example.com/{index}"} for index in range(3)]

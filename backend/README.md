@@ -73,8 +73,8 @@ BROWSER_MAX_PAGES=4
 - 当前代码里虽然读取了 `CORS_ORIGINS`，但还没有接入白名单逻辑，发布前需要补齐
 - 文章详情的实际并发上限取 `ARTICLE_FETCH_EXECUTOR_WORKERS` 与
   `BROWSER_POOL_SIZE * BROWSER_MAX_PAGES` 中的较小值
-- 执行器超时会取消尚未开始或尚未完成的任务；文章只入库已完成部分，图片保持
-  `pending` 并等待下一轮回填
+- 文章执行器超时会取消尚未完成的详情任务，只入库已完成部分；图片执行器超时
+  仅记录告警，并等待同步下载线程收口后再更新缓存状态
 
 ## 本地依赖服务
 

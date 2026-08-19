@@ -360,9 +360,10 @@ class ArticleService:
         if image_tasks:
             # 图片下载会在 TaskExecutor 内转入线程，固定 worker 数限制整批回填并发。
             executor = TaskExecutor(max_workers=IMAGE_CACHE_EXECUTOR_WORKERS, image_service=self.image_service)
+            executor_task = asyncio.create_task(executor.run(image_tasks))
             try:
                 await asyncio.wait_for(
-                    executor.run(image_tasks),
+                    asyncio.shield(executor_task),
                     timeout=executor_timeout_secs,
                 )
             except asyncio.TimeoutError:
@@ -373,6 +374,13 @@ class ArticleService:
                     timeout_secs=executor_timeout_secs,
                     attempted=attempted,
                 )
+                # 总超时只是告警阈值，不能在同步下载线程仍在运行时回写 pending。
+                await executor_task
+            except BaseException:
+                # 服务关闭或上层取消时，也要等待同步下载线程收口后再传播异常。
+                executor_task.cancel()
+                await asyncio.gather(executor_task, return_exceptions=True)
+                raise
 
         for task in image_tasks:
             # 队列只记录执行结果；数据库状态仍由 service 在全部任务结束后统一更新。

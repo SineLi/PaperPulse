@@ -117,7 +117,7 @@ class TaskExecutor:
         try:
             await queue.join()
         finally:
-            # wait_for 取消 run() 时必须同步取消 worker，避免页面抓取留在后台运行。
+            # 取消时同步收口 worker；图片 worker 会先等其同步下载线程结束再退出。
             for worker in workers:
                 worker.cancel()
             await asyncio.gather(*workers, return_exceptions=True)
@@ -158,12 +158,20 @@ class TaskExecutor:
                 if self.image_service is None:
                     raise RuntimeError("image_service is required for image cache tasks")
 
-                # 图片缓存是同步 I/O，放入线程以免阻塞 asyncio 事件循环。
-                cache_result = await asyncio.to_thread(
-                    self.image_service.cache_image,
-                    task.url,
-                    task.article_id,
-                )
+                cache_result, image_error, cancelled_while_waiting = await self._cache_image(task)
+                if image_error is not None:
+                    self._record_result(task, stats, success=False, error=str(image_error))
+                    logger.error(
+                        "event=task_executor_image_cache_exception article_id=%s detail=%s",
+                        task.article_id,
+                        image_error,
+                    )
+                    if cancelled_while_waiting:
+                        raise asyncio.CancelledError
+                    return
+
+                if cache_result is None:
+                    raise RuntimeError("image cache task returned no result")
                 data = dict(cache_result)
                 if not cache_result.get("path"):
                     # ImageService 用返回值表达可预期失败，需要显式转换成失败结果。
@@ -182,6 +190,8 @@ class TaskExecutor:
                         status=cache_result.get("status"),
                         error=cache_result.get("error"),
                     )
+                    if cancelled_while_waiting:
+                        raise asyncio.CancelledError
                     return
             else:
                 raise TypeError(f"Unsupported queue task type: {type(task).__name__}")
@@ -192,6 +202,31 @@ class TaskExecutor:
             return
 
         self._record_result(task, stats, success=True, data=data)
+        if isinstance(task, ImageCacheTask) and cancelled_while_waiting:
+            raise asyncio.CancelledError
+
+    async def _cache_image(
+        self,
+        task: ImageCacheTask,
+    ) -> tuple[dict[str, Any] | None, Exception | None, bool]:
+        """等待同步下载线程结束，避免取消协程后把仍在运行的任务误标为 cancelled。"""
+
+        if self.image_service is None:
+            raise RuntimeError("image_service is required for image cache tasks")
+
+        work = asyncio.create_task(
+            asyncio.to_thread(self.image_service.cache_image, task.url, task.article_id)
+        )
+        try:
+            return await asyncio.shield(work), None, False
+        except asyncio.CancelledError:
+            # shield 保留底层线程任务；收到取消后仍必须等待其真实结果再结束 worker。
+            try:
+                return await asyncio.shield(work), None, True
+            except Exception as exc:
+                return None, exc, True
+        except Exception as exc:
+            return None, exc, False
 
     def _record_result(
         self,
@@ -231,4 +266,3 @@ class TaskExecutor:
                 error="task_cancelled",
                 cancelled=True,
             )
-

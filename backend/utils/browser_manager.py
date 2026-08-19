@@ -36,25 +36,50 @@ class Browser:
         if self.is_connected:
             return
 
-        self.browser = await self.playwright.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
+        launch_task = asyncio.create_task(
+            self.playwright.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
         )
+        try:
+            self.browser = await asyncio.shield(launch_task)
+        except asyncio.CancelledError:
+            # 启动请求可能已创建 Chromium；等待拿到句柄并关闭后再传播取消。
+            launch_result = await asyncio.gather(launch_task, return_exceptions=True)
+            launched_browser = launch_result[0]
+            if not isinstance(launched_browser, BaseException):
+                close_task = asyncio.create_task(launched_browser.close())
+                await asyncio.gather(close_task, return_exceptions=True)
+            raise
         self.status = "idle"
 
-    async def close(self) -> None:
+    async def close(self, preserve_status: bool = False) -> None:
         browser = self.browser
-        self.browser = None
         self.activate_pages = 0
-        self.status = "closed"
-        if browser is not None:
-            await browser.close()
+        if not preserve_status:
+            self.status = "closed"
+        if browser is None:
+            return
+
+        close_task = asyncio.create_task(browser.close())
+        try:
+            await asyncio.shield(close_task)
+        except asyncio.CancelledError:
+            # Chromium 关闭一旦开始就必须收口，否则句柄会在取消后失去引用。
+            await asyncio.gather(close_task, return_exceptions=True)
+            if not close_task.cancelled() and close_task.exception() is None:
+                self.browser = None
+            raise
+        else:
+            self.browser = None
 
     async def get_browser_context(self):
         if not self.is_connected:
-            await self.launch(self.playwright)
+            # BrowserManager 负责替换断连实例，避免多个页面协程在这里并发启动 Chromium。
+            raise RuntimeError("browser_disconnected")
         if self.browser is None:
-            raise RuntimeError("Failed to launch browser")
+            raise RuntimeError("browser_unavailable")
         return await self.browser.new_context()
 
 
@@ -160,6 +185,7 @@ class BrowserManager:
                         browser
                         for browser in self.browser_pool
                         if browser.activate_pages == 0
+                        and browser.status != "refreshing"
                         and (browser.status == "error" or not browser.is_connected)
                     ),
                     None,
@@ -254,7 +280,8 @@ class BrowserManager:
 
         replacement = Browser()
         try:
-            await browser.close()
+            # 保持 refreshing 状态直到替换完成，避免第二个协程再次刷新同一池槽。
+            await browser.close(preserve_status=True)
             await replacement.launch(playwright)
         except BaseException as exc:
             if not isinstance(exc, asyncio.CancelledError):
