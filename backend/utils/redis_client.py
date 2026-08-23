@@ -149,11 +149,14 @@ _client: RedisClient | None = None
 def init_client() -> RedisClient:
     global _client
     if _client is None:
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            raise RuntimeError("REDIS_URL is not configured")
         try:
-            _client = RedisClient(redis_url=str(os.getenv("REDIS_URL")))
+            _client = RedisClient(redis_url=redis_url)
         except Exception as e:
             logger.exception("event=redis_client_init_failed detail=%s", e)
-            raise RuntimeError(f"Failed to initialize Redis client: {e}")
+            raise RuntimeError("Failed to initialize Redis client") from e
 
         if not _client.ping():
             _client = None

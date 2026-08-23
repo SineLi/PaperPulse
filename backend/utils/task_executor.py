@@ -94,6 +94,19 @@ class TaskExecutor:
         """等待一批任务全部结束，并将结果写回各任务的 result 字段。"""
 
         task_list = list(tasks)
+        unsupported_task = next(
+            (
+                task
+                for task in task_list
+                if not isinstance(task, (ArticleFetchTask, ImageCacheTask))
+            ),
+            None,
+        )
+        if unsupported_task is not None:
+            raise TypeError(
+                f"Unsupported queue task type: {type(unsupported_task).__name__}"
+            )
+
         stats = {
             "queued": len(task_list),
             "succeeded": 0,

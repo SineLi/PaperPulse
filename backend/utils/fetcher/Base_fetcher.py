@@ -145,9 +145,6 @@ class BaseFetcher(ABC):
             selector=selector,
             wait_until=wait_until,
         )
-        browser = None
-        context = None
-        page = None
         content = ""
         try:
             for i in range(PLAYWRIGHT_ATTEMPTS):
@@ -311,6 +308,18 @@ class BaseFetcher(ABC):
         tasks = [asyncio.create_task(run_one(i)) for i in range(len(papers_to_fetch))]
         for task in asyncio.as_completed(tasks):
             await task
+
+    async def run(self) -> None:
+        """独立执行单个 fetcher，并在结束后释放其使用的浏览器资源。"""
+
+        try:
+            papers_to_fetch = await self.collect()
+            if not papers_to_fetch:
+                return
+            await self._fetch_details_concurrently(papers_to_fetch)
+            await self.finalize(papers_to_fetch)
+        finally:
+            await self.browser_manager.close_all_browsers()
 
     async def collect(self) -> List[Dict] | None:
         """阶段1：获取RSS列表 + 过滤已存在文章，返回待抓取详情的文章列表"""

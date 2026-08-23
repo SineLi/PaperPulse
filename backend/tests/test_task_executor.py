@@ -2,7 +2,7 @@ import asyncio
 import threading
 import unittest
 
-from utils.task_executor import ArticleFetchTask, ImageCacheTask, TaskExecutor
+from utils.task_executor import ArticleFetchTask, ImageCacheTask, QueueTask, TaskExecutor
 
 
 class FakeFetcher:
@@ -48,6 +48,10 @@ class BlockingImageService:
 
 
 class TaskExecutorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rejects_unsupported_task_before_starting_workers(self):
+        with self.assertRaisesRegex(TypeError, "Unsupported queue task type: QueueTask"):
+            await TaskExecutor(max_workers=1).run([QueueTask()])
+
     async def test_limits_article_concurrency(self):
         papers = [{"link": f"https://example.com/{index}"} for index in range(6)]
         fetcher = FakeFetcher(["ok"] * len(papers), delay=0.01)
