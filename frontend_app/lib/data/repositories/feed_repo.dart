@@ -109,6 +109,28 @@ class FeedRepo {
     return enrichedArticles;
   }
 
+  /// 仅搜索本地已收藏文章。
+  Future<List<Article>> searchLocalFavoriteArticles(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final articles = await _articleDatabaseIO.searchFavoriteArticles(
+      query,
+      limit: limit,
+      offset: offset,
+    );
+
+    if (_journalRepo == null) return articles;
+
+    final enrichedArticles = <Article>[];
+    for (final article in articles) {
+      final publisher = await _getPublisher(article.journalId);
+      enrichedArticles.add(article.copyWith(publisher: publisher));
+    }
+    return enrichedArticles;
+  }
+
   /// 返回当前文章库中实际出现的期刊列表，供筛选面板使用。
   Future<List<({int id, String name, String abbr})>> getFilterableJournals() =>
       _articleDatabaseIO.getDistinctJournalsInArticles();

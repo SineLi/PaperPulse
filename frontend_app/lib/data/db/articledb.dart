@@ -275,6 +275,32 @@ class ArticleDatabaseIO {
     return maps.map((map) => Article.fromMap(map)).toList();
   }
 
+  /// 仅在已收藏文章中搜索标题、摘要或期刊名。
+  Future<List<Article>> searchFavoriteArticles(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final db = await dbHelper.database;
+    final pattern = '%$query%';
+    final q = _buildFilterQuery(
+      ArticleFilter.empty,
+      baseWhere:
+          '${Article.colIsFavorite} = ? AND '
+          '(${Article.colSummary} LIKE ? OR ${Article.colTitle} LIKE ? OR ${Article.colJournalName} LIKE ?)',
+      baseArgs: [1, pattern, pattern, pattern],
+    );
+    final maps = await db.query(
+      Article.tableArticles,
+      where: q.where,
+      whereArgs: q.whereArgs,
+      orderBy: q.orderBy,
+      limit: limit,
+      offset: offset,
+    );
+    return maps.map((map) => Article.fromMap(map)).toList();
+  }
+
   /// 获取所有没有缓存路径但有远程图片 URL 的文章
   Future<List<Map<String, dynamic>>> getUncachedImageArticles({
     int limit = 50,

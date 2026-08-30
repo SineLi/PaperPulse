@@ -29,8 +29,8 @@ class FavPage extends StatelessWidget {
             offset: offset,
             filter: filter,
           ),
-      searchArticles: (query, limit, offset) =>
-          feedRepo.searchLocalArticles(query, limit: limit, offset: offset),
+      searchArticles: (query, limit, offset) => feedRepo
+          .searchLocalFavoriteArticles(query, limit: limit, offset: offset),
       onSettings: () {},
       onRefresh: () async {
         await syncService.pullStatus();
