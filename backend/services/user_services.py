@@ -86,7 +86,9 @@ class UserService:
                 text(
                     """
                     SELECT
-                      id, name, sci, "if", if5, casup, casbase, publisher, abbreviation
+                      id, name, sci, "if", if5,
+                      casup AS "CASUp", casbase AS "CASBase",
+                      publisher, abbreviation
                     FROM journals
                     WHERE official_url IS NOT NULL OR rss_url IS NOT NULL
                     ORDER BY id ASC
