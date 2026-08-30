@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -13,6 +15,7 @@ import 'data/repositories/feed_repo.dart';
 import 'data/repositories/journal_repo.dart';
 import 'data/repositories/user_repo.dart';
 import 'data/service/feed_service.dart';
+import 'data/service/backend_status_service.dart';
 import 'data/service/journal_service.dart';
 import 'data/service/post_auth_sync_service.dart';
 import 'data/service/sync_service.dart';
@@ -31,6 +34,13 @@ Future<void> main() async {
 
   final settingsController = SettingsController(SettingStorage());
   await settingsController.load();
+  final backendStatusController = BackendStatusController(
+    BackendStatusService(),
+  );
+  final configuredBaseUrl = settingsController.setting.baseURL.trim();
+  if (configuredBaseUrl.isNotEmpty) {
+    unawaited(backendStatusController.checkSilently(configuredBaseUrl));
+  }
 
   final authStorage = AuthStorage();
   final apiClient = ApiClient(
@@ -104,6 +114,7 @@ Future<void> main() async {
   runApp(
     MyApp(
       settingsController: settingsController,
+      backendStatusController: backendStatusController,
       authServices: authServices,
       articleDb: articleDb,
       feedRepo: feedRepo,
@@ -119,6 +130,7 @@ Future<void> main() async {
 
 class MyApp extends StatelessWidget {
   final SettingsController settingsController;
+  final BackendStatusController backendStatusController;
   final AuthServices authServices;
   final ArticleDatabaseIO articleDb;
   final FeedRepo feedRepo;
@@ -131,6 +143,7 @@ class MyApp extends StatelessWidget {
   const MyApp({
     super.key,
     required this.settingsController,
+    required this.backendStatusController,
     required this.authServices,
     required this.articleDb,
     required this.feedRepo,
@@ -188,75 +201,80 @@ class MyApp extends StatelessWidget {
 
         return ChangeNotifierProvider<SettingsController>.value(
           value: settingsController,
-          child: ChangeNotifierProvider<AuthServices>.value(
-            value: authServices,
-            child: Provider<ArticleDatabaseIO>.value(
-              value: articleDb,
-              child: Provider<JournalRepo>.value(
-                value: journalRepo,
-                child: Provider<UserRepo>.value(
-                  value: userRepo,
-                  child: Provider<FeedRepo>.value(
-                    value: feedRepo,
-                    child: Provider<SyncService>.value(
-                      value: syncService,
-                      child: ChangeNotifierProvider<PostAuthSyncService>.value(
-                        value: postAuthSyncService,
-                        child: Provider<ImageCacheService>.value(
-                          value: imageCacheService,
-                          child: Provider<TabScrollRegistry>.value(
-                            value: tabScrollRegistry,
-                            child: Consumer<SettingsController>(
-                              builder: (context, settingsCtrl, _) {
-                                final amoledEnabled =
-                                    settingsCtrl.setting.amoled;
-                                final effectiveDarkColorScheme = amoledEnabled
-                                    ? _withAmoledSurfaces(darkColorScheme)
-                                    : darkColorScheme;
-                                return MaterialApp.router(
-                                  title: 'PaperPulse',
-                                  routerConfig: _router,
-                                  theme: ThemeData(
-                                    platform: TargetPlatform.android,
-                                    colorScheme: lightColorScheme,
-                                    useMaterial3: true,
-                                    snackBarTheme: snackBarTheme,
-                                    fontFamily: _appFontFamily,
-                                    fontFamilyFallback: _appFontFallback,
+          child: ChangeNotifierProvider<BackendStatusController>.value(
+            value: backendStatusController,
+            child: ChangeNotifierProvider<AuthServices>.value(
+              value: authServices,
+              child: Provider<ArticleDatabaseIO>.value(
+                value: articleDb,
+                child: Provider<JournalRepo>.value(
+                  value: journalRepo,
+                  child: Provider<UserRepo>.value(
+                    value: userRepo,
+                    child: Provider<FeedRepo>.value(
+                      value: feedRepo,
+                      child: Provider<SyncService>.value(
+                        value: syncService,
+                        child:
+                            ChangeNotifierProvider<PostAuthSyncService>.value(
+                              value: postAuthSyncService,
+                              child: Provider<ImageCacheService>.value(
+                                value: imageCacheService,
+                                child: Provider<TabScrollRegistry>.value(
+                                  value: tabScrollRegistry,
+                                  child: Consumer<SettingsController>(
+                                    builder: (context, settingsCtrl, _) {
+                                      final amoledEnabled =
+                                          settingsCtrl.setting.amoled;
+                                      final effectiveDarkColorScheme =
+                                          amoledEnabled
+                                          ? _withAmoledSurfaces(darkColorScheme)
+                                          : darkColorScheme;
+                                      return MaterialApp.router(
+                                        title: 'PaperPulse',
+                                        routerConfig: _router,
+                                        theme: ThemeData(
+                                          platform: TargetPlatform.android,
+                                          colorScheme: lightColorScheme,
+                                          useMaterial3: true,
+                                          snackBarTheme: snackBarTheme,
+                                          fontFamily: _appFontFamily,
+                                          fontFamilyFallback: _appFontFallback,
+                                        ),
+                                        darkTheme: ThemeData(
+                                          colorScheme: effectiveDarkColorScheme,
+                                          useMaterial3: true,
+                                          snackBarTheme: snackBarTheme,
+                                          platform: TargetPlatform.android,
+                                          fontFamily: _appFontFamily,
+                                          fontFamilyFallback: _appFontFallback,
+                                          scaffoldBackgroundColor: amoledEnabled
+                                              ? _amoledBlack
+                                              : null,
+                                          canvasColor: amoledEnabled
+                                              ? _amoledBlack
+                                              : null,
+                                          cardColor: amoledEnabled
+                                              ? _amoledBlack
+                                              : null,
+                                          appBarTheme: AppBarTheme(
+                                            backgroundColor: amoledEnabled
+                                                ? _amoledBlack
+                                                : null,
+                                            surfaceTintColor: amoledEnabled
+                                                ? Colors.transparent
+                                                : null,
+                                          ),
+                                        ),
+                                        themeMode: context
+                                            .watch<SettingsController>()
+                                            .themeMode,
+                                      );
+                                    },
                                   ),
-                                  darkTheme: ThemeData(
-                                    colorScheme: effectiveDarkColorScheme,
-                                    useMaterial3: true,
-                                    snackBarTheme: snackBarTheme,
-                                    platform: TargetPlatform.android,
-                                    fontFamily: _appFontFamily,
-                                    fontFamilyFallback: _appFontFallback,
-                                    scaffoldBackgroundColor: amoledEnabled
-                                        ? _amoledBlack
-                                        : null,
-                                    canvasColor: amoledEnabled
-                                        ? _amoledBlack
-                                        : null,
-                                    cardColor: amoledEnabled
-                                        ? _amoledBlack
-                                        : null,
-                                    appBarTheme: AppBarTheme(
-                                      backgroundColor: amoledEnabled
-                                          ? _amoledBlack
-                                          : null,
-                                      surfaceTintColor: amoledEnabled
-                                          ? Colors.transparent
-                                          : null,
-                                    ),
-                                  ),
-                                  themeMode: context
-                                      .watch<SettingsController>()
-                                      .themeMode,
-                                );
-                              },
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
                       ),
                     ),
                   ),
