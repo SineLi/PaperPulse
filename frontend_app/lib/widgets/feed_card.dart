@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../data/models/article.dart';
 import '../data/models/article_view_data.dart';
+import '../settings/feed_card_style.dart';
 import 'cached_image.dart';
 
-enum FeedCardStyle { compact, featuredImage, masonry }
+export '../settings/feed_card_style.dart';
 
 class FeedItemCard extends StatelessWidget {
   static const _masonryCardMaxHeight = 320.0;

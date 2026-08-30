@@ -118,3 +118,4 @@ flutter:
   # see https://flutter.dev/to/font-from-package
   assets:
     - assets/logo.svg
+    - assets/card_style_previews/

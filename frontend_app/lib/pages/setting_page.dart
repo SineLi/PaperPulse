@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
 import '../data/models/user.dart';
+import '../settings/feed_card_style.dart';
 import '../settings/settings_controller.dart';
 import '../widgets/policy_dialog.dart';
 
@@ -57,7 +58,7 @@ class SettingPage extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.code_outlined),
-                title: Text('实验'),
+                title: Text('实验室'),
                 subtitle: Text('正在测试的新功能'),
                 onTap: () => context.push('/settings/experimental'),
               ),
@@ -889,15 +890,151 @@ class ExperimentalPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedStyle = context
+        .watch<SettingsController>()
+        .setting
+        .feedCardStyle;
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar.large(title: Text('实验功能')),
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(child: Text('暂无实验功能，敬请期待！')),
+          const SliverAppBar.large(title: Text('实验室')),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              const _SettingsSectionHeader(title: '文章卡片'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                child: Text(
+                  '选择首页与收藏页文章的展示方式。实验样式可能会继续调整。',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              for (final style in FeedCardStyle.values)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: _FeedCardStyleOption(
+                    style: style,
+                    selected: style == selectedStyle,
+                    onTap: () async {
+                      await context
+                          .read<SettingsController>()
+                          .updateFeedCardStyle(style);
+                    },
+                  ),
+                ),
+              const SizedBox(height: 36),
+            ]),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FeedCardStyleOption extends StatelessWidget {
+  final FeedCardStyle style;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FeedCardStyleOption({
+    required this.style,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final borderRadius = BorderRadius.circular(16);
+
+    final shape = RoundedRectangleBorder(
+      borderRadius: borderRadius,
+      side: BorderSide(
+        color: selected ? colorScheme.primary : colorScheme.outlineVariant,
+        width: selected ? 2 : 1,
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${style.displayName}卡片样式',
+      child: Material(
+        key: ValueKey('feed-card-style-${style.name}'),
+        color: selected
+            ? colorScheme.secondaryContainer.withValues(alpha: 0.28)
+            : colorScheme.surfaceContainerLow,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          customBorder: shape,
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 2,
+                child: ColoredBox(
+                  color: colorScheme.surfaceContainerLowest,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SvgPicture.asset(
+                      style.previewAsset,
+                      fit: BoxFit.contain,
+                      semanticsLabel: '${style.displayName}布局预览',
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 11, 14, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            style.displayName,
+                            style: textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            style.description,
+                            style: textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 160),
+                      child: selected
+                          ? Icon(
+                              Icons.check_circle_rounded,
+                              key: const ValueKey('selected'),
+                              color: colorScheme.primary,
+                            )
+                          : Icon(
+                              Icons.circle_outlined,
+                              key: const ValueKey('unselected'),
+                              color: colorScheme.outline,
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

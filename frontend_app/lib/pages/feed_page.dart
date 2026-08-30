@@ -7,8 +7,8 @@ import '../data/repositories/feed_repo.dart';
 import '../data/service/post_auth_sync_service.dart';
 import '../data/service/sync_service.dart';
 import '../navigation/tab_scroll_registry.dart';
+import '../settings/settings_controller.dart';
 import '../widgets/article_list_page.dart';
-import '../widgets/feed_card.dart';
 
 class FeedPage extends StatefulWidget {
   final ScrollController? scrollController;
@@ -90,13 +90,14 @@ class _FeedPageState extends State<FeedPage> {
     final feedRepo = context.read<FeedRepo>();
     final syncService = context.read<SyncService>();
     final postAuthSyncService = context.watch<PostAuthSyncService>();
+    final cardStyle = context.watch<SettingsController>().setting.feedCardStyle;
 
     return ArticleListPage(
       title: '文章推送',
       scrollController: widget.scrollController,
       tabScrollIndex: feedTabIndex,
       routeSource: 'feed',
-      cardStyle: FeedCardStyle.masonry,
+      cardStyle: cardStyle,
       loadArticles: (limit, offset, filter) => feedRepo.getLocalArticles(
         limit: limit,
         offset: offset,

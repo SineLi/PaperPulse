@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180" role="img" aria-labelledby="title desc">
+  <title id="title">Featured image article card preview</title>
+  <desc id="desc">A journal header above a large image with the article title layered over the image.</desc>
+  <defs>
+    <clipPath id="cardClip">
+      <rect x="31" y="22" width="258" height="136" rx="10"/>
+    </clipPath>
+  </defs>
+  <rect width="320" height="180" rx="14" fill="#F4F5F7"/>
+  <g clip-path="url(#cardClip)">
+    <rect x="31" y="22" width="258" height="136" fill="#252A2F"/>
+    <rect x="31" y="22" width="258" height="34" fill="#30363B"/>
+    <circle cx="50" cy="39" r="9" fill="#F4F5F7"/>
+    <circle cx="50" cy="39" r="5" fill="#AAB3BC"/>
+    <rect x="66" y="34" width="66" height="7" rx="3.5" fill="#F4F5F7"/>
+    <rect x="248" y="36" width="21" height="5" rx="2.5" fill="#AAB3BC"/>
+    <circle cx="278" cy="38" r="2.5" fill="#AAB3BC"/>
+
+    <rect x="31" y="56" width="258" height="102" fill="#AAB3BC"/>
+    <circle cx="236" cy="82" r="19" fill="#C9D0D7" opacity=".7"/>
+    <path d="M31 138 77 94l34 26 38-43 60 58 29-22 51 34v11H31Z" fill="#8F9AA4"/>
+    <path d="M31 149 79 116l33 22 35-31 60 44 33-18 49 23v2H31Z" fill="#69737D"/>
+    <rect x="47" y="121" width="36" height="6" rx="3" fill="#D97878"/>
+    <rect x="47" y="135" width="137" height="9" rx="4.5" fill="#FFFFFF"/>
+    <rect x="47" y="149" width="96" height="7" rx="3.5" fill="#FFFFFF"/>
+  </g>
+  <rect x="31" y="22" width="258" height="136" rx="10" fill="none" stroke="#69737D"/>
+</svg>

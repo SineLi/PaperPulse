@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'feed_card_style.dart';
+
 class AppSetting {
   final int themeMode; // '0light', '1dark', '2system'
   final bool amoled;
@@ -17,6 +19,7 @@ class AppSetting {
   final int swipeSensitivity; // 50-200 px
   final bool doubleTapToTop;
   final int doubleTapSensitivity; // 100-1000 ms
+  final FeedCardStyle feedCardStyle;
 
   AppSetting({
     required this.themeMode,
@@ -33,6 +36,7 @@ class AppSetting {
     this.swipeSensitivity = 120,
     this.doubleTapToTop = true,
     this.doubleTapSensitivity = 300,
+    this.feedCardStyle = FeedCardStyle.masonry,
   });
 
   AppSetting copyWith({
@@ -50,6 +54,7 @@ class AppSetting {
     int? swipeSensitivity,
     bool? doubleTapToTop,
     int? doubleTapSensitivity,
+    FeedCardStyle? feedCardStyle,
   }) {
     return AppSetting(
       themeMode: themeMode ?? this.themeMode,
@@ -68,6 +73,7 @@ class AppSetting {
       swipeSensitivity: swipeSensitivity ?? this.swipeSensitivity,
       doubleTapToTop: doubleTapToTop ?? this.doubleTapToTop,
       doubleTapSensitivity: doubleTapSensitivity ?? this.doubleTapSensitivity,
+      feedCardStyle: feedCardStyle ?? this.feedCardStyle,
     );
   }
 
@@ -101,6 +107,7 @@ class SettingStorage {
   static const String _keyDoubleTapToTop = 'settings.doubleTapToTop';
   static const String _keyDoubleTapSensitivity =
       'settings.doubleTapSensitivity';
+  static const String _keyFeedCardStyle = 'settings.feedCardStyle';
 
   Future<AppSetting> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -120,6 +127,9 @@ class SettingStorage {
       swipeSensitivity: prefs.getInt(_keySwipeSensitivity) ?? 140,
       doubleTapToTop: prefs.getBool(_keyDoubleTapToTop) ?? true,
       doubleTapSensitivity: prefs.getInt(_keyDoubleTapSensitivity) ?? 300,
+      feedCardStyle: FeedCardStyleMetadata.fromStorage(
+        prefs.getString(_keyFeedCardStyle),
+      ),
     );
   }
 
@@ -145,6 +155,7 @@ class SettingStorage {
     await prefs.setInt(_keySwipeSensitivity, setting.swipeSensitivity);
     await prefs.setBool(_keyDoubleTapToTop, setting.doubleTapToTop);
     await prefs.setInt(_keyDoubleTapSensitivity, setting.doubleTapSensitivity);
+    await prefs.setString(_keyFeedCardStyle, setting.feedCardStyle.name);
   }
 }
 
@@ -163,6 +174,7 @@ class SettingsController extends ChangeNotifier {
     titleBold: true,
     wifiOnlyImages: false,
     doubleTapSensitivity: 300,
+    feedCardStyle: FeedCardStyle.masonry,
   );
 
   AppSetting get setting => _setting;
@@ -253,6 +265,13 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> updateDoubleTapSensitivity(int sensitivity) async {
     _setting = _setting.copyWith(doubleTapSensitivity: sensitivity);
+    await _storage.save(_setting);
+    notifyListeners();
+  }
+
+  Future<void> updateFeedCardStyle(FeedCardStyle style) async {
+    if (_setting.feedCardStyle == style) return;
+    _setting = _setting.copyWith(feedCardStyle: style);
     await _storage.save(_setting);
     notifyListeners();
   }

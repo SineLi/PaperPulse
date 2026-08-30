@@ -5,6 +5,7 @@ import '../data/repositories/feed_repo.dart';
 import '../data/service/post_auth_sync_service.dart';
 import '../data/service/sync_service.dart';
 import '../navigation/tab_scroll_registry.dart';
+import '../settings/settings_controller.dart';
 import '../widgets/article_list_page.dart';
 
 class FavPage extends StatelessWidget {
@@ -17,12 +18,14 @@ class FavPage extends StatelessWidget {
     final feedRepo = context.read<FeedRepo>();
     final syncService = context.read<SyncService>();
     final postAuthSyncService = context.watch<PostAuthSyncService>();
+    final cardStyle = context.watch<SettingsController>().setting.feedCardStyle;
 
     return ArticleListPage(
       title: '我的收藏',
       scrollController: scrollController,
       tabScrollIndex: favoritesTabIndex,
       routeSource: 'favorites',
+      cardStyle: cardStyle,
       loadArticles: (limit, offset, filter) =>
           feedRepo.getLocalFavoriteArticles(
             limit: limit,
