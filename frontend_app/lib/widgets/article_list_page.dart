@@ -46,6 +46,7 @@ class ArticleListPage extends StatefulWidget {
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
   final bool dimReadArticles;
+  final FeedCardStyle cardStyle;
   final int? lastSeenArticleId;
   final void Function(int articleId)? onArticleVisible;
   final VoidCallback? onUserScrollStart;
@@ -80,6 +81,7 @@ class ArticleListPage extends StatefulWidget {
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
     this.dimReadArticles = true,
+    this.cardStyle = FeedCardStyle.featuredImage,
     this.lastSeenArticleId,
     this.onArticleVisible,
     this.onUserScrollStart,
@@ -293,8 +295,22 @@ class _ArticleListPageState extends State<ArticleListPage> {
       matchesPreloadAnchor: _filter.isActive || widget.lastSeenArticleId == null
           ? null
           : (article) => article.articleId == widget.lastSeenArticleId,
+      layout: widget.cardStyle == FeedCardStyle.masonry
+          ? UnifiedListLayout.masonry
+          : UnifiedListLayout.list,
       skeletonCount: 6,
-      skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
+      skeletonBuilder: (cs) =>
+          _ArticleSkeletonCard(colorScheme: cs, style: widget.cardStyle),
+      fullWidthLeadingBuilder: (ctx, article, index, allArticles) {
+        final boundary = widget.lastSeenArticleId;
+        final markerIndex = boundary == null
+            ? -1
+            : allArticles.indexWhere((item) => item.articleId == boundary);
+        _lastReadMarkerIndex = markerIndex;
+        _loadedArticleCount = allArticles.length;
+        if (markerIndex < 0 || index != markerIndex) return null;
+        return LastReadMarker(key: _lastReadMarkerKey);
+      },
       itemBuilder:
           (
             ctx,
@@ -308,6 +324,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
             Widget card = FeedItemCard(
               article: article,
               dimWhenRead: widget.dimReadArticles,
+              style: widget.cardStyle,
               onTap: () {
                 // 路由里只放稳定、可刷新的状态。详情页会根据 articleId 查当前文章，
                 // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
@@ -353,22 +370,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
               );
             }
 
-            final boundary = widget.lastSeenArticleId;
-            final markerIndex = boundary == null
-                ? -1
-                : allArticles.indexWhere((item) => item.articleId == boundary);
-            _lastReadMarkerIndex = markerIndex;
-            _loadedArticleCount = allArticles.length;
-            final showLastReadMarker = markerIndex >= 0 && index == markerIndex;
-            if (!showLastReadMarker) return card;
-
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LastReadMarker(key: _lastReadMarkerKey),
-                card,
-              ],
-            );
+            return card;
           },
     );
   }
@@ -377,11 +379,55 @@ class _ArticleListPageState extends State<ArticleListPage> {
 // ── 文章骨架卡片 ──
 class _ArticleSkeletonCard extends StatelessWidget {
   final ColorScheme colorScheme;
-  const _ArticleSkeletonCard({required this.colorScheme});
+  final FeedCardStyle style;
+  const _ArticleSkeletonCard({required this.colorScheme, required this.style});
 
   @override
   Widget build(BuildContext context) {
     final bone = colorScheme.surfaceContainerHighest;
+
+    if (style == FeedCardStyle.masonry) {
+      return Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 184, child: ColoredBox(color: bone)),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _bone(bone, height: 12),
+                  const SizedBox(height: 7),
+                  _bone(bone, width: 112, height: 12),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _bone(bone, width: 22, height: 22, radius: 11),
+                      const SizedBox(width: 7),
+                      Expanded(child: _bone(bone, height: 9)),
+                      const SizedBox(width: 12),
+                      _bone(bone, width: 16, height: 16, radius: 8),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Card(
       elevation: 0,

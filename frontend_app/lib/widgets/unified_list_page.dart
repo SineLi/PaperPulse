@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../navigation/tab_scroll_registry.dart';
+import 'chunked_masonry_sliver.dart';
 import 'login_required.dart';
 
 /// 加载数据的回调：返回指定分页的数据列表
@@ -35,6 +37,16 @@ typedef ItemWidgetBuilder<T> =
 /// 骨架卡片构建器
 typedef SkeletonBuilder = Widget Function(ColorScheme colorScheme);
 
+/// 主内容的排列方式。
+enum UnifiedListLayout { list, masonry }
+
+/// 在指定列表项前构建一个占满可用宽度的组件。
+///
+/// 普通列表中它会与条目纵向排列；瀑布流中它会切断网格并独占一行，
+/// 适合阅读分界线等不能被限制在单列宽度内的内容。
+typedef FullWidthLeadingBuilder<T> =
+    Widget? Function(BuildContext context, T item, int index, List<T> allItems);
+
 /// 通用分页列表页，封装了分页加载、骨架屏、空状态、下拉刷新、搜索和筛选逻辑。
 /// 可以通过泛型 [T] 适配任意数据类型（文章、期刊等）。
 class UnifiedListPage<T> extends StatefulWidget {
@@ -55,6 +67,12 @@ class UnifiedListPage<T> extends StatefulWidget {
 
   /// 骨架卡片数量
   final int skeletonCount;
+
+  /// 主内容排列方式。
+  final UnifiedListLayout layout;
+
+  /// 在条目前插入的全宽组件。
+  final FullWidthLeadingBuilder<T>? fullWidthLeadingBuilder;
 
   // ── 搜索相关 ──
 
@@ -125,6 +143,8 @@ class UnifiedListPage<T> extends StatefulWidget {
     required this.itemBuilder,
     required this.skeletonBuilder,
     this.skeletonCount = 6,
+    this.layout = UnifiedListLayout.list,
+    this.fullWidthLeadingBuilder,
     this.actions,
     this.searchItems,
     this.searchHint = '搜索…',
@@ -220,7 +240,11 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       widget.onUserScrollEnd?.call();
     }
 
-    if (notification is ScrollUpdateNotification &&
+    // NestedScrollView 的外层（depth 0）只负责折叠 AppBar，它很快就会
+    // 到达自身末端。分页必须只响应内层文章区，否则每次滑动都会误加载
+    // 一页并让瀑布流重新估算范围，表现为滚动位置循环回跳。
+    if (notification.depth == 1 &&
+        notification is ScrollUpdateNotification &&
         notification.metrics.pixels >=
             notification.metrics.maxScrollExtent - 300 &&
         !_isLoading &&
@@ -662,7 +686,23 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     }
 
     // 数据列表
-    final listView = ListView.builder(
+    final scrollView = widget.layout == UnifiedListLayout.masonry
+        ? _buildMasonryView(colorScheme)
+        : _buildListView(colorScheme);
+
+    if (widget.onRefresh != null && !_isSearchMode) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        edgeOffset: 0,
+        child: scrollView,
+      );
+    }
+
+    return scrollView;
+  }
+
+  Widget _buildListView(ColorScheme colorScheme) {
+    return ListView.builder(
       padding: const EdgeInsets.only(top: 4, bottom: 88),
       itemCount: _items.length + (_hasMore ? 1 : 0),
       itemBuilder: (context, index) {
@@ -681,31 +721,102 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
             ),
           );
         }
-        return widget.itemBuilder(
-          context,
-          _items[index],
-          index,
-          List.unmodifiable(_items),
-          _updateItem,
-          _updateItemById,
-          _removeItemById,
-        );
+        return _buildItem(context, index, includeFullWidthLeading: true);
       },
     );
+  }
 
-    if (widget.onRefresh != null && !_isSearchMode) {
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        edgeOffset: 0,
-        child: listView,
-      );
+  Widget _buildMasonryView(ColorScheme colorScheme) {
+    final allItems = List<T>.unmodifiable(_items);
+    final fullWidthLeading = <int, Widget>{};
+    final leadingBuilder = widget.fullWidthLeadingBuilder;
+    if (leadingBuilder != null) {
+      for (var index = 0; index < _items.length; index++) {
+        final leading = leadingBuilder(context, _items[index], index, allItems);
+        if (leading != null) fullWidthLeading[index] = leading;
+      }
     }
 
-    return listView;
+    final slivers = <Widget>[
+      const SliverToBoxAdapter(child: SizedBox(height: 4)),
+      ChunkedMasonrySliver(
+        itemCount: _items.length,
+        fullWidthLeading: fullWidthLeading,
+        itemBuilder: (context, index) =>
+            _buildItem(context, index, includeFullWidthLeading: false),
+      ),
+    ];
+
+    if (_hasMore) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 88)));
+
+    return CustomScrollView(
+      key: const ValueKey('unified-masonry-grid'),
+      slivers: slivers,
+    );
+  }
+
+  Widget _buildItem(
+    BuildContext context,
+    int index, {
+    required bool includeFullWidthLeading,
+  }) {
+    final allItems = List<T>.unmodifiable(_items);
+    final item = widget.itemBuilder(
+      context,
+      _items[index],
+      index,
+      allItems,
+      _updateItem,
+      _updateItemById,
+      _removeItemById,
+    );
+    if (!includeFullWidthLeading) return item;
+
+    final leading = widget.fullWidthLeadingBuilder?.call(
+      context,
+      _items[index],
+      index,
+      allItems,
+    );
+    if (leading == null) return item;
+
+    return Column(mainAxisSize: MainAxisSize.min, children: [leading, item]);
   }
 
   // ── 骨架屏 ──
   Widget _buildSkeletonList(ColorScheme colorScheme) {
+    if (widget.layout == UnifiedListLayout.masonry) {
+      return MasonryGridView.count(
+        key: const ValueKey('unified-masonry-skeleton'),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 88),
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        itemCount: widget.skeletonCount,
+        itemBuilder: (context, index) => widget.skeletonBuilder(colorScheme),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.only(top: 4, bottom: 88),
       physics: const NeverScrollableScrollPhysics(),

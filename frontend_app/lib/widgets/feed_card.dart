@@ -4,9 +4,13 @@ import '../data/models/article.dart';
 import '../data/models/article_view_data.dart';
 import 'cached_image.dart';
 
-enum FeedCardStyle { compact, featuredImage }
+enum FeedCardStyle { compact, featuredImage, masonry }
 
 class FeedItemCard extends StatelessWidget {
+  static const _masonryCardMaxHeight = 320.0;
+  static const _masonryImageMaxHeight = 184.0;
+  static const _masonryTitleMaxCharacters = 23;
+
   final ArticleViewData articleViewData;
   final VoidCallback? onTap;
   final bool dimWhenRead;
@@ -24,38 +28,52 @@ class FeedItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final shouldDim = dimWhenRead && articleViewData.isRead;
-    final borderRadius = BorderRadius.circular(
-      style == FeedCardStyle.featuredImage ? 10 : 16,
-    );
+    final isImageLedStyle = style != FeedCardStyle.compact;
+    final borderRadius = BorderRadius.circular(switch (style) {
+      FeedCardStyle.compact => 16,
+      FeedCardStyle.featuredImage => 10,
+      FeedCardStyle.masonry => 8,
+    });
 
     return Card(
       key: ValueKey('feed-card-${style.name}'),
       elevation: 0,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      margin: style == FeedCardStyle.masonry
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       color: shouldDim
           ? colorScheme.surfaceContainerLowest.withValues(alpha: 0.6)
           : colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: borderRadius,
-        side: style == FeedCardStyle.featuredImage
+        side: isImageLedStyle
             ? BorderSide(
                 color: colorScheme.outlineVariant.withValues(alpha: 0.5),
               )
             : BorderSide.none,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Opacity(
-        opacity: shouldDim ? 0.75 : 1.0,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: borderRadius,
-          child: switch (style) {
-            FeedCardStyle.compact => _buildCompactCard(context, colorScheme),
-            FeedCardStyle.featuredImage => _buildFeaturedImageCard(
-              context,
-              colorScheme,
-            ),
-          },
+      child: ConstrainedBox(
+        key: style == FeedCardStyle.masonry
+            ? const ValueKey('feed-card-masonry-max-height')
+            : null,
+        constraints: style == FeedCardStyle.masonry
+            ? const BoxConstraints(maxHeight: _masonryCardMaxHeight)
+            : const BoxConstraints(),
+        child: Opacity(
+          opacity: shouldDim ? 0.75 : 1.0,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: borderRadius,
+            child: switch (style) {
+              FeedCardStyle.compact => _buildCompactCard(context, colorScheme),
+              FeedCardStyle.featuredImage => _buildFeaturedImageCard(
+                context,
+                colorScheme,
+              ),
+              FeedCardStyle.masonry => _buildMasonryCard(context, colorScheme),
+            },
+          ),
         ),
       ),
     );
@@ -252,7 +270,156 @@ class FeedItemCard extends StatelessWidget {
     );
   }
 
-  Widget _buildJournalAvatar(TextTheme textTheme) {
+  Widget _buildMasonryCard(BuildContext context, ColorScheme colorScheme) {
+    final textTheme = Theme.of(context).textTheme;
+    final imageUrl = articleViewData.graphicalAbsUrl;
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+    final shouldDim = dimWhenRead && articleViewData.isRead;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final imageHeight = _masonryImageHeightFor(constraints.maxWidth);
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              key: const ValueKey('feed-card-masonry-image'),
+              height: imageHeight,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (hasImage)
+                    CachedArticleImage(
+                      articleId: articleViewData.article.articleId,
+                      imageUrl: imageUrl,
+                      cachePath: articleViewData.graphicalAbsCachePath,
+                      fit: BoxFit.cover,
+                    )
+                  else
+                    _buildFeaturedImagePlaceholder(colorScheme),
+                  if (_hasMasonryMaintag)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: _buildMasonryMaintag(colorScheme, textTheme),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _masonryTitle,
+                    maxLines: 3,
+                    overflow: TextOverflow.clip,
+                    style: textTheme.titleSmall?.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      height: 1.28,
+                      color: shouldDim
+                          ? colorScheme.onSurfaceVariant
+                          : colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  Row(
+                    children: [
+                      _buildJournalAvatar(textTheme, size: 22),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          articleViewData.displayJournalName ??
+                              articleViewData.article.journalName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.labelSmall?.copyWith(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        articleViewData.isFavorite
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        key: const ValueKey('feed-card-favorite-icon'),
+                        size: 18,
+                        color: articleViewData.isFavorite
+                            ? colorScheme.error
+                            : colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  double get _masonryImageAspectRatio {
+    return switch (articleViewData.article.articleId.abs() % 3) {
+      0 => 4 / 5,
+      1 => 1,
+      _ => 5 / 4,
+    };
+  }
+
+  double _masonryImageHeightFor(double width) {
+    if (!width.isFinite) return _masonryImageMaxHeight;
+    return (width / _masonryImageAspectRatio)
+        .clamp(0.0, _masonryImageMaxHeight)
+        .toDouble();
+  }
+
+  String get _masonryTitle {
+    final title = articleViewData.displayTitle ?? articleViewData.article.title;
+    return title.characters
+        .getRange(
+          0,
+          title.characters.length.clamp(0, _masonryTitleMaxCharacters),
+        )
+        .toString();
+  }
+
+  bool get _hasMasonryMaintag =>
+      articleViewData.displayMaintag != null &&
+      articleViewData.displayMaintag!.isNotEmpty;
+
+  Widget _buildMasonryMaintag(ColorScheme colorScheme, TextTheme textTheme) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 88),
+      child: Container(
+        key: const ValueKey('feed-card-masonry-maintag'),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          articleViewData.displayMaintag!,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: textTheme.labelSmall?.copyWith(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildJournalAvatar(TextTheme textTheme, {double size = 34}) {
     final avatarColor = articleViewData.tagColor;
     final avatarForeground =
         ThemeData.estimateBrightnessForColor(avatarColor) == Brightness.dark
@@ -260,8 +427,8 @@ class FeedItemCard extends StatelessWidget {
         : Colors.black;
 
     return Container(
-      width: 34,
-      height: 34,
+      width: size,
+      height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(color: avatarColor, shape: BoxShape.circle),
       child: Text(
@@ -269,6 +436,7 @@ class FeedItemCard extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.clip,
         style: textTheme.labelSmall?.copyWith(
+          fontSize: size <= 24 ? 9 : null,
           color: avatarForeground,
           fontWeight: FontWeight.w800,
         ),

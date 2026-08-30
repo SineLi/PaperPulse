@@ -8,6 +8,7 @@ import '../data/service/post_auth_sync_service.dart';
 import '../data/service/sync_service.dart';
 import '../navigation/tab_scroll_registry.dart';
 import '../widgets/article_list_page.dart';
+import '../widgets/feed_card.dart';
 
 class FeedPage extends StatefulWidget {
   final ScrollController? scrollController;
@@ -95,6 +96,7 @@ class _FeedPageState extends State<FeedPage> {
       scrollController: widget.scrollController,
       tabScrollIndex: feedTabIndex,
       routeSource: 'feed',
+      cardStyle: FeedCardStyle.masonry,
       loadArticles: (limit, offset, filter) => feedRepo.getLocalArticles(
         limit: limit,
         offset: offset,

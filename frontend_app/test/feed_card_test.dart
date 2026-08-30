@@ -4,10 +4,15 @@ import 'package:frontend_app/data/models/article.dart';
 import 'package:frontend_app/data/models/article_view_data.dart';
 import 'package:frontend_app/widgets/feed_card.dart';
 
-Article _readFavoriteArticle({bool isFavorite = true}) {
+Article _readFavoriteArticle({
+  bool isFavorite = true,
+  int articleId = 1,
+  String title = 'Article title',
+  String maintag = '',
+}) {
   return Article(
-    articleId: 1,
-    title: 'Article title',
+    articleId: articleId,
+    title: title,
     abs: 'Abstract',
     summary: 'Summary',
     publishedDate: '2026-08-30',
@@ -19,7 +24,7 @@ Article _readFavoriteArticle({bool isFavorite = true}) {
     oneSentenceSummary: '',
     background: '',
     innovations: '',
-    maintag: '',
+    maintag: maintag,
     subtags: const [],
     isFavorite: isFavorite,
     isRead: true,
@@ -57,7 +62,7 @@ void main() {
     expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 0.75);
   });
 
-  testWidgets('compact and featured image styles are selectable', (
+  testWidgets('compact, featured image, and masonry styles are selectable', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -74,6 +79,10 @@ void main() {
                   article: _readFavoriteArticle(),
                   style: FeedCardStyle.featuredImage,
                 ),
+                FeedItemCard(
+                  article: _readFavoriteArticle(),
+                  style: FeedCardStyle.masonry,
+                ),
               ],
             ),
           ),
@@ -86,6 +95,7 @@ void main() {
       find.byKey(const ValueKey('feed-card-featuredImage')),
       findsOneWidget,
     );
+    expect(find.byKey(const ValueKey('feed-card-masonry')), findsOneWidget);
   });
 
   testWidgets('featured image style reflects the favorite state', (
@@ -190,4 +200,185 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'masonry card is compact for a grid and keeps read and favorite states',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(colorSchemeSeed: Colors.purple),
+          home: Scaffold(
+            body: SizedBox(
+              width: 180,
+              child: FeedItemCard(
+                article: _readFavoriteArticle(),
+                style: FeedCardStyle.masonry,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final card = tester.widget<Card>(
+        find.byKey(const ValueKey('feed-card-masonry')),
+      );
+      final shape = card.shape! as RoundedRectangleBorder;
+
+      expect(card.margin, EdgeInsets.zero);
+      expect(shape.borderRadius, BorderRadius.circular(8));
+      expect(shape.side.width, 1);
+      expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 0.75);
+      expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+      expect(find.text('Article title'), findsOneWidget);
+      expect(tester.widget<Text>(find.text('Article title')).maxLines, 3);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('feed-card-masonry'))).height,
+        lessThanOrEqualTo(320),
+      );
+      expect(
+        find.byKey(const ValueKey('feed-card-masonry-max-height')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ConstrainedBox>(
+              find.byKey(const ValueKey('feed-card-masonry-max-height')),
+            )
+            .constraints
+            .maxHeight,
+        320,
+      );
+      expect(
+        tester
+            .widget<SizedBox>(
+              find.byKey(const ValueKey('feed-card-masonry-image')),
+            )
+            .height,
+        lessThanOrEqualTo(184),
+      );
+      expect(
+        find.byKey(const ValueKey('feed-card-placeholder-gradient')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('masonry card can keep favorite items undimmed', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: FeedItemCard(
+              article: _readFavoriteArticle(),
+              dimWhenRead: false,
+              style: FeedCardStyle.masonry,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1.0);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+  });
+
+  testWidgets('masonry image height varies stably and never exceeds its cap', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              SizedBox(
+                width: 180,
+                child: FeedItemCard(
+                  article: _readFavoriteArticle(articleId: 1),
+                  style: FeedCardStyle.masonry,
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: FeedItemCard(
+                  article: _readFavoriteArticle(articleId: 2),
+                  style: FeedCardStyle.masonry,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final imageHeights = tester
+        .widgetList<SizedBox>(
+          find.byKey(const ValueKey('feed-card-masonry-image')),
+        )
+        .map((widget) => widget.height)
+        .toList();
+    expect(imageHeights, [180, 144]);
+  });
+
+  testWidgets('masonry title keeps the first 23 Unicode characters visible', (
+    tester,
+  ) async {
+    const title = '测试测试测试测试测试测试测试测试测试测试测试👩‍🔬后';
+    final expectedTitle = title.characters.getRange(0, 23).toString();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            child: FeedItemCard(
+              article: _readFavoriteArticle(title: title),
+              style: FeedCardStyle.masonry,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final titleText = tester.widget<Text>(find.text(expectedTitle));
+    expect(expectedTitle.characters.length, 23);
+    expect(titleText.maxLines, 3);
+    expect(titleText.overflow, TextOverflow.clip);
+    expect(find.textContaining('后'), findsNothing);
+  });
+
+  testWidgets('masonry maintag is shown only when it has content', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              SizedBox(
+                width: 180,
+                child: FeedItemCard(
+                  article: _readFavoriteArticle(maintag: '材料科学'),
+                  style: FeedCardStyle.masonry,
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: FeedItemCard(
+                  article: _readFavoriteArticle(articleId: 2),
+                  style: FeedCardStyle.masonry,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('材料科学'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('feed-card-masonry-maintag')),
+      findsOneWidget,
+    );
+  });
 }
