@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -98,6 +99,8 @@ class _ArticleListPageState extends State<ArticleListPage> {
   int _lastReadMarkerIndex = -1;
   int _loadedArticleCount = 0;
   final Map<int, int> _visibleArticleIndexes = {};
+  final List<VoidCallback> _pendingVisibilityFlushes = [];
+  bool _visibilityFlushScheduled = false;
 
   // 筛选面板数据缓存，首次打开时懒加载，避免每次打开都重新查询 DB
   List<({int id, String name, String abbr})>? _cachedJournals;
@@ -132,15 +135,50 @@ class _ArticleListPageState extends State<ArticleListPage> {
   }
 
   void _handleUserScrollStart() {
-    // 先结算启动布局留下的回调，此时 Feed 尚未允许更新边界。
-    VisibilityDetectorController.instance.notifyNow();
-    widget.onUserScrollStart?.call();
+    _scheduleVisibilityFlush(() {
+      // 先结算启动布局留下的回调，此时 Feed 尚未允许更新边界。
+      VisibilityDetectorController.instance.notifyNow();
+      widget.onUserScrollStart?.call();
+      // 即使一次很短的手势在刷新前已经结束，也要把刚结算出的
+      // 最后可见文章纳入这次用户滚动。
+      _notifyLastVisibleArticle();
+    });
   }
 
   void _handleUserScrollEnd() {
-    // 在关闭用户滚动写入窗口前，立即结算手势的最终曝光位置。
-    VisibilityDetectorController.instance.notifyNow();
-    widget.onUserScrollEnd?.call();
+    _scheduleVisibilityFlush(() {
+      // 在关闭用户滚动写入窗口前，结算手势的最终曝光位置。
+      VisibilityDetectorController.instance.notifyNow();
+      _notifyLastVisibleArticle();
+      widget.onUserScrollEnd?.call();
+    });
+  }
+
+  void _scheduleVisibilityFlush(VoidCallback flush) {
+    // ScrollNotification 可能在布局阶段派发。notifyNow() 会同步读取
+    // RenderVisibilityDetector 的尺寸，必须放到帧与帧之间执行。
+    _pendingVisibilityFlushes.add(flush);
+    if (_visibilityFlushScheduled) return;
+    _visibilityFlushScheduled = true;
+    SchedulerBinding.instance.scheduleTask<void>(
+      () {
+        _visibilityFlushScheduled = false;
+        if (!mounted) {
+          _pendingVisibilityFlushes.clear();
+          return;
+        }
+
+        // 同一帧内可能连续收到 start/end；按通知原始顺序结算，避免
+        // 很短的手势先关闭再开启 Feed 的边界写入窗口。
+        final pending = List<VoidCallback>.of(_pendingVisibilityFlushes);
+        _pendingVisibilityFlushes.clear();
+        for (final callback in pending) {
+          callback();
+        }
+      },
+      Priority.touch,
+      debugLabel: 'flush article visibility',
+    );
   }
 
   Future<bool> _scrollToLastReadMarker() async {
