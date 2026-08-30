@@ -35,4 +35,14 @@ class SyncDatabaseIO {
     }
     await batch.commit(noResult: true);
   }
+
+  /// 清理旧版本可能遗留的收藏队列动作，避免直传结果随后被覆盖。
+  Future<void> removeFavoriteActionsForArticle(int articleId) async {
+    final db = await dbHelper.database;
+    await db.delete(
+      'sync_queue',
+      where: 'article_id = ? AND action IN (?, ?)',
+      whereArgs: [articleId, 'favorite', 'unfavorite'],
+    );
+  }
 }

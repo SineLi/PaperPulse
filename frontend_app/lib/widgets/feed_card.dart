@@ -6,9 +6,14 @@ import 'cached_image.dart';
 class FeedItemCard extends StatelessWidget {
   final ArticleViewData articleViewData;
   final VoidCallback? onTap;
+  final bool dimWhenRead;
 
-  FeedItemCard({super.key, required Article article, this.onTap})
-    : articleViewData = ArticleViewData.fromArticle(article);
+  FeedItemCard({
+    super.key,
+    required Article article,
+    this.onTap,
+    this.dimWhenRead = true,
+  }) : articleViewData = ArticleViewData.fromArticle(article);
 
   @override
   Widget build(BuildContext context) {
@@ -18,17 +23,18 @@ class FeedItemCard extends StatelessWidget {
     final hasImage =
         articleViewData.graphicalAbsUrl != null &&
         articleViewData.graphicalAbsUrl!.isNotEmpty;
+    final shouldDim = dimWhenRead && articleViewData.isRead;
 
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      color: articleViewData.isRead
+      color: shouldDim
           ? colorScheme.surfaceContainerLowest.withValues(alpha: 0.6)
           : colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Opacity(
-        opacity: articleViewData.isRead ? 0.75 : 1.0,
+        opacity: shouldDim ? 0.75 : 1.0,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
@@ -53,7 +59,7 @@ class FeedItemCard extends StatelessWidget {
                         style: textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           height: 1.35,
-                          color: articleViewData.isRead
+                          color: shouldDim
                               ? colorScheme.onSurfaceVariant
                               : colorScheme.onSurface,
                         ),

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../data/models/article.dart';
 import '../data/models/article_filter.dart';
+import '../data/models/article_detail_callbacks.dart';
 import 'article_filter_sheet.dart';
 import 'feed_card.dart';
+import 'last_read_marker.dart';
 import 'unified_list_page.dart';
 
 /// 加载文章的回调：返回指定分页的文章列表
@@ -38,6 +41,9 @@ class ArticleListPage extends StatefulWidget {
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
+  final bool dimReadArticles;
+  final int? lastSeenArticleId;
+  final void Function(int articleId)? onArticleVisible;
 
   /// 返回筛选面板可用的期刊列表（懒加载，首次打开面板时调用）
   final Future<List<({int id, String name, String abbr})>> Function()?
@@ -67,6 +73,9 @@ class ArticleListPage extends StatefulWidget {
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
+    this.dimReadArticles = true,
+    this.lastSeenArticleId,
+    this.onArticleVisible,
     this.loadFilterJournals,
     this.loadFilterTags,
   });
@@ -136,26 +145,73 @@ class _ArticleListPageState extends State<ArticleListPage> {
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, article, index, allArticles, updateItem, updateItemById) {
-        return FeedItemCard(
-          article: article,
-          onTap: () {
-            // 路由里只放稳定、可刷新的状态。详情页会根据 articleId 查当前文章，
-            // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
-            ctx.push(
-              '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
-              // 为详情页提供已读回调，使其在标记已读时按 articleId 实时查找并更新当前列表项。
-              // 这样即使列表在打开详情期间发生变化，也能准确更新对应文章项。
-              extra: (int readArticleId) {
-                updateItemById(
-                  readArticleId,
-                  (readArticle) => readArticle.copyWith(isRead: true),
+      itemBuilder:
+          (
+            ctx,
+            article,
+            index,
+            allArticles,
+            updateItem,
+            updateItemById,
+            removeItemById,
+          ) {
+            Widget card = FeedItemCard(
+              article: article,
+              dimWhenRead: widget.dimReadArticles,
+              onTap: () {
+                // 路由里只放稳定、可刷新的状态。详情页会根据 articleId 查当前文章，
+                // 再根据 source 在本地数据库里重建上一篇/下一篇的文章序列。
+                ctx.push(
+                  '/article/${article.articleId}?source=${Uri.encodeQueryComponent(widget.routeSource)}',
+                  // 为详情页提供已读回调，使其在标记已读时按 articleId 实时查找并更新当前列表项。
+                  // 这样即使列表在打开详情期间发生变化，也能准确更新对应文章项。
+                  extra: ArticleDetailCallbacks(
+                    onArticleRead: (readArticleId) {
+                      updateItemById(
+                        readArticleId,
+                        (readArticle) => readArticle.copyWith(isRead: true),
+                      );
+                    },
+                    onFavoriteChanged: (favoriteArticleId, isFavorite) {
+                      if (widget.routeSource == 'favorites' && !isFavorite) {
+                        removeItemById(favoriteArticleId);
+                        return;
+                      }
+                      updateItemById(
+                        favoriteArticleId,
+                        (favoriteArticle) =>
+                            favoriteArticle.copyWith(isFavorite: isFavorite),
+                      );
+                    },
+                  ),
                 );
               },
             );
+
+            if (widget.onArticleVisible != null) {
+              card = VisibilityDetector(
+                key: ValueKey('article-visibility-${article.articleId}'),
+                onVisibilityChanged: (info) {
+                  if (info.visibleFraction > 0) {
+                    widget.onArticleVisible!(article.articleId);
+                  }
+                },
+                child: card,
+              );
+            }
+
+            final boundary = widget.lastSeenArticleId;
+            final showLastReadMarker =
+                boundary != null &&
+                article.articleId == boundary &&
+                allArticles.any((item) => item.articleId > boundary);
+            if (!showLastReadMarker) return card;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [const LastReadMarker(), card],
+            );
           },
-        );
-      },
     );
   }
 }

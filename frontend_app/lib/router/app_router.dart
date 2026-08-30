@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../pages/app_shell_page.dart';
 import '../pages/article_detail_page.dart';
+import '../data/models/article_detail_callbacks.dart';
 import '../pages/bootstrap_page.dart';
 import '../pages/fav_page.dart';
 import '../pages/feed_page.dart';
@@ -73,21 +74,22 @@ GoRouter createAppRouter() {
           final idText = state.pathParameters['id']!;
           final articleId = int.tryParse(idText);
           if (articleId == null) {
-            return ArticleNotFoundPage(
-              message: '无效的文章 ID：$idText',
-            );
+            return ArticleNotFoundPage(message: '无效的文章 ID：$idText');
           }
 
           final source = normalizeArticleSource(
             state.uri.queryParameters['source'],
           );
-          final onArticleRead = state.extra;
+          final callbacks = state.extra;
 
           return ArticleDetailPage(
             articleId: articleId,
             source: source,
-            onArticleRead: onArticleRead is void Function(int)
-                ? onArticleRead
+            onArticleRead: callbacks is ArticleDetailCallbacks
+                ? callbacks.onArticleRead
+                : null,
+            onFavoriteChanged: callbacks is ArticleDetailCallbacks
+                ? callbacks.onFavoriteChanged
                 : null,
           );
         },

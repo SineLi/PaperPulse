@@ -17,6 +17,25 @@ class SyncService {
        _syncDatabase = syncDatabase,
        _articleDatabase = articleDatabase ?? ArticleDatabaseIO();
 
+  /// 收藏动作直接提交后端；确认成功后才更新本地状态。
+  Future<void> setFavoriteImmediately(int articleId, bool isFavorite) async {
+    try {
+      if (isFavorite) {
+        await _apiClient.postJson('/articles/$articleId/favorite', {});
+      } else {
+        await _apiClient.delete('/articles/$articleId/favorite');
+      }
+    } on ApiException catch (error) {
+      final alreadyInRequestedState =
+          (isFavorite && error.statusCode == 409) ||
+          (!isFavorite && error.statusCode == 404);
+      if (!alreadyInRequestedState) rethrow;
+    }
+
+    await _articleDatabase.setFavorite(articleId, isFavorite);
+    await _syncDatabase.removeFavoriteActionsForArticle(articleId);
+  }
+
   Future<void> flush({int limit = 100}) async {
     final pendingActions = await _syncDatabase.getPendingSyncActions(
       limit: limit,

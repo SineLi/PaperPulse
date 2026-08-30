@@ -29,6 +29,7 @@ typedef ItemWidgetBuilder<T> =
       List<T> allItems,
       void Function(int index, T newItem) updateItem,
       void Function(int articleId, T Function(T) updater) updateItemById,
+      void Function(int articleId) removeItemById,
     );
 
 /// 骨架卡片构建器
@@ -251,6 +252,17 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         _items[index] = updater(_items[index]);
       });
     }
+  }
+
+  void _removeItemById(int articleId) {
+    final index = _items.indexWhere((item) {
+      return (item as dynamic).articleId == articleId;
+    });
+    if (index < 0) return;
+    setState(() {
+      _items.removeAt(index);
+      if (_currentOffset > 0) _currentOffset -= 1;
+    });
   }
 
   void _resetAndReload() {
@@ -573,6 +585,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
           List.unmodifiable(_items),
           _updateItem,
           _updateItemById,
+          _removeItemById,
         );
       },
     );

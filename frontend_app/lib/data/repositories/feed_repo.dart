@@ -139,6 +139,12 @@ class FeedRepo {
   Future<List<String>> getFilterableTags() =>
       _articleDatabaseIO.getDistinctTagsInArticles();
 
+  Future<int> getLastSeenFeedArticleId() =>
+      _articleDatabaseIO.getLastSeenFeedArticleId();
+
+  Future<void> markFeedArticleSeen(int articleId) =>
+      _articleDatabaseIO.markFeedArticleSeen(articleId);
+
   Future<int> refreshArticles() {
     final inFlight = _refreshInFlight;
     if (inFlight != null) {

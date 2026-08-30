@@ -157,23 +157,6 @@ class ArticleDatabaseIO {
     return articles;
   }
 
-  Future<void> setFavoriteWithSync(int id, bool isFavorite) async {
-    final db = await dbHelper.database;
-    await db.transaction((txn) async {
-      await txn.update(
-        Article.tableArticles,
-        {Article.colIsFavorite: isFavorite ? 1 : 0},
-        where: '${Article.colId} = ?',
-        whereArgs: [id],
-      );
-      await txn.insert("sync_queue", {
-        'article_id': id,
-        'action': isFavorite ? 'favorite' : 'unfavorite',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-    });
-  }
-
   Future<void> setReadWithSync(int id, bool isRead) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
@@ -215,6 +198,38 @@ class ArticleDatabaseIO {
       'key': 'last_feed_sync_id',
       'value': id.toString(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 获取上一次已经真实出现在首页视口中的最新文章 ID。
+  Future<int> getLastSeenFeedArticleId() async {
+    final db = await dbHelper.database;
+    final result = await db.query(
+      'metadata',
+      where: 'key = ?',
+      whereArgs: ['last_seen_feed_article_id'],
+    );
+    if (result.isEmpty) return 0;
+    return int.tryParse(result.first['value'] as String) ?? 0;
+  }
+
+  /// 仅向前推进曝光边界，较旧文章的回调不会覆盖已记录的新边界。
+  Future<void> markFeedArticleSeen(int articleId) async {
+    final db = await dbHelper.database;
+    await db.transaction((txn) async {
+      final result = await txn.query(
+        'metadata',
+        where: 'key = ?',
+        whereArgs: ['last_seen_feed_article_id'],
+      );
+      final current = result.isEmpty
+          ? 0
+          : int.tryParse(result.first['value'] as String) ?? 0;
+      if (articleId <= current) return;
+      await txn.insert('metadata', {
+        'key': 'last_seen_feed_article_id',
+        'value': articleId.toString(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
   }
 
   Future<int> getMaxArticleId() async {
