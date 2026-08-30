@@ -100,6 +100,8 @@ class _ArticleListPageState extends State<ArticleListPage> {
   TabScrollRegistry? _tabScrollRegistry;
   int _lastReadMarkerIndex = -1;
   int _loadedArticleCount = 0;
+  List<Article>? _lastReadMarkerArticlesSnapshot;
+  int? _lastReadMarkerBoundarySnapshot;
   final Map<int, int> _visibleArticleIndexes = {};
   final List<VoidCallback> _pendingVisibilityFlushes = [];
   bool _visibilityFlushScheduled = false;
@@ -301,22 +303,39 @@ class _ArticleListPageState extends State<ArticleListPage> {
       skeletonCount: 6,
       skeletonBuilder: (cs) =>
           _ArticleSkeletonCard(colorScheme: cs, style: widget.cardStyle),
-      fullWidthLeadingBuilder: (ctx, article, index, allArticles) {
-        final boundary = widget.lastSeenArticleId;
-        final markerIndex = boundary == null
-            ? -1
-            : allArticles.indexWhere((item) => item.articleId == boundary);
-        _lastReadMarkerIndex = markerIndex;
-        _loadedArticleCount = allArticles.length;
-        if (markerIndex < 0 || index != markerIndex) return null;
-        return LastReadMarker(key: _lastReadMarkerKey);
-      },
+      fullWidthLeadingBuilder:
+          (ctx, article, index, allArticles, isSearchActive) {
+            if (_filter.isActive || isSearchActive) {
+              _lastReadMarkerArticlesSnapshot = null;
+              _lastReadMarkerBoundarySnapshot = null;
+              _lastReadMarkerIndex = -1;
+              _loadedArticleCount = 0;
+              return null;
+            }
+            final boundary = widget.lastSeenArticleId;
+            if (!identical(_lastReadMarkerArticlesSnapshot, allArticles) ||
+                _lastReadMarkerBoundarySnapshot != boundary) {
+              _lastReadMarkerArticlesSnapshot = allArticles;
+              _lastReadMarkerBoundarySnapshot = boundary;
+              _lastReadMarkerIndex = boundary == null
+                  ? -1
+                  : allArticles.indexWhere(
+                      (item) => item.articleId == boundary,
+                    );
+              _loadedArticleCount = allArticles.length;
+            }
+            if (_lastReadMarkerIndex < 0 || index != _lastReadMarkerIndex) {
+              return null;
+            }
+            return LastReadMarker(key: _lastReadMarkerKey);
+          },
       itemBuilder:
           (
             ctx,
             article,
             index,
             allArticles,
+            isSearchActive,
             updateItem,
             updateItemById,
             removeItemById,
@@ -355,7 +374,9 @@ class _ArticleListPageState extends State<ArticleListPage> {
               },
             );
 
-            if (widget.onArticleVisible != null) {
+            if (widget.onArticleVisible != null &&
+                !_filter.isActive &&
+                !isSearchActive) {
               card = VisibilityDetector(
                 key: ValueKey('article-visibility-${article.articleId}'),
                 onVisibilityChanged: (info) {

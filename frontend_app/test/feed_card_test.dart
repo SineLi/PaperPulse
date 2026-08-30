@@ -168,6 +168,33 @@ void main() {
     expect(shape.side, BorderSide.none);
   });
 
+  testWidgets('compact maintag is omitted when it is blank', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              FeedItemCard(
+                article: _readFavoriteArticle(maintag: '   '),
+                style: FeedCardStyle.compact,
+              ),
+              FeedItemCard(
+                article: _readFavoriteArticle(articleId: 2, maintag: ' 材料科学 '),
+                style: FeedCardStyle.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('feed-card-compact-maintag')),
+      findsOneWidget,
+    );
+    expect(find.text('材料科学'), findsOneWidget);
+  });
+
   testWidgets(
     'featured image placeholder softly derives from publisher color',
     (tester) async {

@@ -485,6 +485,7 @@ class FeedItemCard extends StatelessWidget {
       children: [
         if (articleViewData.displayMaintag != null)
           Container(
+            key: const ValueKey('feed-card-compact-maintag'),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
               color: colorScheme.secondaryContainer,

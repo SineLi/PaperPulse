@@ -29,6 +29,7 @@ typedef ItemWidgetBuilder<T> =
       T item,
       int index,
       List<T> allItems,
+      bool isSearchActive,
       void Function(int index, T newItem) updateItem,
       void Function(int articleId, T Function(T) updater) updateItemById,
       void Function(int articleId) removeItemById,
@@ -45,7 +46,13 @@ enum UnifiedListLayout { list, masonry }
 /// 普通列表中它会与条目纵向排列；瀑布流中它会切断网格并独占一行，
 /// 适合阅读分界线等不能被限制在单列宽度内的内容。
 typedef FullWidthLeadingBuilder<T> =
-    Widget? Function(BuildContext context, T item, int index, List<T> allItems);
+    Widget? Function(
+      BuildContext context,
+      T item,
+      int index,
+      List<T> allItems,
+      bool isSearchActive,
+    );
 
 /// 通用分页列表页，封装了分页加载、骨架屏、空状态、下拉刷新、搜索和筛选逻辑。
 /// 可以通过泛型 [T] 适配任意数据类型（文章、期刊等）。
@@ -184,6 +191,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   bool _hasMore = true;
   int _currentOffset = 0;
   Future<void>? _loadMoreFuture;
+  int _loadGeneration = 0;
   bool _isPreloadingAnchor = false;
   bool _lastLoadFailed = false;
   bool _isUserScrollInProgress = false;
@@ -233,10 +241,14 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         notification.dragDetails != null &&
         !_isUserScrollInProgress) {
       _isUserScrollInProgress = true;
-      widget.onUserScrollStart?.call();
+      if (!widget.filterActive && _searchQuery.isEmpty) {
+        widget.onUserScrollStart?.call();
+      }
     } else if (notification is ScrollEndNotification &&
         _isUserScrollInProgress) {
       _isUserScrollInProgress = false;
+      // 搜索或筛选可能在手势中途生效；结束回调始终派发，以关闭外部
+      // 可能已经打开的用户滚动写入窗口。
       widget.onUserScrollEnd?.call();
     }
 
@@ -320,6 +332,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   }
 
   void _resetAndReload() {
+    _invalidatePendingLoad();
     setState(() {
       _currentOffset = 0;
       _items.clear();
@@ -331,6 +344,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   Future<void> _reloadVisibleItems() async {
     if (!mounted) return;
+    _invalidatePendingLoad();
     setState(() {
       _currentOffset = 0;
       _items.clear();
@@ -345,10 +359,11 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   Future<void> _loadThroughPreloadAnchor() async {
     if (_isPreloadingAnchor) return;
     _isPreloadingAnchor = true;
+    final preloadGeneration = _loadGeneration;
     try {
       do {
         await _loadMore();
-        if (!mounted) return;
+        if (!mounted || preloadGeneration != _loadGeneration) return;
 
         final anchorKey = widget.preloadAnchorKey;
         final matcher = widget.matchesPreloadAnchor;
@@ -370,7 +385,8 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     if (activeLoad != null) return activeLoad;
 
     late final Future<void> load;
-    load = _performLoadMore().whenComplete(() {
+    final generation = _loadGeneration;
+    load = _performLoadMore(generation).whenComplete(() {
       if (identical(_loadMoreFuture, load)) {
         _loadMoreFuture = null;
       }
@@ -379,43 +395,45 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     return load;
   }
 
-  Future<void> _performLoadMore() async {
+  Future<void> _performLoadMore(int generation) async {
     if (_isLoading || !_hasMore) return;
 
     _lastLoadFailed = false;
     setState(() => _isLoading = true);
+    final offset = _currentOffset;
+    final searchQuery = _searchQuery;
+    final useSearch =
+        _isSearchMode && searchQuery.isNotEmpty && widget.searchItems != null;
 
     try {
       final List<T> batch;
-      if (_isSearchMode &&
-          _searchQuery.isNotEmpty &&
-          widget.searchItems != null) {
-        batch = await widget.searchItems!(
-          _searchQuery,
-          widget.pageSize,
-          _currentOffset,
-        );
+      if (useSearch) {
+        batch = await widget.searchItems!(searchQuery, widget.pageSize, offset);
       } else {
-        batch = await widget.loadItems(widget.pageSize, _currentOffset);
+        batch = await widget.loadItems(widget.pageSize, offset);
       }
 
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
-          _currentOffset += batch.length;
+          _currentOffset = offset + batch.length;
           _items.addAll(batch);
           _hasMore = batch.length == widget.pageSize;
           _isLoading = false;
         });
       }
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       _lastLoadFailed = true;
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
-      }
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
     }
+  }
+
+  void _invalidatePendingLoad() {
+    _loadGeneration += 1;
+    _loadMoreFuture = null;
   }
 
   Future<void> _refresh() async {
@@ -702,6 +720,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   }
 
   Widget _buildListView(ColorScheme colorScheme) {
+    final allItems = List<T>.unmodifiable(_items);
     return ListView.builder(
       padding: const EdgeInsets.only(top: 4, bottom: 88),
       itemCount: _items.length + (_hasMore ? 1 : 0),
@@ -721,7 +740,12 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
             ),
           );
         }
-        return _buildItem(context, index, includeFullWidthLeading: true);
+        return _buildItem(
+          context,
+          index,
+          allItems: allItems,
+          includeFullWidthLeading: true,
+        );
       },
     );
   }
@@ -732,7 +756,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     final leadingBuilder = widget.fullWidthLeadingBuilder;
     if (leadingBuilder != null) {
       for (var index = 0; index < _items.length; index++) {
-        final leading = leadingBuilder(context, _items[index], index, allItems);
+        final leading = leadingBuilder(
+          context,
+          _items[index],
+          index,
+          allItems,
+          _searchQuery.isNotEmpty,
+        );
         if (leading != null) fullWidthLeading[index] = leading;
       }
     }
@@ -742,8 +772,12 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       ChunkedMasonrySliver(
         itemCount: _items.length,
         fullWidthLeading: fullWidthLeading,
-        itemBuilder: (context, index) =>
-            _buildItem(context, index, includeFullWidthLeading: false),
+        itemBuilder: (context, index) => _buildItem(
+          context,
+          index,
+          allItems: allItems,
+          includeFullWidthLeading: false,
+        ),
       ),
     ];
 
@@ -777,14 +811,15 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   Widget _buildItem(
     BuildContext context,
     int index, {
+    required List<T> allItems,
     required bool includeFullWidthLeading,
   }) {
-    final allItems = List<T>.unmodifiable(_items);
     final item = widget.itemBuilder(
       context,
       _items[index],
       index,
       allItems,
+      _searchQuery.isNotEmpty,
       _updateItem,
       _updateItemById,
       _removeItemById,
@@ -796,6 +831,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       _items[index],
       index,
       allItems,
+      _searchQuery.isNotEmpty,
     );
     if (leading == null) return item;
 

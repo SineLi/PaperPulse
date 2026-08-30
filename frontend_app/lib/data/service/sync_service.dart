@@ -8,6 +8,7 @@ class SyncService {
   final SyncDatabaseIO _syncDatabase;
   final ArticleDatabaseIO _articleDatabase;
   Future<void>? _pullStatusInFlight;
+  Future<void> _syncOperationTail = Future<void>.value();
 
   SyncService({
     required ApiClient apiClient,
@@ -18,7 +19,13 @@ class SyncService {
        _articleDatabase = articleDatabase ?? ArticleDatabaseIO();
 
   /// 收藏动作直接提交后端；确认成功后才更新本地状态。
-  Future<void> setFavoriteImmediately(int articleId, bool isFavorite) async {
+  Future<void> setFavoriteImmediately(int articleId, bool isFavorite) {
+    return _serializeSyncOperation(
+      () => _setFavoriteImmediately(articleId, isFavorite),
+    );
+  }
+
+  Future<void> _setFavoriteImmediately(int articleId, bool isFavorite) async {
     try {
       if (isFavorite) {
         await _apiClient.postJson('/articles/$articleId/favorite', {});
@@ -36,7 +43,11 @@ class SyncService {
     await _syncDatabase.removeFavoriteActionsForArticle(articleId);
   }
 
-  Future<void> flush({int limit = 100}) async {
+  Future<void> flush({int limit = 100}) {
+    return _serializeSyncOperation(() => _flush(limit: limit));
+  }
+
+  Future<void> _flush({int limit = 100}) async {
     final pendingActions = await _syncDatabase.getPendingSyncActions(
       limit: limit,
     );
@@ -106,7 +117,7 @@ class SyncService {
       return inFlight;
     }
 
-    final future = _performPullStatus();
+    final future = _serializeSyncOperation(_performPullStatus);
     _pullStatusInFlight = future;
     future.whenComplete(() {
       if (identical(_pullStatusInFlight, future)) {
@@ -117,7 +128,8 @@ class SyncService {
   }
 
   Future<void> _performPullStatus() async {
-    await flush();
+    // pullStatus 已持有串行队列，调用内部实现避免再次排队形成自锁。
+    await _flush();
     final data = await _apiClient.getJson('/articles/favorites');
     final raw = data['items'] as List;
     final Set<int> favoriteIds = raw.map((id) => id as int).toSet();
@@ -142,5 +154,14 @@ class SyncService {
     for (var toUnfav in localFavIds.difference(favoriteIds)) {
       await _articleDatabase.setFavorite(toUnfav, false);
     }
+  }
+
+  Future<T> _serializeSyncOperation<T>(Future<T> Function() operation) {
+    final result = _syncOperationTail.then((_) => operation());
+    _syncOperationTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
   }
 }

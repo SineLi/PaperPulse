@@ -120,6 +120,7 @@ class _JournalListPageState extends State<JournalListPage> {
             journal,
             index,
             allItems,
+            isSearchActive,
             updateItem,
             updateItemById,
             removeItemById,

@@ -33,10 +33,7 @@ void main() {
 
     await tester.pumpWidget(buildSubject(const LastReadMarker()));
 
-    expect(
-      tester.getSemantics(find.byType(LastReadMarker)),
-      containsSemantics(label: '上次阅读到这'),
-    );
+    expect(tester.getSemantics(find.byType(LastReadMarker)).label, '上次阅读到这');
     semanticsHandle.dispose();
   });
 }
