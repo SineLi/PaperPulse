@@ -1,13 +1,17 @@
 from contextlib import asynccontextmanager
+import logging
+import os
 from pathlib import Path
-from fastapi import FastAPI
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+
 from app.routers import auth, journals, users, articles, status
 
-from fastapi.responses import FileResponse
-
-import os
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,6 +49,33 @@ media_dir = Path(__file__).resolve().parents[1] / "media"
 media_dir.mkdir(parents=True, exist_ok=True)
 
 app.mount("/media", CachedStaticFiles(directory=str(media_dir)), name="media")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    log_errors = [
+        {"type": error.get("type"), "loc": error.get("loc")}
+        for error in errors
+    ]
+    logger.warning(
+        "event=request_validation_failed method=%s path=%s errors=%s",
+        request.method,
+        request.url.path,
+        log_errors,
+    )
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception(
+        "event=unhandled_request_exception method=%s path=%s detail=%s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 @app.get("/")
 def root():

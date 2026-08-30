@@ -59,10 +59,11 @@ class WileyFetcher(RSSFetcher):
             return doi.split('doi.org/')[-1]
         return doi
     
-    def fetch_details(self, article: Dict):
-        # Wiley 文章页面通常不需要额外的 JS 渲染，直接返回空字符串
-        return ""
+    async def fetch_details(self, article: Dict):
+        # Wiley 文章页面通常不需要额外的 JS 渲染，详情在 RSS 中已解析。
+        return {}
 
 if __name__ == "__main__":
-    WileyFetcher().run()
+    import asyncio
+    asyncio.run(WileyFetcher().run())
 

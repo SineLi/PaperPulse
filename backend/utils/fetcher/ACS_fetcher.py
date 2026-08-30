@@ -23,10 +23,10 @@ class ACSFetcher(RSSFetcher):
             'status': 'online'
         }
 
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
         
-        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
         if not content: return {}
 
         tree = lhtml.fromstring(content)
@@ -45,5 +45,6 @@ class ACSFetcher(RSSFetcher):
         return info
 
 if __name__ == "__main__":
-    ACSFetcher().run()
+    import asyncio
+    asyncio.run(ACSFetcher().run())
 

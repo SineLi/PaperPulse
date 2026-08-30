@@ -1,6 +1,7 @@
 import os
 import html
 import logging
+import asyncio
 from lxml import etree
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 import requests
@@ -52,7 +53,7 @@ class ElsevierFetcher(RSSFetcher):
         except Exception as e:
             logger.error(f"Error fetching graphical abstract for PII {pii}: {e}")
 
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
         pii = link.split("/")[-1].split("?")[0]  # 提取 PII
         url = API_ADDRESS + "{" + pii + "}"
@@ -62,7 +63,7 @@ class ElsevierFetcher(RSSFetcher):
             'Accept': 'text/xml'
         }
 
-        response = requests.get(url, headers=headers, timeout=15)
+        response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15)
         if response.status_code != 200:
             logger.error(f"Failed to fetch details for {link}: {response.status_code}")
             return {}
@@ -92,10 +93,10 @@ class ElsevierFetcher(RSSFetcher):
             info['abstract'] = html.unescape(abstract_nodes[0].xpath("string()").strip())
 
         # graphical abstract
-        info['graphical_abstract'] = self._get_ga_url(pii)
+        info['graphical_abstract'] = await asyncio.to_thread(self._get_ga_url, pii)
 
         return info
 
 if __name__ == "__main__":
-    ElsevierFetcher().run()
+    asyncio.run(ElsevierFetcher().run())
 

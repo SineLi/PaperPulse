@@ -12,10 +12,10 @@ class RSCFetcher(RSSFetcher):
             **kwargs
         )
 
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
         
-        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
         if not content: return {}
 
         tree = lhtml.fromstring(content)
@@ -39,5 +39,6 @@ class RSCFetcher(RSSFetcher):
         return info
 
 if __name__ == "__main__":
-    RSCFetcher().run()
+    import asyncio
+    asyncio.run(RSCFetcher().run())
 

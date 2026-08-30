@@ -26,10 +26,10 @@ class FrontiersFetcher(RSSFetcher):
             'status': 'online'
         }
 
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
         
-        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
         if not content: return {}
 
         tree = lhtml.fromstring(content)
@@ -51,5 +51,6 @@ class FrontiersFetcher(RSSFetcher):
 
 
 if __name__ == "__main__":
-    FrontiersFetcher().run()
+    import asyncio
+    asyncio.run(FrontiersFetcher().run())
 

@@ -18,7 +18,7 @@ import sys
 import dotenv
 import uvicorn
 
-from utils.logging_utils import configure_logging, log_event
+from utils.logging_utils import build_uvicorn_log_config, configure_logging, log_event
 
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -264,6 +264,10 @@ def main():
 
     # 5. Initialize / migrate schema
     init_db()
+    # Alembic env.py calls fileConfig(), which resets root logging.
+    # Re-apply the application logging config before starting the scheduler.
+    configure_logging(force=True)
+    log_event(logger, logging.INFO, "logging_reconfigured_after_migrations")
 
     # 6. Optionally start background scheduler
     bg_scheduler = None
@@ -286,6 +290,7 @@ def main():
             port=args.port,
             log_level="info",
             access_log=True,
+            log_config=build_uvicorn_log_config(),
         )
     finally:
         if bg_scheduler is not None:
