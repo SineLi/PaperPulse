@@ -349,35 +349,30 @@ class _ArticleSkeletonCard extends StatelessWidget {
       elevation: 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       color: colorScheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _bone(bone, width: 140, height: 10),
-                  const SizedBox(height: 12),
-                  _bone(bone, height: 14),
-                  const SizedBox(height: 6),
-                  _bone(bone, height: 14),
-                  const SizedBox(height: 6),
-                  _bone(bone, width: 180, height: 14),
-                  const SizedBox(height: 14),
-                  _bone(bone, width: 64, height: 18, radius: 8),
-                ],
-              ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                _bone(bone, width: 34, height: 34, radius: 17),
+                const SizedBox(width: 10),
+                Expanded(child: _bone(bone, width: 112, height: 12)),
+                const SizedBox(width: 24),
+                _bone(bone, width: 42, height: 10),
+                const SizedBox(width: 14),
+                _bone(bone, width: 18, height: 18, radius: 9),
+              ],
             ),
-            const SizedBox(width: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Container(width: 100, height: 100, color: bone),
-            ),
-          ],
-        ),
+          ),
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ColoredBox(color: bone),
+          ),
+        ],
       ),
     );
   }
