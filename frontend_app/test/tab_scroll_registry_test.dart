@@ -21,6 +21,7 @@ void main() {
       ),
     );
     registry.register(feedTabIndex, controller);
+    registry.registerContent(feedTabIndex, controller);
     registry.registerBoundaryScroller(feedTabIndex, () async {
       boundaryCalls += 1;
       return true;
@@ -31,6 +32,35 @@ void main() {
     expect(boundaryCalls, 1);
     expect(controller.offset, 0);
   });
+
+  testWidgets(
+    'failed precise anchor does not trigger a conflicting scroll to top',
+    (tester) async {
+      final controller = ScrollController();
+      final registry = TabScrollRegistry();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ListView.builder(
+            controller: controller,
+            itemCount: 30,
+            itemExtent: 80,
+            itemBuilder: (_, index) => Text('Item $index'),
+          ),
+        ),
+      );
+      registry.register(feedTabIndex, controller);
+      registry.registerContent(feedTabIndex, controller);
+      registry.registerBoundaryScroller(feedTabIndex, () async {
+        controller.jumpTo(400);
+        return false;
+      });
+
+      await registry.handleDoubleTap(feedTabIndex);
+
+      expect(controller.offset, 400);
+    },
+  );
 
   testWidgets('home double tap returns to top when list is scrolled', (
     tester,
@@ -50,6 +80,7 @@ void main() {
       ),
     );
     registry.register(feedTabIndex, controller);
+    registry.registerContent(feedTabIndex, controller);
     registry.registerBoundaryScroller(feedTabIndex, () async {
       boundaryCalls += 1;
       return true;
@@ -81,6 +112,7 @@ void main() {
       ),
     );
     registry.register(feedTabIndex, controller);
+    registry.registerContent(feedTabIndex, controller);
 
     final scroll = registry.scrollToFraction(feedTabIndex, 0.5);
     await tester.pumpAndSettle();

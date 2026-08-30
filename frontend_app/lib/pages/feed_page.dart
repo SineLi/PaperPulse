@@ -19,8 +19,12 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
+  late FeedRepo _feedRepo;
   int? _lastSeenArticleId;
-  int _highestSeenThisSession = 0;
+  int? _pendingSeenArticleId;
+  Timer? _persistSeenTimer;
+  Future<void> _persistSeenChain = Future.value();
+  bool _isUserScrollInProgress = false;
 
   @override
   void initState() {
@@ -31,19 +35,53 @@ class _FeedPageState extends State<FeedPage> {
     });
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _feedRepo = context.read<FeedRepo>();
+  }
+
   Future<void> _loadLastSeenBoundary() async {
-    final id = await context.read<FeedRepo>().getLastSeenFeedArticleId();
+    final id = await _feedRepo.getLastSeenFeedArticleId();
     if (!mounted) return;
     setState(() {
       _lastSeenArticleId = id > 0 ? id : null;
-      _highestSeenThisSession = id;
     });
   }
 
   void _onArticleVisible(int articleId) {
-    if (articleId <= _highestSeenThisSession) return;
-    _highestSeenThisSession = articleId;
-    unawaited(context.read<FeedRepo>().markFeedArticleSeen(articleId));
+    if (!_isUserScrollInProgress) return;
+    _pendingSeenArticleId = articleId;
+    _persistSeenTimer?.cancel();
+    _persistSeenTimer = Timer(
+      const Duration(milliseconds: 200),
+      _persistPendingSeenArticle,
+    );
+  }
+
+  void _onUserScrollStart() {
+    _isUserScrollInProgress = true;
+  }
+
+  void _onUserScrollEnd() {
+    _isUserScrollInProgress = false;
+  }
+
+  void _persistPendingSeenArticle() {
+    final articleId = _pendingSeenArticleId;
+    _pendingSeenArticleId = null;
+    if (articleId == null) return;
+    _persistSeenChain = _persistSeenChain.then(
+      (_) => _feedRepo.setLastSeenFeedArticleId(articleId),
+    );
+    unawaited(_persistSeenChain);
+  }
+
+  @override
+  void dispose() {
+    _persistSeenTimer?.cancel();
+    _persistPendingSeenArticle();
+    super.dispose();
   }
 
   @override
@@ -71,6 +109,8 @@ class _FeedPageState extends State<FeedPage> {
       externalRefreshSignal: postAuthSyncService.completedSyncCount,
       lastSeenArticleId: _lastSeenArticleId,
       onArticleVisible: _onArticleVisible,
+      onUserScrollStart: _onUserScrollStart,
+      onUserScrollEnd: _onUserScrollEnd,
       loadFilterJournals: feedRepo.getFilterableJournals,
       loadFilterTags: feedRepo.getFilterableTags,
       emptyTitle: '暂无文章',

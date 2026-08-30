@@ -142,8 +142,8 @@ class FeedRepo {
   Future<int> getLastSeenFeedArticleId() =>
       _articleDatabaseIO.getLastSeenFeedArticleId();
 
-  Future<void> markFeedArticleSeen(int articleId) =>
-      _articleDatabaseIO.markFeedArticleSeen(articleId);
+  Future<void> setLastSeenFeedArticleId(int articleId) =>
+      _articleDatabaseIO.setLastSeenFeedArticleId(articleId);
 
   Future<int> refreshArticles() {
     final inFlight = _refreshInFlight;

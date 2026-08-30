@@ -212,24 +212,13 @@ class ArticleDatabaseIO {
     return int.tryParse(result.first['value'] as String) ?? 0;
   }
 
-  /// 仅向前推进曝光边界，较旧文章的回调不会覆盖已记录的新边界。
-  Future<void> markFeedArticleSeen(int articleId) async {
+  /// 保存最后一次曝光的文章 ID，作为下次启动时的阅读分界。
+  Future<void> setLastSeenFeedArticleId(int articleId) async {
     final db = await dbHelper.database;
-    await db.transaction((txn) async {
-      final result = await txn.query(
-        'metadata',
-        where: 'key = ?',
-        whereArgs: ['last_seen_feed_article_id'],
-      );
-      final current = result.isEmpty
-          ? 0
-          : int.tryParse(result.first['value'] as String) ?? 0;
-      if (articleId <= current) return;
-      await txn.insert('metadata', {
-        'key': 'last_seen_feed_article_id',
-        'value': articleId.toString(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    });
+    await db.insert('metadata', {
+      'key': 'last_seen_feed_article_id',
+      'value': articleId.toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<int> getMaxArticleId() async {

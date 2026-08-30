@@ -111,6 +111,12 @@ class UnifiedListPage<T> extends StatefulWidget {
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
+  final VoidCallback? onUserScrollStart;
+  final VoidCallback? onUserScrollEnd;
+
+  /// 初始恢复时需要加载到的锚点。与 [matchesPreloadAnchor] 配合使用。
+  final Object? preloadAnchorKey;
+  final bool Function(T item)? matchesPreloadAnchor;
 
   const UnifiedListPage({
     super.key,
@@ -138,6 +144,10 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
+    this.onUserScrollStart,
+    this.onUserScrollEnd,
+    this.preloadAnchorKey,
+    this.matchesPreloadAnchor,
   });
 
   @override
@@ -146,12 +156,17 @@ class UnifiedListPage<T> extends StatefulWidget {
 
 class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   late final ScrollController _scrollController;
+  ScrollController? _contentScrollController;
   TabScrollRegistry? _tabScrollRegistry;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _isRefreshing = false;
   bool _hasMore = true;
   int _currentOffset = 0;
+  Future<void>? _loadMoreFuture;
+  bool _isPreloadingAnchor = false;
+  bool _lastLoadFailed = false;
+  bool _isUserScrollInProgress = false;
 
   // ── 搜索状态 ──
   bool _isSearchMode = false;
@@ -169,7 +184,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       // The page owns the controller, but the shell can still find it by tab.
       _tabScrollRegistry!.register(widget.tabScrollIndex!, _scrollController);
     }
-    _loadMore();
+    unawaited(_loadThroughPreloadAnchor());
     if (widget.autoRefreshOnInit && widget.onRefresh != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -181,6 +196,10 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void didUpdateWidget(covariant UnifiedListPage<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.preloadAnchorKey != widget.preloadAnchorKey &&
+        widget.preloadAnchorKey != null) {
+      unawaited(_loadThroughPreloadAnchor());
+    }
     if (oldWidget.externalRefreshSignal != widget.externalRefreshSignal) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -190,6 +209,17 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null &&
+        !_isUserScrollInProgress) {
+      _isUserScrollInProgress = true;
+      widget.onUserScrollStart?.call();
+    } else if (notification is ScrollEndNotification &&
+        _isUserScrollInProgress) {
+      _isUserScrollInProgress = false;
+      widget.onUserScrollEnd?.call();
+    }
+
     if (notification is ScrollUpdateNotification &&
         notification.metrics.pixels >=
             notification.metrics.maxScrollExtent - 300 &&
@@ -288,9 +318,47 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   // ── 分页加载 ──
 
-  Future<void> _loadMore() async {
-    if (_isLoading) return;
+  Future<void> _loadThroughPreloadAnchor() async {
+    if (_isPreloadingAnchor) return;
+    _isPreloadingAnchor = true;
+    try {
+      do {
+        await _loadMore();
+        if (!mounted) return;
 
+        final anchorKey = widget.preloadAnchorKey;
+        final matcher = widget.matchesPreloadAnchor;
+        if (anchorKey == null ||
+            matcher == null ||
+            _items.any(matcher) ||
+            _lastLoadFailed ||
+            !_hasMore) {
+          return;
+        }
+      } while (mounted);
+    } finally {
+      _isPreloadingAnchor = false;
+    }
+  }
+
+  Future<void> _loadMore() {
+    final activeLoad = _loadMoreFuture;
+    if (activeLoad != null) return activeLoad;
+
+    late final Future<void> load;
+    load = _performLoadMore().whenComplete(() {
+      if (identical(_loadMoreFuture, load)) {
+        _loadMoreFuture = null;
+      }
+    });
+    _loadMoreFuture = load;
+    return load;
+  }
+
+  Future<void> _performLoadMore() async {
+    if (_isLoading || !_hasMore) return;
+
+    _lastLoadFailed = false;
     setState(() => _isLoading = true);
 
     try {
@@ -316,6 +384,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
         });
       }
     } catch (e) {
+      _lastLoadFailed = true;
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(
@@ -364,6 +433,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   void dispose() {
     if (widget.tabScrollIndex != null) {
       _tabScrollRegistry?.unregister(widget.tabScrollIndex!, _scrollController);
+      final contentController = _contentScrollController;
+      if (contentController != null) {
+        _tabScrollRegistry?.unregisterContent(
+          widget.tabScrollIndex!,
+          contentController,
+        );
+      }
     }
     if (widget.scrollController == null) {
       _scrollController.dispose();
@@ -450,47 +526,74 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               actions: _buildActions(),
             ),
           ],
-          body: Column(
-            children: [
-              // ── 搜索栏 ──
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  child: _isSearchMode
-                      ? KeyedSubtree(
-                          key: const ValueKey('search_open'),
-                          child: _buildSearchBar(colorScheme),
-                        )
-                      : const SizedBox.shrink(key: ValueKey('search_closed')),
-                ),
-              ),
+          body: Builder(
+            builder: (bodyContext) {
+              _trackContentScrollController(bodyContext);
+              return Column(
+                children: [
+                  // ── 搜索栏 ──
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      child: _isSearchMode
+                          ? KeyedSubtree(
+                              key: const ValueKey('search_open'),
+                              child: _buildSearchBar(colorScheme),
+                            )
+                          : const SizedBox.shrink(
+                              key: ValueKey('search_closed'),
+                            ),
+                    ),
+                  ),
 
-              // ── 刷新进度指示条 ──
-              // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
-              if (widget.showExternalRefreshing ||
-                  _isRefreshing ||
-                  (_isLoading && _items.isNotEmpty))
-                LinearProgressIndicator(
-                  minHeight: 3,
-                  color: colorScheme.primary,
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                ),
+                  // ── 刷新进度指示条 ──
+                  // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
+                  if (widget.showExternalRefreshing ||
+                      _isRefreshing ||
+                      (_isLoading && _items.isNotEmpty))
+                    LinearProgressIndicator(
+                      minHeight: 3,
+                      color: colorScheme.primary,
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                    ),
 
-              // ── 主体内容 ──
-              Expanded(child: _buildBody(colorScheme, textTheme)),
-            ],
+                  // ── 主体内容 ──
+                  Expanded(child: _buildBody(colorScheme, textTheme)),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
+  }
+
+  void _trackContentScrollController(BuildContext context) {
+    final controller = PrimaryScrollController.maybeOf(context);
+    final tabIndex = widget.tabScrollIndex;
+    if (controller == null ||
+        tabIndex == null ||
+        identical(controller, _contentScrollController)) {
+      return;
+    }
+
+    final previous = _contentScrollController;
+    _contentScrollController = controller;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (previous != null) {
+        _tabScrollRegistry?.unregisterContent(tabIndex, previous);
+      }
+      _tabScrollRegistry?.registerContent(tabIndex, controller);
+    });
   }
 
   // ── 搜索栏 ──

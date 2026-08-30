@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -46,6 +47,8 @@ class ArticleListPage extends StatefulWidget {
   final bool dimReadArticles;
   final int? lastSeenArticleId;
   final void Function(int articleId)? onArticleVisible;
+  final VoidCallback? onUserScrollStart;
+  final VoidCallback? onUserScrollEnd;
 
   /// 返回筛选面板可用的期刊列表（懒加载，首次打开面板时调用）
   final Future<List<({int id, String name, String abbr})>> Function()?
@@ -78,6 +81,8 @@ class ArticleListPage extends StatefulWidget {
     this.dimReadArticles = true,
     this.lastSeenArticleId,
     this.onArticleVisible,
+    this.onUserScrollStart,
+    this.onUserScrollEnd,
     this.loadFilterJournals,
     this.loadFilterTags,
   });
@@ -92,6 +97,7 @@ class _ArticleListPageState extends State<ArticleListPage> {
   TabScrollRegistry? _tabScrollRegistry;
   int _lastReadMarkerIndex = -1;
   int _loadedArticleCount = 0;
+  final Map<int, int> _visibleArticleIndexes = {};
 
   // 筛选面板数据缓存，首次打开时懒加载，避免每次打开都重新查询 DB
   List<({int id, String name, String abbr})>? _cachedJournals;
@@ -116,12 +122,33 @@ class _ArticleListPageState extends State<ArticleListPage> {
     }
   }
 
+  void _notifyLastVisibleArticle() {
+    final onArticleVisible = widget.onArticleVisible;
+    if (onArticleVisible == null || _visibleArticleIndexes.isEmpty) return;
+    final lastVisible = _visibleArticleIndexes.entries.reduce(
+      (current, next) => current.value > next.value ? current : next,
+    );
+    onArticleVisible(lastVisible.key);
+  }
+
+  void _handleUserScrollStart() {
+    // 先结算启动布局留下的回调，此时 Feed 尚未允许更新边界。
+    VisibilityDetectorController.instance.notifyNow();
+    widget.onUserScrollStart?.call();
+  }
+
+  void _handleUserScrollEnd() {
+    // 在关闭用户滚动写入窗口前，立即结算手势的最终曝光位置。
+    VisibilityDetectorController.instance.notifyNow();
+    widget.onUserScrollEnd?.call();
+  }
+
   Future<bool> _scrollToLastReadMarker() async {
     var markerContext = _lastReadMarkerKey.currentContext;
     final tabIndex = widget.tabScrollIndex;
     if (markerContext == null &&
         tabIndex != null &&
-        _lastReadMarkerIndex > 0 &&
+        _lastReadMarkerIndex >= 0 &&
         _loadedArticleCount > 1) {
       await _tabScrollRegistry?.scrollToFraction(
         tabIndex,
@@ -134,11 +161,26 @@ class _ArticleListPageState extends State<ArticleListPage> {
       return false;
     }
 
-    await Scrollable.ensureVisible(
-      markerContext,
+    final renderObject = markerContext.findRenderObject();
+    final scrollable = Scrollable.maybeOf(markerContext);
+    if (renderObject == null || scrollable == null) {
+      return false;
+    }
+    final viewport = RenderAbstractViewport.maybeOf(renderObject);
+    if (viewport == null) return false;
+
+    final position = scrollable.position;
+    final revealedOffset = viewport
+        .getOffsetToReveal(renderObject, 0.92)
+        .offset;
+    final targetOffset = revealedOffset.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    await position.animateTo(
+      targetOffset,
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeOutCubic,
-      alignment: 0.08,
     );
     return true;
   }
@@ -207,6 +249,12 @@ class _ArticleListPageState extends State<ArticleListPage> {
       autoRefreshOnInit: widget.autoRefreshOnInit,
       showExternalRefreshing: widget.showExternalRefreshing,
       externalRefreshSignal: widget.externalRefreshSignal,
+      onUserScrollStart: _handleUserScrollStart,
+      onUserScrollEnd: _handleUserScrollEnd,
+      preloadAnchorKey: _filter.isActive ? null : widget.lastSeenArticleId,
+      matchesPreloadAnchor: _filter.isActive || widget.lastSeenArticleId == null
+          ? null
+          : (article) => article.articleId == widget.lastSeenArticleId,
       skeletonCount: 6,
       skeletonBuilder: (cs) => _ArticleSkeletonCard(colorScheme: cs),
       itemBuilder:
@@ -257,8 +305,11 @@ class _ArticleListPageState extends State<ArticleListPage> {
                 key: ValueKey('article-visibility-${article.articleId}'),
                 onVisibilityChanged: (info) {
                   if (info.visibleFraction > 0) {
-                    widget.onArticleVisible!(article.articleId);
+                    _visibleArticleIndexes[article.articleId] = index;
+                  } else {
+                    _visibleArticleIndexes.remove(article.articleId);
                   }
+                  _notifyLastVisibleArticle();
                 },
                 child: card,
               );
@@ -267,10 +318,10 @@ class _ArticleListPageState extends State<ArticleListPage> {
             final boundary = widget.lastSeenArticleId;
             final markerIndex = boundary == null
                 ? -1
-                : allArticles.indexWhere((item) => item.articleId <= boundary);
+                : allArticles.indexWhere((item) => item.articleId == boundary);
             _lastReadMarkerIndex = markerIndex;
             _loadedArticleCount = allArticles.length;
-            final showLastReadMarker = markerIndex > 0 && index == markerIndex;
+            final showLastReadMarker = markerIndex >= 0 && index == markerIndex;
             if (!showLastReadMarker) return card;
 
             return Column(
