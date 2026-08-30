@@ -64,7 +64,7 @@ jobs:
       - name: Build Android APK
         shell: bash
         run: |
-          version="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          version="$(tr -d '[:space:]' < ../VERSION)"
           build_name="${version%%+*}"
           build_number="${version#*+}"
 
@@ -73,11 +73,14 @@ jobs:
           fi
 
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="${GITHUB_REF_NAME#v}"
-            build_name="${version%%+*}"
-            build_number="${version#*+}"
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [ "${tag_version%%+*}" != "${build_name}" ]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match VERSION ${version}."
+              exit 1
+            fi
+            build_number="${tag_version#*+}"
 
-            if [ "${build_number}" = "${version}" ]; then
+            if [ "${build_number}" = "${tag_version}" ]; then
               build_number="${GITHUB_RUN_NUMBER}"
             fi
           fi

@@ -55,7 +55,19 @@ jobs:
           fi
 
       - name: Build Flutter Web
-        run: flutter build web --release --base-href "${{ steps.base-href.outputs.value }}"
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < ../VERSION)"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && \
+             [ "${GITHUB_REF_NAME#v}" != "${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION ${version}."
+            exit 1
+          fi
+          flutter build web \
+            --release \
+            --build-name "${version}" \
+            --build-number "${GITHUB_RUN_NUMBER}" \
+            --base-href "${{ steps.base-href.outputs.value }}"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
