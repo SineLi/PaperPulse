@@ -13,8 +13,7 @@ from utils.logging_utils import configure_logging, log_event
 logger = logging.getLogger(__name__)
 STEP_WARN_AFTER_SECS = 5 * 60
 CYCLE_WARN_AFTER_SECS = 50 * 60
-_cycle_active = threading.Event()
-_cycle_lock = threading.Lock()
+_scheduler_work_lock = threading.Lock()
 
 
 try:
@@ -33,21 +32,19 @@ def _log_step_duration(step_name: str, started_at: float):
 
 
 def cycle_job():
-    if not _cycle_lock.acquire(blocking=False):
+    if not _scheduler_work_lock.acquire(blocking=False):
         log_event(
             logger,
             logging.INFO,
             "scheduler_cycle_skipped",
-            reason="cycle_already_active",
+            reason="scheduler_work_active",
         )
         return
 
-    _cycle_active.set()
     try:
         _run_cycle_job()
     finally:
-        _cycle_active.clear()
-        _cycle_lock.release()
+        _scheduler_work_lock.release()
 
 
 def _run_cycle_job():
@@ -91,26 +88,26 @@ def _run_cycle_job():
 
 def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
     started_at = time.monotonic()
-    if _cycle_active.is_set():
+    if not _scheduler_work_lock.acquire(blocking=False):
         log_event(
             logger,
             logging.INFO,
             "scheduler_step_skipped",
             step="image_cache_backfill",
-            reason="crawler_cycle_active",
+            reason="scheduler_work_active",
         )
         return
 
-    service = ArticleService()
-    log_event(
-        logger,
-        logging.INFO,
-        "scheduler_step_started",
-        step="image_cache_backfill",
-        limit=limit,
-        scan_limit=scan_limit,
-    )
     try:
+        service = ArticleService()
+        log_event(
+            logger,
+            logging.INFO,
+            "scheduler_step_started",
+            step="image_cache_backfill",
+            limit=limit,
+            scan_limit=scan_limit,
+        )
         result = asyncio.run(
             service.cache_missing_article_images_async(
                 limit=limit,
@@ -122,6 +119,7 @@ def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
         logger.exception("event=scheduler_step_failed step=image_cache_backfill detail=%s", e)
     finally:
         _log_step_duration("image_cache_backfill", started_at)
+        _scheduler_work_lock.release()
 
 
 

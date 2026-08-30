@@ -148,7 +148,7 @@ class BaseFetcher(ABC):
         content = ""
         try:
             for i in range(PLAYWRIGHT_ATTEMPTS):
-                async with self.browser_manager.add_page() as page:
+                async with self.browser_manager.add_page(user_agent=self.user_agent) as page:
                     try:
                         log_event(
                             logger,

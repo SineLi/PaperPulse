@@ -31,11 +31,13 @@ class FakeBrowserHandle:
         self.close_started = asyncio.Event()
         self.release_close = asyncio.Event()
         self.close_completed = False
+        self.context_options = []
 
     def is_connected(self):
         return self.connected
 
-    async def new_context(self):
+    async def new_context(self, **kwargs):
+        self.context_options.append(kwargs)
         if self.fail_new_context:
             raise RuntimeError("context_failed")
         return FakeContext()
@@ -116,6 +118,16 @@ class BrowserManagerTests(unittest.TestCase):
 
 
 class BrowserManagerAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_passes_user_agent_to_new_context(self):
+        manager = BrowserManager(max_browsers=1, max_browser_pages=1)
+
+        async with manager.add_page(user_agent="PaperPulse/Test"):
+            pass
+
+        browser_handle = manager.browser_pool[0].browser
+        self.assertEqual(browser_handle.context_options, [{"user_agent": "PaperPulse/Test"}])
+        await manager.close_all_browsers()
+
     async def test_refresh_cancellation_closes_new_browser_started_during_launch(self):
         manager = BrowserManager(max_browsers=1, max_browser_pages=1)
         await manager.init_browser_pool()

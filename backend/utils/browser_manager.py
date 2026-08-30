@@ -74,12 +74,14 @@ class Browser:
         else:
             self.browser = None
 
-    async def get_browser_context(self):
+    async def get_browser_context(self, user_agent: str | None = None):
         if not self.is_connected:
             # BrowserManager 负责替换断连实例，避免多个页面协程在这里并发启动 Chromium。
             raise RuntimeError("browser_disconnected")
         if self.browser is None:
             raise RuntimeError("browser_unavailable")
+        if user_agent:
+            return await self.browser.new_context(user_agent=user_agent)
         return await self.browser.new_context()
 
 
@@ -205,7 +207,7 @@ class BrowserManager:
         yield await self._acquire_browser()
 
     @asynccontextmanager
-    async def add_page(self):
+    async def add_page(self, user_agent: str | None = None):
         await self.init_browser_pool()
         semaphore = self._semaphore
         if semaphore is None:
@@ -216,7 +218,7 @@ class BrowserManager:
         async with semaphore:
             async with self._get_browser() as browser:
                 try:
-                    context = await browser.get_browser_context()
+                    context = await browser.get_browser_context(user_agent=user_agent)
                     page = await context.new_page()
                 except BaseException as exc:
                     await self._close_page_resources(page, context)

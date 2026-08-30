@@ -44,26 +44,48 @@ import scheduler
 
 class SchedulerCycleTests(unittest.TestCase):
     def test_skips_reentrant_cycle(self):
-        scheduler._cycle_lock.acquire()
+        scheduler._scheduler_work_lock.acquire()
         try:
             with patch.object(scheduler, "_run_cycle_job") as run_cycle:
                 scheduler.cycle_job()
             run_cycle.assert_not_called()
         finally:
-            scheduler._cycle_lock.release()
+            scheduler._scheduler_work_lock.release()
 
-    def test_marks_cycle_active_while_running(self):
+    def test_cycle_holds_shared_lock_for_full_execution(self):
         observed_states = []
 
         def observe_cycle():
-            observed_states.append(scheduler._cycle_active.is_set())
+            observed_states.append(scheduler._scheduler_work_lock.locked())
 
         with patch.object(scheduler, "_run_cycle_job", side_effect=observe_cycle):
             scheduler.cycle_job()
 
         self.assertEqual(observed_states, [True])
-        self.assertFalse(scheduler._cycle_active.is_set())
-        self.assertFalse(scheduler._cycle_lock.locked())
+        self.assertFalse(scheduler._scheduler_work_lock.locked())
+
+    def test_skips_image_backfill_while_scheduler_work_is_active(self):
+        scheduler._scheduler_work_lock.acquire()
+        try:
+            with patch.object(scheduler, "ArticleService") as article_service:
+                scheduler.image_cache_backfill_job()
+            article_service.assert_not_called()
+        finally:
+            scheduler._scheduler_work_lock.release()
+
+    def test_image_backfill_holds_shared_lock_for_full_execution(self):
+        observed_states = []
+
+        class FakeArticleService:
+            async def cache_missing_article_images_async(self, **kwargs):
+                observed_states.append(scheduler._scheduler_work_lock.locked())
+                return {}
+
+        with patch.object(scheduler, "ArticleService", FakeArticleService):
+            scheduler.image_cache_backfill_job()
+
+        self.assertEqual(observed_states, [True])
+        self.assertFalse(scheduler._scheduler_work_lock.locked())
 
 
 if __name__ == "__main__":

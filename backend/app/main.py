@@ -53,13 +53,18 @@ app.mount("/media", CachedStaticFiles(directory=str(media_dir)), name="media")
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    log_errors = [
+        {"type": error.get("type"), "loc": error.get("loc")}
+        for error in errors
+    ]
     logger.warning(
         "event=request_validation_failed method=%s path=%s errors=%s",
         request.method,
         request.url.path,
-        exc.errors(),
+        log_errors,
     )
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @app.exception_handler(Exception)
