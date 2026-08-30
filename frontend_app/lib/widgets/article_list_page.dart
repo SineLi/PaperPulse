@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../data/models/article.dart';
 import '../data/models/article_filter.dart';
 import '../data/models/article_detail_callbacks.dart';
+import '../navigation/tab_scroll_registry.dart';
 import 'article_filter_sheet.dart';
 import 'feed_card.dart';
 import 'last_read_marker.dart';
@@ -86,10 +88,72 @@ class ArticleListPage extends StatefulWidget {
 
 class _ArticleListPageState extends State<ArticleListPage> {
   ArticleFilter _filter = ArticleFilter.empty;
+  final GlobalKey _lastReadMarkerKey = GlobalKey();
+  TabScrollRegistry? _tabScrollRegistry;
+  int _lastReadMarkerIndex = -1;
+  int _loadedArticleCount = 0;
 
   // 筛选面板数据缓存，首次打开时懒加载，避免每次打开都重新查询 DB
   List<({int id, String name, String abbr})>? _cachedJournals;
   List<String>? _cachedTags;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final registry = context.read<TabScrollRegistry>();
+    if (_tabScrollRegistry == registry) return;
+
+    final tabIndex = widget.tabScrollIndex;
+    if (_tabScrollRegistry != null && tabIndex != null) {
+      _tabScrollRegistry!.unregisterBoundaryScroller(
+        tabIndex,
+        _scrollToLastReadMarker,
+      );
+    }
+    _tabScrollRegistry = registry;
+    if (tabIndex != null) {
+      registry.registerBoundaryScroller(tabIndex, _scrollToLastReadMarker);
+    }
+  }
+
+  Future<bool> _scrollToLastReadMarker() async {
+    var markerContext = _lastReadMarkerKey.currentContext;
+    final tabIndex = widget.tabScrollIndex;
+    if (markerContext == null &&
+        tabIndex != null &&
+        _lastReadMarkerIndex > 0 &&
+        _loadedArticleCount > 1) {
+      await _tabScrollRegistry?.scrollToFraction(
+        tabIndex,
+        _lastReadMarkerIndex / (_loadedArticleCount - 1),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      markerContext = _lastReadMarkerKey.currentContext;
+    }
+    if (!mounted || markerContext == null || !markerContext.mounted) {
+      return false;
+    }
+
+    await Scrollable.ensureVisible(
+      markerContext,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
+    );
+    return true;
+  }
+
+  @override
+  void dispose() {
+    final tabIndex = widget.tabScrollIndex;
+    if (tabIndex != null) {
+      _tabScrollRegistry?.unregisterBoundaryScroller(
+        tabIndex,
+        _scrollToLastReadMarker,
+      );
+    }
+    super.dispose();
+  }
 
   Future<void> _openFilterSheet() async {
     // 首次打开时并行加载期刊和标签数据
@@ -201,15 +265,20 @@ class _ArticleListPageState extends State<ArticleListPage> {
             }
 
             final boundary = widget.lastSeenArticleId;
-            final showLastReadMarker =
-                boundary != null &&
-                article.articleId == boundary &&
-                allArticles.any((item) => item.articleId > boundary);
+            final markerIndex = boundary == null
+                ? -1
+                : allArticles.indexWhere((item) => item.articleId <= boundary);
+            _lastReadMarkerIndex = markerIndex;
+            _loadedArticleCount = allArticles.length;
+            final showLastReadMarker = markerIndex > 0 && index == markerIndex;
             if (!showLastReadMarker) return card;
 
             return Column(
               mainAxisSize: MainAxisSize.min,
-              children: [const LastReadMarker(), card],
+              children: [
+                LastReadMarker(key: _lastReadMarkerKey),
+                card,
+              ],
             );
           },
     );
