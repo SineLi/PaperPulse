@@ -114,17 +114,27 @@ class _JournalListPageState extends State<JournalListPage> {
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 8,
       skeletonBuilder: (cs) => _JournalSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, journal, index, allItems, updateItem, updateItemById) {
-        return JournalCard(
-          journal: journal,
-          isFollowed: widget.isFollowed(journal.journalId),
-          onFollowChanged: widget.onFollowChanged == null
-              ? null
-              : (follow) async {
-                  await widget.onFollowChanged!(journal, follow);
-                },
-        );
-      },
+      itemBuilder:
+          (
+            ctx,
+            journal,
+            index,
+            allItems,
+            isSearchActive,
+            updateItem,
+            updateItemById,
+            removeItemById,
+          ) {
+            return JournalCard(
+              journal: journal,
+              isFollowed: widget.isFollowed(journal.journalId),
+              onFollowChanged: widget.onFollowChanged == null
+                  ? null
+                  : (follow) async {
+                      await widget.onFollowChanged!(journal, follow);
+                    },
+            );
+          },
     );
   }
 }

@@ -157,23 +157,6 @@ class ArticleDatabaseIO {
     return articles;
   }
 
-  Future<void> setFavoriteWithSync(int id, bool isFavorite) async {
-    final db = await dbHelper.database;
-    await db.transaction((txn) async {
-      await txn.update(
-        Article.tableArticles,
-        {Article.colIsFavorite: isFavorite ? 1 : 0},
-        where: '${Article.colId} = ?',
-        whereArgs: [id],
-      );
-      await txn.insert("sync_queue", {
-        'article_id': id,
-        'action': isFavorite ? 'favorite' : 'unfavorite',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-    });
-  }
-
   Future<void> setReadWithSync(int id, bool isRead) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
@@ -214,6 +197,27 @@ class ArticleDatabaseIO {
     await db.insert('metadata', {
       'key': 'last_feed_sync_id',
       'value': id.toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// 获取上一次已经真实出现在首页视口中的最新文章 ID。
+  Future<int> getLastSeenFeedArticleId() async {
+    final db = await dbHelper.database;
+    final result = await db.query(
+      'metadata',
+      where: 'key = ?',
+      whereArgs: ['last_seen_feed_article_id'],
+    );
+    if (result.isEmpty) return 0;
+    return int.tryParse(result.first['value'] as String) ?? 0;
+  }
+
+  /// 保存最后一次曝光的文章 ID，作为下次启动时的阅读分界。
+  Future<void> setLastSeenFeedArticleId(int articleId) async {
+    final db = await dbHelper.database;
+    await db.insert('metadata', {
+      'key': 'last_seen_feed_article_id',
+      'value': articleId.toString(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -263,6 +267,32 @@ class ArticleDatabaseIO {
       baseWhere:
           '(${Article.colSummary} LIKE ? OR ${Article.colTitle} LIKE ? OR ${Article.colJournalName} LIKE ?)',
       baseArgs: [pattern, pattern, pattern],
+    );
+    final maps = await db.query(
+      Article.tableArticles,
+      where: q.where,
+      whereArgs: q.whereArgs,
+      orderBy: q.orderBy,
+      limit: limit,
+      offset: offset,
+    );
+    return maps.map((map) => Article.fromMap(map)).toList();
+  }
+
+  /// 仅在已收藏文章中搜索标题、摘要或期刊名。
+  Future<List<Article>> searchFavoriteArticles(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final db = await dbHelper.database;
+    final pattern = '%$query%';
+    final q = _buildFilterQuery(
+      ArticleFilter.empty,
+      baseWhere:
+          '${Article.colIsFavorite} = ? AND '
+          '(${Article.colSummary} LIKE ? OR ${Article.colTitle} LIKE ? OR ${Article.colJournalName} LIKE ?)',
+      baseArgs: [1, pattern, pattern, pattern],
     );
     final maps = await db.query(
       Article.tableArticles,
