@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 
@@ -34,8 +35,10 @@ Future<void> main() async {
 
   final settingsController = SettingsController(SettingStorage());
   await settingsController.load();
+  final packageInfo = await PackageInfo.fromPlatform();
   final backendStatusController = BackendStatusController(
     BackendStatusService(),
+    clientVersion: packageInfo.version,
   );
   final configuredBaseUrl = settingsController.setting.baseURL.trim();
   if (configuredBaseUrl.isNotEmpty) {

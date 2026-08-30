@@ -10,7 +10,6 @@ import '../data/auth/auth_services.dart';
 import '../data/db/articledb.dart';
 import '../data/models/user.dart';
 import '../data/service/backend_status_service.dart';
-import '../app_version.dart';
 import '../settings/feed_card_style.dart';
 import '../settings/settings_controller.dart';
 import '../widgets/policy_dialog.dart';
@@ -27,7 +26,8 @@ class SettingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasUpdate = context.watch<BackendStatusController>().hasUpdate;
+    final backendStatus = context.watch<BackendStatusController>();
+    final hasUpdate = backendStatus.hasUpdate;
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -72,7 +72,7 @@ class SettingPage extends StatelessWidget {
                     if (hasUpdate) ...[const SizedBox(width: 8), const Badge()],
                   ],
                 ),
-                subtitle: Text('$_appName v$appVersion'),
+                subtitle: Text('$_appName v${backendStatus.clientVersion}'),
                 onTap: () => context.push('/settings/about'),
               ),
               SizedBox(height: 48),
@@ -625,6 +625,7 @@ class AboutPage extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final backendStatus = context.watch<BackendStatusController>();
     final hasUpdate = backendStatus.hasUpdate;
+    final appVersion = backendStatus.clientVersion;
 
     return Scaffold(
       body: CustomScrollView(

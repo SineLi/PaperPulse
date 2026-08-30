@@ -157,4 +157,7 @@ docker compose up -d
 
 本项目仍在持续迭代中，功能和界面会继续优化。  
 
+项目发布版本以根目录的 `VERSION` 为准。升级版本时运行
+`python scripts/version.py set <新版本>`，脚本会同步 Flutter 清单；CI 会检查两者是否一致。
+
 > 注意：大语言模型生成的内容可能不完全准确，请以原文为准。

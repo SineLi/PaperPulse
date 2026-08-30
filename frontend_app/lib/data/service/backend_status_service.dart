@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../../app_version.dart';
-
 class BackendStatus {
   final String version;
 
@@ -65,8 +63,9 @@ class BackendStatusService {
 
 class BackendStatusController extends ChangeNotifier {
   final BackendStatusService _service;
+  final String clientVersion;
 
-  BackendStatusController(this._service);
+  BackendStatusController(this._service, {required this.clientVersion});
 
   BackendStatus? _status;
   bool _isChecking = false;
@@ -74,9 +73,9 @@ class BackendStatusController extends ChangeNotifier {
   BackendStatus? get status => _status;
   bool get isChecking => _isChecking;
   bool get hasUpdate =>
-      _status != null && compareVersions(_status!.version, appVersion) > 0;
+      _status != null && compareVersions(_status!.version, clientVersion) > 0;
   bool get hasVersionMismatch =>
-      _status != null && compareVersions(_status!.version, appVersion) != 0;
+      _status != null && compareVersions(_status!.version, clientVersion) != 0;
 
   Future<BackendStatus> check(String baseUrl) async {
     _isChecking = true;

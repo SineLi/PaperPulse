@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -26,6 +27,12 @@ class ServiceStatusTests(unittest.TestCase):
 
     def test_status_does_not_require_redis(self):
         self.assertEqual(service_status()["status"], "ok")
+
+    def test_backend_uses_the_project_version(self):
+        project_version = (
+            Path(__file__).resolve().parents[2] / "VERSION"
+        ).read_text(encoding="utf-8").strip()
+        self.assertEqual(APP_VERSION, project_version)
 
 
 if __name__ == "__main__":

@@ -42,11 +42,12 @@ void main() {
       BackendStatusService(
         client: MockClient(
           (_) async => http.Response(
-            '{"status":"ok","service":"paperpulse-backend","version":"0.0.5"}',
+            '{"status":"ok","service":"paperpulse-backend","version":"0.0.6"}',
             200,
           ),
         ),
       ),
+      clientVersion: '0.0.5',
     );
 
     await controller.check('https://example.test');
