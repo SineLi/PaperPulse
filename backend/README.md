@@ -58,6 +58,10 @@ SMTP_USERNAME=your-smtp-user
 SMTP_KEY=your-smtp-password
 SOURCE_EMAIL=donotreply@example.com
 CORS_ORIGINS=https://app.example.com,https://admin.example.com
+DB_CONNECT_TIMEOUT_SECS=10
+DB_POOL_TIMEOUT_SECS=10
+DB_STATEMENT_TIMEOUT_MS=60000
+DB_LOCK_TIMEOUT_MS=10000
 ARTICLE_FETCH_EXECUTOR_WORKERS=8
 ARTICLE_FETCH_EXECUTOR_TIMEOUT_SECS=1800
 IMAGE_CACHE_EXECUTOR_WORKERS=2
@@ -71,6 +75,8 @@ BROWSER_MAX_PAGES=4
 - 缺少 `LM_API_KEY` 或 `Elsevier_KEY` 时，部分摘要/抓取能力会受限
 - 缺少 SMTP 配置时，验证码邮件无法发送
 - 当前代码里虽然读取了 `CORS_ORIGINS`，但还没有接入白名单逻辑，发布前需要补齐
+- 数据库连接、连接池等待、SQL 执行和锁等待分别由 `DB_*_TIMEOUT_*` 配置限制，
+  避免同步数据库线程使调度周期无限阻塞
 - 文章详情的实际并发上限取 `ARTICLE_FETCH_EXECUTOR_WORKERS` 与
   `BROWSER_POOL_SIZE * BROWSER_MAX_PAGES` 中的较小值
 - 文章执行器超时会取消尚未完成的详情任务，只入库已完成部分；图片执行器超时
