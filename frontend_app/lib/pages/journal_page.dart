@@ -98,7 +98,7 @@ class _JournalPageState extends State<JournalPage> {
       loadFilterPublishers: journalRepo.getFilterablePublishers,
       loadFilterCasCategories: journalRepo.getFilterableCasCategories,
       showExternalRefreshing: postAuthSyncService.isSyncing,
-      externalRefreshSignal: postAuthSyncService.completedSyncCount,
+      externalRefreshSignal: postAuthSyncService.journalCatalogRefreshCount,
       onSettings: () {},
       emptyIcon: Icons.book_outlined,
       emptyTitle: '暂无期刊',

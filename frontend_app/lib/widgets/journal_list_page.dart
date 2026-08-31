@@ -67,6 +67,15 @@ class _JournalListPageState extends State<JournalListPage> {
   List<String>? _cachedPublishers;
   List<String>? _cachedCasCategories;
 
+  @override
+  void didUpdateWidget(covariant JournalListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.externalRefreshSignal != widget.externalRefreshSignal) {
+      _cachedPublishers = null;
+      _cachedCasCategories = null;
+    }
+  }
+
   Future<void> _openFilterSheet() async {
     // 第一次打开时并行拉取出版商 & CAS 分区
     if (_cachedPublishers == null || _cachedCasCategories == null) {

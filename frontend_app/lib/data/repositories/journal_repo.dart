@@ -3,6 +3,16 @@ import '../db/journaldb.dart';
 import '../models/journal.dart';
 import '../models/journal_filter.dart';
 
+class JournalCatalogSyncResult {
+  final bool changed;
+  final int journalCount;
+
+  const JournalCatalogSyncResult({
+    required this.changed,
+    required this.journalCount,
+  });
+}
+
 class JournalRepo {
   final JournalService _journalService;
   final JournalDatabaseIO _journalDatabaseIO;
@@ -50,7 +60,7 @@ class JournalRepo {
     );
   }
 
-  Future<int> syncJournalsIfNeeded({
+  Future<JournalCatalogSyncResult> syncJournalsIfNeeded({
     int pageSize = 1000,
     int maxAttempts = 2,
   }) async {
@@ -62,7 +72,7 @@ class JournalRepo {
     var expectedStatus = await _journalService.fetchCatalogStatus();
     if (localCount == expectedStatus.count &&
         localRevision == expectedStatus.revision) {
-      return 0;
+      return JournalCatalogSyncResult(changed: false, journalCount: localCount);
     }
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
@@ -92,7 +102,10 @@ class JournalRepo {
           journals,
           revision: actualStatus.revision,
         );
-        return journals.length;
+        return JournalCatalogSyncResult(
+          changed: true,
+          journalCount: journals.length,
+        );
       }
 
       expectedStatus = actualStatus;
@@ -103,6 +116,8 @@ class JournalRepo {
     );
   }
 
-  Future<int> syncJournalsEmpty({int pageSize = 1000}) =>
-      syncJournalsIfNeeded(pageSize: pageSize);
+  Future<int> syncJournalsEmpty({int pageSize = 1000}) async {
+    final result = await syncJournalsIfNeeded(pageSize: pageSize);
+    return result.changed ? result.journalCount : 0;
+  }
 }

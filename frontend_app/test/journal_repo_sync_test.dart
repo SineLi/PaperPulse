@@ -95,7 +95,8 @@ void main() {
 
       final synced = await repo.syncJournalsIfNeeded(pageSize: 2);
 
-      expect(synced, 0);
+      expect(synced.changed, isFalse);
+      expect(synced.journalCount, 2);
       expect(service.journalCalls, 0);
       expect(database.replacement, isNull);
     },
@@ -121,7 +122,8 @@ void main() {
 
       final synced = await repo.syncJournalsIfNeeded(pageSize: 2);
 
-      expect(synced, 3);
+      expect(synced.changed, isTrue);
+      expect(synced.journalCount, 3);
       expect(database.replacement?.map((journal) => journal.journalId), [
         1,
         2,
@@ -154,5 +156,28 @@ void main() {
     );
 
     expect(database.replacement, isNull);
+  });
+
+  test('reports a changed catalog when the replacement is empty', () async {
+    final service = _FakeJournalService()
+      ..statuses.addAll(const [
+        JournalCatalogStatus(revision: '8', count: 0),
+        JournalCatalogStatus(revision: '8', count: 0),
+      ])
+      ..pages[0] = [];
+    final database = _FakeJournalDatabase()
+      ..count = 2
+      ..revision = '7';
+    final repo = JournalRepo(
+      journalService: service,
+      journalDatabaseIO: database,
+    );
+
+    final synced = await repo.syncJournalsIfNeeded(pageSize: 2);
+
+    expect(synced.changed, isTrue);
+    expect(synced.journalCount, 0);
+    expect(database.replacement, isEmpty);
+    expect(database.replacementRevision, '8');
   });
 }
