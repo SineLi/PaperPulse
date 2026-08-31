@@ -50,33 +50,59 @@ class JournalRepo {
     );
   }
 
-  Future<int> syncJournalsEmpty({int pageSize = 1000}) async {
+  Future<int> syncJournalsIfNeeded({
+    int pageSize = 1000,
+    int maxAttempts = 2,
+  }) async {
+    if (pageSize <= 0) throw ArgumentError.value(pageSize, 'pageSize');
+    if (maxAttempts <= 0) throw ArgumentError.value(maxAttempts, 'maxAttempts');
+
     final localCount = await _journalDatabaseIO.getJournalCount();
-    if (localCount > 0) {
+    final localRevision = await _journalDatabaseIO.getCatalogRevision();
+    var expectedStatus = await _journalService.fetchCatalogStatus();
+    if (localCount == expectedStatus.count &&
+        localRevision == expectedStatus.revision) {
       return 0;
     }
 
-    int totalAdded = 0;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final journals = <Journal>[];
 
-    for (var offset = 0; ; offset += pageSize) {
-      final journals = await _journalService.fetchJournals(
-        limit: pageSize,
-        offset: offset,
-      );
+      for (var offset = 0; ; offset += pageSize) {
+        final page = await _journalService.fetchJournals(
+          limit: pageSize,
+          offset: offset,
+        );
+        journals.addAll(page);
 
-      if (journals.isEmpty) {
-        break;
+        if (page.length < pageSize) break;
       }
 
-      await _journalDatabaseIO.addJournals(journals);
-      totalAdded += journals.length;
-
-      if (journals.length < pageSize) {
-        // Last batch fetched
-        break;
+      final actualStatus = await _journalService.fetchCatalogStatus();
+      final uniqueJournalCount = journals
+          .map((journal) => journal.journalId)
+          .toSet()
+          .length;
+      final isConsistent =
+          actualStatus.revision == expectedStatus.revision &&
+          journals.length == actualStatus.count &&
+          uniqueJournalCount == actualStatus.count;
+      if (isConsistent) {
+        await _journalDatabaseIO.replaceJournals(
+          journals,
+          revision: actualStatus.revision,
+        );
+        return journals.length;
       }
+
+      expectedStatus = actualStatus;
     }
 
-    return totalAdded;
+    throw StateError(
+      'Journal catalog changed repeatedly during synchronization',
+    );
   }
+
+  Future<int> syncJournalsEmpty({int pageSize = 1000}) =>
+      syncJournalsIfNeeded(pageSize: pageSize);
 }

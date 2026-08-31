@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 
 class JournalDatabaseIO {
   final DatabaseHelper dbHelper = DatabaseHelper.instance;
+  static const String _catalogRevisionKey = 'journal_catalog_revision';
 
   Future<int> addJournal(Journal journal) async {
     final db = await dbHelper.database;
@@ -145,6 +146,18 @@ class JournalDatabaseIO {
     return result ?? 0;
   }
 
+  Future<String?> getCatalogRevision() async {
+    final db = await dbHelper.database;
+    final rows = await db.query(
+      'metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [_catalogRevisionKey],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['value'] as String;
+  }
+
   /// 搜索期刊（按名称、缩写、出版商模糊匹配）
   Future<List<Journal>> searchJournals(
     String query, {
@@ -176,5 +189,28 @@ class JournalDatabaseIO {
       );
     }
     await batch.commit(noResult: true);
+  }
+
+  Future<void> replaceJournals(
+    List<Journal> journals, {
+    required String revision,
+  }) async {
+    final db = await dbHelper.database;
+    await db.transaction((transaction) async {
+      await transaction.delete(Journal.tableJournals);
+      final batch = transaction.batch();
+      for (final journal in journals) {
+        batch.insert(
+          Journal.tableJournals,
+          journal.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      batch.insert('metadata', {
+        'key': _catalogRevisionKey,
+        'value': revision,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await batch.commit(noResult: true);
+    });
   }
 }

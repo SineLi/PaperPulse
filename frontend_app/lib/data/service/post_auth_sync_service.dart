@@ -58,7 +58,7 @@ class PostAuthSyncService extends ChangeNotifier {
   }
 
   Future<void> _performSyncAfterAuth() async {
-    await _journalRepo.syncJournalsEmpty();
+    await _journalRepo.syncJournalsIfNeeded();
     await _userRepo.syncSubscribedJournalIds();
     await _syncService.pullStatus();
     _lastNewArticleCount = await _feedRepo.refreshArticles();
