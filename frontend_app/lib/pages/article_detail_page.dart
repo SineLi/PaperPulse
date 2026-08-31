@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/models/article_view_data.dart';
 import '../data/db/articledb.dart';
+import '../data/service/sync_service.dart';
 import '../settings/settings_controller.dart';
 import '../widgets/cached_image.dart';
 
@@ -34,12 +35,14 @@ class ArticleDetailPage extends StatefulWidget {
   final String source; // 用于分析入口来源
   // 可选回调：从列表页进入时，用来同步更新发起页的已读状态。
   final void Function(int articleId)? onArticleRead;
+  final void Function(int articleId, bool isFavorite)? onFavoriteChanged;
 
   const ArticleDetailPage({
     super.key,
     required this.articleId,
     required this.source,
     this.onArticleRead,
+    this.onFavoriteChanged,
   });
 
   @override
@@ -59,6 +62,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   bool _barsVisible = true;
   double _lastScrollOffset = 0;
   late bool _isFavorite;
+  bool _isUpdatingFavorite = false;
   bool _suppressScrollListener = false;
   late ValueKey<int> _contentKey;
   bool _animateContentSwitch = false;
@@ -345,11 +349,16 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
   }
 
   Future<void> _toggleFavorite() async {
-    if (!_hasData) return;
-    final db = context.read<ArticleDatabaseIO>();
+    if (!_hasData || _isUpdatingFavorite) return;
     final newState = !_isFavorite;
-    await db.setFavoriteWithSync(_viewData.id, newState);
-    if (mounted) {
+    setState(() => _isUpdatingFavorite = true);
+
+    try {
+      await context.read<SyncService>().setFavoriteImmediately(
+        _viewData.id,
+        newState,
+      );
+      if (!mounted) return;
       final updatedView = ArticleViewData.fromArticle(
         _viewData.article.copyWith(isFavorite: newState),
       );
@@ -358,6 +367,20 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
         _viewData = updatedView;
         _isFavorite = newState;
       });
+      widget.onFavoriteChanged?.call(_viewData.id, newState);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(newState ? '已收藏' : '已取消收藏')));
+    } catch (error) {
+      debugPrint('更新收藏状态失败: $error');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('收藏操作失败，请稍后重试')));
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingFavorite = false);
+      }
     }
   }
 
@@ -989,7 +1012,7 @@ class _ArticleDetailPageState extends State<ArticleDetailPage> {
                 ),
                 color: _isFavorite ? colorScheme.error : null,
                 tooltip: _isFavorite ? '取消收藏' : '收藏',
-                onPressed: _toggleFavorite,
+                onPressed: _isUpdatingFavorite ? null : _toggleFavorite,
               ),
 
               // 分享

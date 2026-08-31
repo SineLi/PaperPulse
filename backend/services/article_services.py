@@ -1,14 +1,19 @@
 import logging
+import asyncio
 import json
+import os
 from typing import Optional, List, Union, TypedDict
 
 from sqlalchemy import text
 from db.database import get_db_connection
-from services.image_service import ImageService, ImageCache
+from services.image_service import ImageService
 from utils.logging_utils import log_event
+from utils.task_executor import ImageCacheTask, TaskExecutor
 
 
 logger = logging.getLogger(__name__)
+IMAGE_CACHE_EXECUTOR_WORKERS = int(os.getenv("IMAGE_CACHE_EXECUTOR_WORKERS", "2"))
+IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS = float(os.getenv("IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS", "600"))
 
 
 class Article(TypedDict):
@@ -131,11 +136,13 @@ class ArticleService:
 
                 if not abstract:
                     if fetch_status != "ok":
-                        logger.warning(
-                            "Skip non-article classification due fetch status: title=%s, status=%s, reason=%s",
-                            title,
-                            fetch_status,
-                            fetch_fail_reason,
+                        log_event(
+                            logger,
+                            logging.WARNING,
+                            "non_article_classification_skipped_due_fetch_status",
+                            title=title,
+                            status=fetch_status,
+                            reason=fetch_fail_reason,
                         )
                         continue
 
@@ -210,7 +217,6 @@ class ArticleService:
                         ).mappings().all()
                     ]
 
-                self._cache_inserted_article_images(conn, inserted_rows)
                 log_event(
                     logger,
                     logging.INFO,
@@ -278,32 +284,30 @@ class ArticleService:
                 rowcount=result.rowcount,
             )
 
-    def _cache_inserted_article_images(self, conn, inserted_rows: list[dict]) -> None:
-        if not inserted_rows:
-            return
+    async def cache_missing_article_images_async(
+        self,
+        limit: int = 100,
+        scan_limit: int | None = None,
+        executor_timeout_secs: float | None = None,
+    ) -> dict:
+        """限流缓存待处理图片，并在任务结束后统一更新数据库状态。"""
 
-        status_updates: list[dict] = []
-        for row in inserted_rows:
-            article_id = int(row["id"])
-            image_url = row.get("graphical_abstract")
-            if not image_url:
-                continue
-
-            cache_result = self._cache_article_image(article_id, image_url)
-            status_updates.append(
-                {
-                    "id": article_id,
-                    "ga_cache_status": "cached" if cache_result and cache_result.get("path") else "failed",
-                }
-            )
-
-        self._update_ga_cache_statuses(status_updates, conn=conn)
-
-    def cache_missing_article_images(self, limit: int = 100, scan_limit: int | None = None) -> dict:
         if limit <= 0:
-            result = {"scanned": 0, "attempted": 0, "cached": 0, "failed": 0, "skipped": 0}
+            result = {
+                "scanned": 0,
+                "attempted": 0,
+                "cached": 0,
+                "failed": 0,
+                "cancelled": 0,
+                "skipped": 0,
+            }
             log_event(logger, logging.INFO, "article_image_backfill_skipped_invalid_limit", limit=limit)
             return result
+
+        if executor_timeout_secs is None:
+            executor_timeout_secs = IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS
+        if executor_timeout_secs <= 0:
+            raise ValueError("executor_timeout_secs must be positive")
 
         effective_scan_limit = scan_limit if scan_limit is not None else max(limit * 10, limit)
         with get_db_connection() as conn:
@@ -330,8 +334,10 @@ class ArticleService:
         attempted = 0
         cached = 0
         failed = 0
+        cancelled = 0
         skipped = 0
         status_updates: list[dict] = []
+        image_tasks: list[ImageCacheTask] = []
 
         for row in rows:
             article_id = int(row["id"])
@@ -349,13 +355,45 @@ class ArticleService:
                 break
 
             attempted += 1
-            cache_result = self._cache_article_image(article_id, image_url)
-            if cache_result and cache_result.get("path"):
+            image_tasks.append(ImageCacheTask(article_id=article_id, url=image_url))
+
+        if image_tasks:
+            # 图片下载会在 TaskExecutor 内转入线程，固定 worker 数限制整批回填并发。
+            executor = TaskExecutor(max_workers=IMAGE_CACHE_EXECUTOR_WORKERS, image_service=self.image_service)
+            executor_task = asyncio.create_task(executor.run(image_tasks))
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(executor_task),
+                    timeout=executor_timeout_secs,
+                )
+            except asyncio.TimeoutError:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "article_image_backfill_timeout",
+                    timeout_secs=executor_timeout_secs,
+                    attempted=attempted,
+                )
+                # 总超时只是告警阈值，不能在同步下载线程仍在运行时回写 pending。
+                await executor_task
+            except BaseException:
+                # 服务关闭或上层取消时，也要等待同步下载线程收口后再传播异常。
+                executor_task.cancel()
+                await asyncio.gather(executor_task, return_exceptions=True)
+                raise
+
+        for task in image_tasks:
+            # 队列只记录执行结果；数据库状态仍由 service 在全部任务结束后统一更新。
+            if task.result and task.result.success:
                 cached += 1
-                status_updates.append({"id": article_id, "ga_cache_status": "cached"})
+                status_updates.append({"id": task.article_id, "ga_cache_status": "cached"})
+            elif task.result is None or task.result.cancelled:
+                # 超时取消不代表图片本身失败，保留 pending 供下一轮继续尝试。
+                cancelled += 1
+                status_updates.append({"id": task.article_id, "ga_cache_status": "pending"})
             else:
                 failed += 1
-                status_updates.append({"id": article_id, "ga_cache_status": "failed"})
+                status_updates.append({"id": task.article_id, "ga_cache_status": "failed"})
 
         self._update_ga_cache_statuses(status_updates)
 
@@ -364,24 +402,34 @@ class ArticleService:
             "attempted": attempted,
             "cached": cached,
             "failed": failed,
+            "cancelled": cancelled,
             "skipped": skipped,
         }
         log_event(logger, logging.INFO, "article_image_backfill_completed", **result)
         return result
 
-    def _cache_article_image(self, article_id: int, image_url: str) -> ImageCache | None:
-        cache_result = self.image_service.cache_image(image_url, article_id=article_id)
-        if cache_result.get("path"):
-            return cache_result
+    def cache_missing_article_images(
+        self,
+        limit: int = 100,
+        scan_limit: int | None = None,
+        executor_timeout_secs: float | None = None,
+    ) -> dict:
+        """为同步调用方保留的兼容入口；异步代码应调用对应 async 方法。"""
 
-        logger.warning(
-            "Image cache skipped for article_id=%s url=%s status=%s error=%s",
-            article_id,
-            image_url,
-            cache_result.get("status"),
-            cache_result.get("error"),
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("async callers must use cache_missing_article_images_async")
+
+        return asyncio.run(
+            self.cache_missing_article_images_async(
+                limit=limit,
+                scan_limit=scan_limit,
+                executor_timeout_secs=executor_timeout_secs,
+            )
         )
-        return None
 
     def _update_ga_cache_statuses(self, updates: list[dict], conn=None) -> None:
         if not updates:

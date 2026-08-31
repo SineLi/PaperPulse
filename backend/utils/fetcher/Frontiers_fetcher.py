@@ -26,10 +26,10 @@ class FrontiersFetcher(RSSFetcher):
             'status': 'online'
         }
 
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
         
-        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
         if not content: return {}
 
         tree = lhtml.fromstring(content)
@@ -43,13 +43,34 @@ class FrontiersFetcher(RSSFetcher):
         return info
     
     def _extract_doi(self, entry):
-        if 'links' in entry:
-            for link in entry.links:
-                link_split = link.get('href', '').split('/')
-                return link_split[-2] + '/' + link_split[-1]
+        # Prefer explicit DOI fields and DOI URLs.  The first RSS ``link`` is
+        # usually the article page, so treating every link as a DOI produces
+        # values such as ``articles/123``.
+        candidates = (
+            entry.get('doi', ''),
+            entry.get('prism_doi', ''),
+            entry.get('dc_identifier', ''),
+            entry.get('id', ''),
+        )
+        for candidate in candidates:
+            value = (candidate or '').strip()
+            if not value:
+                continue
+            if value.lower().startswith('doi:'):
+                value = value[4:].strip()
+            if 'doi.org/' in value:
+                value = value.split('doi.org/', 1)[1]
+            if value.startswith('10.'):
+                return value
+
+        for link in entry.get('links', []):
+            href = (link.get('href', '') or '').strip()
+            if 'doi.org/' in href:
+                return href.split('doi.org/', 1)[1]
         return ''
 
 
 if __name__ == "__main__":
-    FrontiersFetcher().run()
+    import asyncio
+    asyncio.run(FrontiersFetcher().run())
 

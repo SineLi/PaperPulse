@@ -86,7 +86,9 @@ class UserService:
                 text(
                     """
                     SELECT
-                      id, name, sci, "if", if5, casup, casbase, publisher, abbreviation
+                      id, name, sci, "if", if5,
+                      casup AS "CASUp", casbase AS "CASBase",
+                      publisher, abbreviation
                     FROM journals
                     WHERE official_url IS NOT NULL OR rss_url IS NOT NULL
                     ORDER BY id ASC
@@ -96,6 +98,25 @@ class UserService:
                 {"limit": limit, "offset": offset},
             ).mappings().all()
             return [dict(r) for r in rows]
+
+    def get_journal_catalog_status(self) -> dict:
+        with get_db_connection() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT state.revision, COUNT(j.id) AS count
+                    FROM journal_catalog_state state
+                    LEFT JOIN journals j
+                      ON j.official_url IS NOT NULL OR j.rss_url IS NOT NULL
+                    WHERE state.id = TRUE
+                    GROUP BY state.revision
+                    """
+                )
+            ).mappings().one()
+            return {
+                "revision": str(row["revision"]),
+                "count": int(row["count"]),
+            }
 
     def get_followed_journals(self, user_id: int) -> list[int]:
         with get_db_connection() as conn:

@@ -36,9 +36,9 @@ class NatureFetcher(RSSFetcher):
         if 'doi' in entry:
             return entry['doi']
         
-    def fetch_details(self, article):
+    async def fetch_details(self, article):
         link = article.get('link')
-        content = self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
         if not content: return {}
 
         tree = lhtml.fromstring(content)
@@ -61,4 +61,5 @@ class NatureFetcher(RSSFetcher):
         return info
 
 if __name__ == "__main__":
-    NatureFetcher().run()
+    import asyncio
+    asyncio.run(NatureFetcher().run())

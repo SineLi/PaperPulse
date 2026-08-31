@@ -1,6 +1,7 @@
 import io
 import base64
 import logging
+import threading
 from pathlib import Path
 from typing import TypedDict
 
@@ -38,14 +39,7 @@ class ImageService:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._public_prefix = public_prefix.rstrip("/")
         self._timeout = timeout
-        self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "User-Agent": _DEFAULT_USER_AGENT,
-                "Accept": "image/webp,image/*,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-            }
-        )
+        self._session_local = threading.local()
 
     def cache_image(self, url: str, article_id: int) -> ImageCache:
         if not url:
@@ -127,7 +121,7 @@ class ImageService:
 
     def _download_image(self, url: str) -> bytes:
         headers = self._build_headers(url)
-        response = self._session.get(
+        response = self._get_session().get(
             url, headers=headers, timeout=self._timeout)
         response.raise_for_status()
 
@@ -139,6 +133,22 @@ class ImageService:
             raise ValueError("empty_image_response")
 
         return response.content
+
+    def _get_session(self) -> requests.Session:
+        """为线程池中的每个图片 worker 复用独立 requests.Session。"""
+
+        session = getattr(self._session_local, "session", None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update(
+                {
+                    "User-Agent": _DEFAULT_USER_AGENT,
+                    "Accept": "image/webp,image/*,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                }
+            )
+            self._session_local.session = session
+        return session
 
     def _convert_image(self, image: bytes) -> bytes:
         try:

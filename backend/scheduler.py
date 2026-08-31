@@ -1,6 +1,9 @@
+import asyncio
 import logging
 import sys
+import threading
 import time
+from datetime import datetime
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -10,6 +13,7 @@ from utils.logging_utils import configure_logging, log_event
 logger = logging.getLogger(__name__)
 STEP_WARN_AFTER_SECS = 5 * 60
 CYCLE_WARN_AFTER_SECS = 50 * 60
+_scheduler_work_lock = threading.Lock()
 
 
 try:
@@ -28,6 +32,22 @@ def _log_step_duration(step_name: str, started_at: float):
 
 
 def cycle_job():
+    if not _scheduler_work_lock.acquire(blocking=False):
+        log_event(
+            logger,
+            logging.INFO,
+            "scheduler_cycle_skipped",
+            reason="scheduler_work_active",
+        )
+        return
+
+    try:
+        _run_cycle_job()
+    finally:
+        _scheduler_work_lock.release()
+
+
+def _run_cycle_job():
     cycle_started_at = time.monotonic()
     service = LLMService()
     log_event(logger, logging.INFO, "scheduler_cycle_started")
@@ -35,7 +55,7 @@ def cycle_job():
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="llm_update")
     try:
-        service.run_update_cycle()
+        service.run_update_cycle(timeout_secs=600)
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=llm_update detail=%s", e)
     finally:
@@ -44,7 +64,7 @@ def cycle_job():
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="article_fetch")
     try:
-        run_enabled_fetchers()
+        run_enabled_fetchers(journal_timeout_secs=600)
         log_event(logger, logging.INFO, "scheduler_step_succeeded", step="article_fetch")
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=article_fetch detail=%s", e)
@@ -68,22 +88,38 @@ def cycle_job():
 
 def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
     started_at = time.monotonic()
-    service = ArticleService()
-    log_event(
-        logger,
-        logging.INFO,
-        "scheduler_step_started",
-        step="image_cache_backfill",
-        limit=limit,
-        scan_limit=scan_limit,
-    )
+    if not _scheduler_work_lock.acquire(blocking=False):
+        log_event(
+            logger,
+            logging.INFO,
+            "scheduler_step_skipped",
+            step="image_cache_backfill",
+            reason="scheduler_work_active",
+        )
+        return
+
     try:
-        result = service.cache_missing_article_images(limit=limit, scan_limit=scan_limit)
+        service = ArticleService()
+        log_event(
+            logger,
+            logging.INFO,
+            "scheduler_step_started",
+            step="image_cache_backfill",
+            limit=limit,
+            scan_limit=scan_limit,
+        )
+        result = asyncio.run(
+            service.cache_missing_article_images_async(
+                limit=limit,
+                scan_limit=scan_limit,
+            )
+        )
         log_event(logger, logging.INFO, "scheduler_step_succeeded", step="image_cache_backfill", **result)
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=image_cache_backfill detail=%s", e)
     finally:
         _log_step_duration("image_cache_backfill", started_at)
+        _scheduler_work_lock.release()
 
 
 
@@ -98,14 +134,33 @@ def _add_jobs(scheduler):
         max_instances=1,
         coalesce=True,
     )
+    log_event(
+        logger,
+        logging.INFO,
+        "scheduler_job_registered",
+        job_id="run_all_cycle",
+        schedule="cron minute=0",
+        name="Fetch articles and process LLM summaries every hour",
+        max_instances=1,
+    )
     scheduler.add_job(
         image_cache_backfill_job,
-        trigger=CronTrigger(minute="*/15"),
+        # 避开整点主周期；若主周期延长到这些时刻，job 内还会再次检查并跳过。
+        trigger=CronTrigger(minute="15,30,45"),
         id="image_cache_backfill",
-        name="Backfill missing cached images every 15 minutes",
+        name="Backfill missing cached images at minute 15, 30, and 45",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+    log_event(
+        logger,
+        logging.INFO,
+        "scheduler_job_registered",
+        job_id="image_cache_backfill",
+        schedule="cron minute=15,30,45",
+        name="Backfill missing cached images at minute 15, 30, and 45",
+        max_instances=1,
     )
 
 
@@ -117,16 +172,18 @@ def start_background_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler()
     _add_jobs(scheduler)
     scheduler.start()
+    log_event(logger, logging.INFO, "scheduler_background_started")
     # Schedule one immediate run in the background thread so it does NOT
     # block the main thread (uvicorn startup).
-    scheduler.add_job(cycle_job, id='initial_cycle', name='Initial cycle on startup')
-    logger.info("Background scheduler started.")
     scheduler.add_job(
-        image_cache_backfill_job,
-        id="initial_image_cache_backfill",
-        name="Initial image cache backfill on startup",
+        cycle_job,
+        trigger="date",
+        run_date=datetime.now(),
+        id='initial_cycle',
+        name='Initial cycle on startup',
+        replace_existing=True,
     )
-
+    log_event(logger, logging.INFO, "scheduler_startup_job_queued", job_id="initial_cycle", name="Initial cycle on startup")
     return scheduler
 
 

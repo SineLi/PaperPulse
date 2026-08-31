@@ -66,14 +66,31 @@ class _JournalListPageState extends State<JournalListPage> {
   // 懒加载缓存
   List<String>? _cachedPublishers;
   List<String>? _cachedCasCategories;
+  int _facetCacheGeneration = 0;
+
+  @override
+  void didUpdateWidget(covariant JournalListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.externalRefreshSignal != widget.externalRefreshSignal) {
+      _facetCacheGeneration += 1;
+      _cachedPublishers = null;
+      _cachedCasCategories = null;
+    }
+  }
 
   Future<void> _openFilterSheet() async {
-    // 第一次打开时并行拉取出版商 & CAS 分区
-    if (_cachedPublishers == null || _cachedCasCategories == null) {
+    // 第一次打开时并行拉取出版商 & CAS 分区。目录刷新期间完成的旧查询
+    // 不得重新写入缓存，因此 generation 变化时重新读取。
+    while (_cachedPublishers == null || _cachedCasCategories == null) {
+      final generation = _facetCacheGeneration;
       final results = await Future.wait([
         widget.loadFilterPublishers?.call() ?? Future.value(<String>[]),
         widget.loadFilterCasCategories?.call() ?? Future.value(<String>[]),
       ]);
+
+      if (!mounted) return;
+      if (generation != _facetCacheGeneration) continue;
+
       _cachedPublishers = results[0];
       _cachedCasCategories = results[1];
     }
@@ -114,17 +131,27 @@ class _JournalListPageState extends State<JournalListPage> {
       externalRefreshSignal: widget.externalRefreshSignal,
       skeletonCount: 8,
       skeletonBuilder: (cs) => _JournalSkeletonCard(colorScheme: cs),
-      itemBuilder: (ctx, journal, index, allItems, updateItem, updateItemById) {
-        return JournalCard(
-          journal: journal,
-          isFollowed: widget.isFollowed(journal.journalId),
-          onFollowChanged: widget.onFollowChanged == null
-              ? null
-              : (follow) async {
-                  await widget.onFollowChanged!(journal, follow);
-                },
-        );
-      },
+      itemBuilder:
+          (
+            ctx,
+            journal,
+            index,
+            allItems,
+            isSearchActive,
+            updateItem,
+            updateItemById,
+            removeItemById,
+          ) {
+            return JournalCard(
+              journal: journal,
+              isFollowed: widget.isFollowed(journal.journalId),
+              onFollowChanged: widget.onFollowChanged == null
+                  ? null
+                  : (follow) async {
+                      await widget.onFollowChanged!(journal, follow);
+                    },
+            );
+          },
     );
   }
 }

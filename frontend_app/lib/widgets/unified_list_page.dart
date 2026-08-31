@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../navigation/tab_scroll_registry.dart';
+import 'chunked_masonry_sliver.dart';
 import 'login_required.dart';
 
 /// 加载数据的回调：返回指定分页的数据列表
@@ -27,12 +29,30 @@ typedef ItemWidgetBuilder<T> =
       T item,
       int index,
       List<T> allItems,
+      bool isSearchActive,
       void Function(int index, T newItem) updateItem,
       void Function(int articleId, T Function(T) updater) updateItemById,
+      void Function(int articleId) removeItemById,
     );
 
 /// 骨架卡片构建器
 typedef SkeletonBuilder = Widget Function(ColorScheme colorScheme);
+
+/// 主内容的排列方式。
+enum UnifiedListLayout { list, masonry }
+
+/// 在指定列表项前构建一个占满可用宽度的组件。
+///
+/// 普通列表中它会与条目纵向排列；瀑布流中它会切断网格并独占一行，
+/// 适合阅读分界线等不能被限制在单列宽度内的内容。
+typedef FullWidthLeadingBuilder<T> =
+    Widget? Function(
+      BuildContext context,
+      T item,
+      int index,
+      List<T> allItems,
+      bool isSearchActive,
+    );
 
 /// 通用分页列表页，封装了分页加载、骨架屏、空状态、下拉刷新、搜索和筛选逻辑。
 /// 可以通过泛型 [T] 适配任意数据类型（文章、期刊等）。
@@ -54,6 +74,12 @@ class UnifiedListPage<T> extends StatefulWidget {
 
   /// 骨架卡片数量
   final int skeletonCount;
+
+  /// 主内容排列方式。
+  final UnifiedListLayout layout;
+
+  /// 在条目前插入的全宽组件。
+  final FullWidthLeadingBuilder<T>? fullWidthLeadingBuilder;
 
   // ── 搜索相关 ──
 
@@ -110,6 +136,12 @@ class UnifiedListPage<T> extends StatefulWidget {
   final bool autoRefreshOnInit;
   final bool showExternalRefreshing;
   final int externalRefreshSignal;
+  final VoidCallback? onUserScrollStart;
+  final VoidCallback? onUserScrollEnd;
+
+  /// 初始恢复时需要加载到的锚点。与 [matchesPreloadAnchor] 配合使用。
+  final Object? preloadAnchorKey;
+  final bool Function(T item)? matchesPreloadAnchor;
 
   const UnifiedListPage({
     super.key,
@@ -118,6 +150,8 @@ class UnifiedListPage<T> extends StatefulWidget {
     required this.itemBuilder,
     required this.skeletonBuilder,
     this.skeletonCount = 6,
+    this.layout = UnifiedListLayout.list,
+    this.fullWidthLeadingBuilder,
     this.actions,
     this.searchItems,
     this.searchHint = '搜索…',
@@ -137,6 +171,10 @@ class UnifiedListPage<T> extends StatefulWidget {
     this.autoRefreshOnInit = false,
     this.showExternalRefreshing = false,
     this.externalRefreshSignal = 0,
+    this.onUserScrollStart,
+    this.onUserScrollEnd,
+    this.preloadAnchorKey,
+    this.matchesPreloadAnchor,
   });
 
   @override
@@ -145,12 +183,18 @@ class UnifiedListPage<T> extends StatefulWidget {
 
 class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   late final ScrollController _scrollController;
+  ScrollController? _contentScrollController;
   TabScrollRegistry? _tabScrollRegistry;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _isRefreshing = false;
   bool _hasMore = true;
   int _currentOffset = 0;
+  Future<void>? _loadMoreFuture;
+  int _loadGeneration = 0;
+  bool _isPreloadingAnchor = false;
+  bool _lastLoadFailed = false;
+  bool _isUserScrollInProgress = false;
 
   // ── 搜索状态 ──
   bool _isSearchMode = false;
@@ -168,7 +212,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
       // The page owns the controller, but the shell can still find it by tab.
       _tabScrollRegistry!.register(widget.tabScrollIndex!, _scrollController);
     }
-    _loadMore();
+    unawaited(_loadThroughPreloadAnchor());
     if (widget.autoRefreshOnInit && widget.onRefresh != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -180,6 +224,10 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   @override
   void didUpdateWidget(covariant UnifiedListPage<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.preloadAnchorKey != widget.preloadAnchorKey &&
+        widget.preloadAnchorKey != null) {
+      unawaited(_loadThroughPreloadAnchor());
+    }
     if (oldWidget.externalRefreshSignal != widget.externalRefreshSignal) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -189,7 +237,26 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollUpdateNotification &&
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null &&
+        !_isUserScrollInProgress) {
+      _isUserScrollInProgress = true;
+      if (!widget.filterActive && _searchQuery.isEmpty) {
+        widget.onUserScrollStart?.call();
+      }
+    } else if (notification is ScrollEndNotification &&
+        _isUserScrollInProgress) {
+      _isUserScrollInProgress = false;
+      // 搜索或筛选可能在手势中途生效；结束回调始终派发，以关闭外部
+      // 可能已经打开的用户滚动写入窗口。
+      widget.onUserScrollEnd?.call();
+    }
+
+    // NestedScrollView 的外层（depth 0）只负责折叠 AppBar，它很快就会
+    // 到达自身末端。分页必须只响应内层文章区，否则每次滑动都会误加载
+    // 一页并让瀑布流重新估算范围，表现为滚动位置循环回跳。
+    if (notification.depth == 1 &&
+        notification is ScrollUpdateNotification &&
         notification.metrics.pixels >=
             notification.metrics.maxScrollExtent - 300 &&
         !_isLoading &&
@@ -253,7 +320,19 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     }
   }
 
+  void _removeItemById(int articleId) {
+    final index = _items.indexWhere((item) {
+      return (item as dynamic).articleId == articleId;
+    });
+    if (index < 0) return;
+    setState(() {
+      _items.removeAt(index);
+      if (_currentOffset > 0) _currentOffset -= 1;
+    });
+  }
+
   void _resetAndReload() {
+    _invalidatePendingLoad();
     setState(() {
       _currentOffset = 0;
       _items.clear();
@@ -265,6 +344,7 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   Future<void> _reloadVisibleItems() async {
     if (!mounted) return;
+    _invalidatePendingLoad();
     setState(() {
       _currentOffset = 0;
       _items.clear();
@@ -276,41 +356,84 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
 
   // ── 分页加载 ──
 
-  Future<void> _loadMore() async {
-    if (_isLoading) return;
+  Future<void> _loadThroughPreloadAnchor() async {
+    if (_isPreloadingAnchor) return;
+    _isPreloadingAnchor = true;
+    final preloadGeneration = _loadGeneration;
+    try {
+      do {
+        await _loadMore();
+        if (!mounted || preloadGeneration != _loadGeneration) return;
 
+        final anchorKey = widget.preloadAnchorKey;
+        final matcher = widget.matchesPreloadAnchor;
+        if (anchorKey == null ||
+            matcher == null ||
+            _items.any(matcher) ||
+            _lastLoadFailed ||
+            !_hasMore) {
+          return;
+        }
+      } while (mounted);
+    } finally {
+      _isPreloadingAnchor = false;
+    }
+  }
+
+  Future<void> _loadMore() {
+    final activeLoad = _loadMoreFuture;
+    if (activeLoad != null) return activeLoad;
+
+    late final Future<void> load;
+    final generation = _loadGeneration;
+    load = _performLoadMore(generation).whenComplete(() {
+      if (identical(_loadMoreFuture, load)) {
+        _loadMoreFuture = null;
+      }
+    });
+    _loadMoreFuture = load;
+    return load;
+  }
+
+  Future<void> _performLoadMore(int generation) async {
+    if (_isLoading || !_hasMore) return;
+
+    _lastLoadFailed = false;
     setState(() => _isLoading = true);
+    final offset = _currentOffset;
+    final searchQuery = _searchQuery;
+    final useSearch =
+        _isSearchMode && searchQuery.isNotEmpty && widget.searchItems != null;
 
     try {
       final List<T> batch;
-      if (_isSearchMode &&
-          _searchQuery.isNotEmpty &&
-          widget.searchItems != null) {
-        batch = await widget.searchItems!(
-          _searchQuery,
-          widget.pageSize,
-          _currentOffset,
-        );
+      if (useSearch) {
+        batch = await widget.searchItems!(searchQuery, widget.pageSize, offset);
       } else {
-        batch = await widget.loadItems(widget.pageSize, _currentOffset);
+        batch = await widget.loadItems(widget.pageSize, offset);
       }
 
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
-          _currentOffset += batch.length;
+          _currentOffset = offset + batch.length;
           _items.addAll(batch);
           _hasMore = batch.length == widget.pageSize;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
-      }
+      if (!mounted || generation != _loadGeneration) return;
+      _lastLoadFailed = true;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('加载失败: $e')));
     }
+  }
+
+  void _invalidatePendingLoad() {
+    _loadGeneration += 1;
+    _loadMoreFuture = null;
   }
 
   Future<void> _refresh() async {
@@ -352,6 +475,13 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
   void dispose() {
     if (widget.tabScrollIndex != null) {
       _tabScrollRegistry?.unregister(widget.tabScrollIndex!, _scrollController);
+      final contentController = _contentScrollController;
+      if (contentController != null) {
+        _tabScrollRegistry?.unregisterContent(
+          widget.tabScrollIndex!,
+          contentController,
+        );
+      }
     }
     if (widget.scrollController == null) {
       _scrollController.dispose();
@@ -438,47 +568,74 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
               actions: _buildActions(),
             ),
           ],
-          body: Column(
-            children: [
-              // ── 搜索栏 ──
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  transitionBuilder: (child, animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  child: _isSearchMode
-                      ? KeyedSubtree(
-                          key: const ValueKey('search_open'),
-                          child: _buildSearchBar(colorScheme),
-                        )
-                      : const SizedBox.shrink(key: ValueKey('search_closed')),
-                ),
-              ),
+          body: Builder(
+            builder: (bodyContext) {
+              _trackContentScrollController(bodyContext);
+              return Column(
+                children: [
+                  // ── 搜索栏 ──
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      child: _isSearchMode
+                          ? KeyedSubtree(
+                              key: const ValueKey('search_open'),
+                              child: _buildSearchBar(colorScheme),
+                            )
+                          : const SizedBox.shrink(
+                              key: ValueKey('search_closed'),
+                            ),
+                    ),
+                  ),
 
-              // ── 刷新进度指示条 ──
-              // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
-              if (widget.showExternalRefreshing ||
-                  _isRefreshing ||
-                  (_isLoading && _items.isNotEmpty))
-                LinearProgressIndicator(
-                  minHeight: 3,
-                  color: colorScheme.primary,
-                  backgroundColor: colorScheme.surfaceContainerHighest,
-                ),
+                  // ── 刷新进度指示条 ──
+                  // 仅在主动刷新或加载更多分页时显示（初始加载由骨架屏承担）
+                  if (widget.showExternalRefreshing ||
+                      _isRefreshing ||
+                      (_isLoading && _items.isNotEmpty))
+                    LinearProgressIndicator(
+                      minHeight: 3,
+                      color: colorScheme.primary,
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                    ),
 
-              // ── 主体内容 ──
-              Expanded(child: _buildBody(colorScheme, textTheme)),
-            ],
+                  // ── 主体内容 ──
+                  Expanded(child: _buildBody(colorScheme, textTheme)),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
+  }
+
+  void _trackContentScrollController(BuildContext context) {
+    final controller = PrimaryScrollController.maybeOf(context);
+    final tabIndex = widget.tabScrollIndex;
+    if (controller == null ||
+        tabIndex == null ||
+        identical(controller, _contentScrollController)) {
+      return;
+    }
+
+    final previous = _contentScrollController;
+    _contentScrollController = controller;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (previous != null) {
+        _tabScrollRegistry?.unregisterContent(tabIndex, previous);
+      }
+      _tabScrollRegistry?.registerContent(tabIndex, controller);
+    });
   }
 
   // ── 搜索栏 ──
@@ -547,7 +704,24 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
     }
 
     // 数据列表
-    final listView = ListView.builder(
+    final scrollView = widget.layout == UnifiedListLayout.masonry
+        ? _buildMasonryView(colorScheme)
+        : _buildListView(colorScheme);
+
+    if (widget.onRefresh != null && !_isSearchMode) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        edgeOffset: 0,
+        child: scrollView,
+      );
+    }
+
+    return scrollView;
+  }
+
+  Widget _buildListView(ColorScheme colorScheme) {
+    final allItems = List<T>.unmodifiable(_items);
+    return ListView.builder(
       padding: const EdgeInsets.only(top: 4, bottom: 88),
       itemCount: _items.length + (_hasMore ? 1 : 0),
       itemBuilder: (context, index) {
@@ -566,30 +740,119 @@ class _UnifiedListPageState<T> extends State<UnifiedListPage<T>> {
             ),
           );
         }
-        return widget.itemBuilder(
+        return _buildItem(
           context,
-          _items[index],
           index,
-          List.unmodifiable(_items),
-          _updateItem,
-          _updateItemById,
+          allItems: allItems,
+          includeFullWidthLeading: true,
         );
       },
     );
+  }
 
-    if (widget.onRefresh != null && !_isSearchMode) {
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        edgeOffset: 0,
-        child: listView,
-      );
+  Widget _buildMasonryView(ColorScheme colorScheme) {
+    final allItems = List<T>.unmodifiable(_items);
+    final fullWidthLeading = <int, Widget>{};
+    final leadingBuilder = widget.fullWidthLeadingBuilder;
+    if (leadingBuilder != null) {
+      for (var index = 0; index < _items.length; index++) {
+        final leading = leadingBuilder(
+          context,
+          _items[index],
+          index,
+          allItems,
+          _searchQuery.isNotEmpty,
+        );
+        if (leading != null) fullWidthLeading[index] = leading;
+      }
     }
 
-    return listView;
+    final slivers = <Widget>[
+      const SliverToBoxAdapter(child: SizedBox(height: 4)),
+      ChunkedMasonrySliver(
+        itemCount: _items.length,
+        fullWidthLeading: fullWidthLeading,
+        itemBuilder: (context, index) => _buildItem(
+          context,
+          index,
+          allItems: allItems,
+          includeFullWidthLeading: false,
+        ),
+      ),
+    ];
+
+    if (_hasMore) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 88)));
+
+    return CustomScrollView(
+      key: const ValueKey('unified-masonry-grid'),
+      slivers: slivers,
+    );
+  }
+
+  Widget _buildItem(
+    BuildContext context,
+    int index, {
+    required List<T> allItems,
+    required bool includeFullWidthLeading,
+  }) {
+    final item = widget.itemBuilder(
+      context,
+      _items[index],
+      index,
+      allItems,
+      _searchQuery.isNotEmpty,
+      _updateItem,
+      _updateItemById,
+      _removeItemById,
+    );
+    if (!includeFullWidthLeading) return item;
+
+    final leading = widget.fullWidthLeadingBuilder?.call(
+      context,
+      _items[index],
+      index,
+      allItems,
+      _searchQuery.isNotEmpty,
+    );
+    if (leading == null) return item;
+
+    return Column(mainAxisSize: MainAxisSize.min, children: [leading, item]);
   }
 
   // ── 骨架屏 ──
   Widget _buildSkeletonList(ColorScheme colorScheme) {
+    if (widget.layout == UnifiedListLayout.masonry) {
+      return MasonryGridView.count(
+        key: const ValueKey('unified-masonry-skeleton'),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 88),
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        itemCount: widget.skeletonCount,
+        itemBuilder: (context, index) => widget.skeletonBuilder(colorScheme),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.only(top: 4, bottom: 88),
       physics: const NeverScrollableScrollPhysics(),

@@ -76,7 +76,7 @@ class _AppShellPageState extends State<AppShellPage> {
 
       if (isDoubleTap) {
         // The tab page owns the controller; the shell only triggers the action.
-        await context.read<TabScrollRegistry>().scrollToTop(index);
+        await context.read<TabScrollRegistry>().handleDoubleTap(index);
         _lastDestinationClickTime = null;
         _lastClickedIndex = null;
         return;

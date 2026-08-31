@@ -60,7 +60,11 @@ class ArticleViewData {
   List<String>? get displayInnovations =>
       article.innovations.isNotEmpty ? article.innovations.split('\n') : null;
 
-  String? get displayMaintag => article.maintag;
+  String? get displayMaintag {
+    final maintag = article.maintag.trim();
+    return maintag.isEmpty ? null : maintag;
+  }
+
   List<String>? get displaySubtags => article.subtags;
 
   String? get publishedDate {
