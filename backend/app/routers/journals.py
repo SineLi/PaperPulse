@@ -8,6 +8,14 @@ user_service = UserService()
 
 router = APIRouter(prefix="/journals", tags=["journals"])
 
+
+@router.get("/status")
+def get_journal_catalog_status(
+    user_id: int = Depends(get_current_user_id),
+):
+    return user_service.get_journal_catalog_status()
+
+
 @router.get("/")
 def get_available_journals(
     limit: int = 50,
