@@ -14,10 +14,12 @@ class PostAuthSyncService extends ChangeNotifier {
   Future<void>? _syncInFlight;
   bool _isSyncing = false;
   int _completedSyncCount = 0;
+  int _journalCatalogRefreshCount = 0;
   int _lastNewArticleCount = 0;
 
   bool get isSyncing => _isSyncing;
   int get completedSyncCount => _completedSyncCount;
+  int get journalCatalogRefreshCount => _journalCatalogRefreshCount;
   int get lastNewArticleCount => _lastNewArticleCount;
 
   PostAuthSyncService({
@@ -58,7 +60,11 @@ class PostAuthSyncService extends ChangeNotifier {
   }
 
   Future<void> _performSyncAfterAuth() async {
-    await _journalRepo.syncJournalsEmpty();
+    final journalSync = await _journalRepo.syncJournalsIfNeeded();
+    if (journalSync.changed) {
+      _journalCatalogRefreshCount += 1;
+      notifyListeners();
+    }
     await _userRepo.syncSubscribedJournalIds();
     await _syncService.pullStatus();
     _lastNewArticleCount = await _feedRepo.refreshArticles();

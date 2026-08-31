@@ -117,6 +117,7 @@ Web 端使用 Path URL 策略，并依赖 `sqflite_common_ffi_web` 与 `sqlite3.
 - `/auth/logout`
 - `/users/me`
 - `/users/me/journals`
+- `/journals/status`
 - `/journals/`
 - `/journals/{journal_id}/follow`
 - `/articles/feed`
@@ -126,6 +127,10 @@ Web 端使用 Path URL 策略，并依赖 `sqflite_common_ffi_web` 与 `sqlite3.
 - `/articles/{article_id}/favorite`
 
 详细后端说明见 `../backend/README.md`。
+
+登录后的启动同步会先读取 `/journals/status` 的目录 revision。revision 和数量均未变化时
+直接复用本地期刊数据；发生变化时分页下载完整目录，并在 SQLite 事务中整体替换，确保新增、
+修改和删除能一起生效，也避免同步中断留下半份数据。
 
 ## 开发注意事项
 
