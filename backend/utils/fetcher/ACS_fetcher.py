@@ -1,8 +1,9 @@
 import html
+import re
 from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
 
-DEFAULT_FEED_URL = "https://pubs.acs.org/action/showFeed?type=axatoc&feed=rss&jc=jacsat"
+DEFAULT_FEED_URL = "https://pubs.acs.org/rss/jacsat/asap.xml"
 class ACSFetcher(RSSFetcher):
     def __init__(self, url=DEFAULT_FEED_URL, name="Journal of the American Chemical Society", journal_id=None, **kwargs):
         super().__init__(
@@ -22,6 +23,16 @@ class ACSFetcher(RSSFetcher):
             'doi': self._extract_doi(entry),
             'status': 'online'
         }
+    
+    def _extract_doi(self, entry):
+        if 'links' in entry:
+            for link in entry.links:
+                href = link.get('href', '')
+                if '/article/doi/' in href:
+                    m = re.search(r'10\.\d{4,9}/[^/\s]+', href)
+                    if m:
+                        return m.group(0)
+        return None
 
     async def fetch_details(self, article):
         link = article.get('link')
@@ -33,14 +44,27 @@ class ACSFetcher(RSSFetcher):
         info = {}
 
         # Abstract
-        abstract_nodes = tree.xpath('//div[@id="abstractBox"]/p')
+        abstract_nodes = tree.xpath('//section[@class="abstract"]/p')
         if abstract_nodes:
             info['abstract'] = " ".join([node.text_content().strip() for node in abstract_nodes])
 
         # graphical abstract
-        ga_parts = tree.xpath('//figure[starts-with(@id, "_i")]//img/@src')
+        ga_parts = tree.xpath('//div[@class="fig-graphic"]//img/@src')
         if ga_parts:
             info['graphical_abstract'] = "https://pubs.acs.org" + ga_parts[0]
+
+        author_nodes = tree.xpath('//div[@class="al-author-name"]/a')
+        if author_nodes:
+            authors = []
+            seen = set()
+            for node in author_nodes:
+                name = node.text_content().strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    authors.append(name)
+            info['authors'] = authors
+
+
 
         return info
 

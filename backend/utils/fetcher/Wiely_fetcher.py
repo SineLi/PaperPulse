@@ -18,7 +18,17 @@ class WileyFetcher(RSSFetcher):
     def _parse_entry(self, entry) -> Dict:
         # 从 content:encoded 获取内容 (feedparser 将其映射到 content 列表)
         content_list = entry.get('content', [])
-        content_html = content_list[1].get('value', '') if content_list else ""
+        # feedparser normally exposes one ``content:encoded`` value.  Some
+        # feeds expose more than one representation, so use the last
+        # non-empty value rather than relying on a second list item existing.
+        content_html = next(
+            (
+                item.get('value', '')
+                for item in reversed(content_list)
+                if item.get('value', '')
+            ),
+            "",
+        )
         
         abstract = ""
         editor_summary = ""
@@ -33,7 +43,8 @@ class WileyFetcher(RSSFetcher):
                 p_nodes = tree.xpath('//p[2]')
                 abstract = p_nodes[0].text_content().replace('\n', ' ').strip() if p_nodes else ""
                 
-                graphical_abstract = tree.xpath('//img/@src')[0]
+                image_parts = tree.xpath('//img/@src')
+                graphical_abstract = image_parts[0] if image_parts else ""
 
                 p_nodes = tree.xpath('//p[1]')
                 editor_summary = p_nodes[0].text_content().replace('\n', ' ').strip() if p_nodes else ""
