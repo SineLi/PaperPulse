@@ -10,9 +10,12 @@ from typing import List, Dict, Optional
 
 import feedparser
 import requests
+from curl_cffi.requests import RequestsError as CurlRequestsError
 from dateutil import parser, tz
 
+from utils.challenge_detection import detect_block_reason
 from utils.browser_manager import BrowserManager, get_browser_manager
+from utils.http_client import impersonated_get
 
 from services.article_services import ArticleService
 from utils.logging_utils import log_event
@@ -88,30 +91,8 @@ class BaseFetcher(ABC):
         ]
         return any(h in msg for h in hints)
 
-    def _detect_block_reason(self, content: str, current_url: str = "") -> Optional[str]:
-        text = (content or "").lower()
-        page_hints = [
-            "just a moment",
-            "verify you are human",
-            "access denied",
-            "captcha",
-            "cloudflare",
-            "security check",
-            "are you a robot",
-            "bot detection",
-            "enable javascript and cookies",
-        ]
-        for hint in page_hints:
-            if hint in text:
-                return f"content:{hint}"
-
-        lower_url = (current_url or "").lower()
-        url_hints = ["cdn-cgi", "challenge", "captcha", "bot"]
-        for hint in url_hints:
-            if hint in lower_url:
-                return f"url:{hint}"
-
-        return None
+    def _detect_block_reason(self, content: str, current_url: str = "", title: str = "") -> Optional[str]:
+        return detect_block_reason(content, current_url, title)
 
     def _article_label(self, article: Dict) -> str:
         return article.get("title") or article.get("link") or "unknown"
@@ -164,7 +145,7 @@ class BaseFetcher(ABC):
                         else:
                             await page.wait_for_timeout(PLAYWRIGHT_IDLE_WAIT_MS)
                         content = await page.content()
-                        block_reason = self._detect_block_reason(content, page.url)
+                        block_reason = self._detect_block_reason(content, page.url, title=await page.title())
                         if block_reason:
                             self._set_fetch_meta(url, "blocked", block_reason)
                         elif content.strip():
@@ -462,15 +443,35 @@ class RSSFetcher(BaseFetcher):
 
     def fetch_list(self) -> List[Dict]:
         log_event(logger, logging.INFO, "rss_fetch_started", journal=self.journal_name, url=self.feed_url)
+        accept_headers = {
+            "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.1",
+        }
         try:
-            response = requests.get(
+            response = impersonated_get(
                 self.feed_url,
-                headers={"User-Agent": self.user_agent},
+                headers=accept_headers,
+                fallback_headers={"User-Agent": self.user_agent, **accept_headers},
                 timeout=RSS_FETCH_TIMEOUT_SECS,
             )
             response.raise_for_status()
-        except requests.RequestException as e:
+        except (requests.RequestException, CurlRequestsError) as e:
             logger.exception("event=rss_fetch_failed journal=%s url=%s detail=%s", self.journal_name, self.feed_url, e)
+            return []
+
+        response_text = getattr(response, "text", "")
+        if not response_text:
+            response_text = response.content.decode("utf-8", errors="replace")
+        block_reason = self._detect_block_reason(
+            response_text,
+            str(getattr(response, "url", self.feed_url)),
+        )
+        if block_reason:
+            logger.warning(
+                "event=rss_fetch_blocked journal=%s url=%s reason=%s",
+                self.journal_name,
+                self.feed_url,
+                block_reason,
+            )
             return []
 
         feed = feedparser.parse(response.content)
