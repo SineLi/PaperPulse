@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN patchright install-deps chromium && \
     apt-get update && \
-    apt-get install -y --no-install-recommends xvfb xauth && \
+    apt-get install -y --no-install-recommends xvfb xauth tini && \
     rm -rf /var/lib/apt/lists/* && \
     rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/lintian/* && \
     rm -rf /usr/share/locale/*
@@ -39,4 +39,5 @@ COPY --chown=appuser:appuser . /app
 RUN mkdir -p /app/media && chown appuser:appuser /app/media
 USER appuser
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1920x1080x24", "python", "run.py"]

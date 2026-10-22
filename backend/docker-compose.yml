@@ -42,6 +42,7 @@ services:
   backend:
     image: ${BACKEND_IMAGE:-ghcr.io/sineli/paperpulse-backend:v0.0.5}
     container_name: paperpulse_backend
+    init: true
     restart: unless-stopped
     depends_on:
       postgres:
