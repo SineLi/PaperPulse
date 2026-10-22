@@ -2,6 +2,7 @@ import logging
 import asyncio
 import json
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Union, TypedDict
 
 from sqlalchemy import text
@@ -14,6 +15,24 @@ from utils.task_executor import ImageCacheTask, TaskExecutor
 logger = logging.getLogger(__name__)
 IMAGE_CACHE_EXECUTOR_WORKERS = int(os.getenv("IMAGE_CACHE_EXECUTOR_WORKERS", "2"))
 IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS = float(os.getenv("IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS", "600"))
+IMAGE_CACHE_RETRY_BASE_SECS = 3600
+IMAGE_CACHE_RETRY_MAX_SECS = 86400
+
+
+def image_cache_status_update(article_id: int, status: str, attempts: int = 0) -> dict:
+    next_retry = None
+    if status == "failed":
+        # 失败等待 1、2、4 小时，最长每天重试一次。限制指数，避免长期失败时溢出。
+        retry_step = max(attempts - 1, 0)
+        retry_step = min(retry_step, 8)
+        delay = min(IMAGE_CACHE_RETRY_BASE_SECS * 2 ** retry_step, IMAGE_CACHE_RETRY_MAX_SECS)
+        next_retry = datetime.now(timezone.utc) + timedelta(seconds=delay)
+    return {
+        "id": article_id,
+        "ga_cache_status": status,
+        "ga_cache_attempts": attempts,
+        "ga_cache_next_retry_at": next_retry,
+    }
 
 
 class Article(TypedDict):
@@ -314,15 +333,19 @@ class ArticleService:
             rows = conn.execute(
                 text(
                     """
-                    SELECT id, graphical_abstract, ga_cache_status
+                    SELECT id, graphical_abstract, ga_cache_status, ga_cache_attempts
                     FROM articles
-                    WHERE ga_cache_status IN ('pending', 'failed')
+                    WHERE ga_cache_status = 'pending'
+                       OR (ga_cache_status = 'failed'
+                           AND (ga_cache_next_retry_at IS NULL
+                                OR ga_cache_next_retry_at <= CURRENT_TIMESTAMP))
                     ORDER BY
                       CASE ga_cache_status
                         WHEN 'pending' THEN 0
                         WHEN 'failed' THEN 1
                         ELSE 2
                       END,
+                      ga_cache_next_retry_at ASC NULLS FIRST,
                       id ASC
                     LIMIT :limit
                     """
@@ -338,9 +361,11 @@ class ArticleService:
         skipped = 0
         status_updates: list[dict] = []
         image_tasks: list[ImageCacheTask] = []
+        attempts_by_id = {}
 
         for row in rows:
             article_id = int(row["id"])
+            attempts_by_id[article_id] = int(row.get("ga_cache_attempts") or 0)
             image_url = row.get("graphical_abstract")
             if not image_url:
                 skipped += 1
@@ -348,7 +373,7 @@ class ArticleService:
 
             if self.image_service.has_cached_image(article_id):
                 cached += 1
-                status_updates.append({"id": article_id, "ga_cache_status": "cached"})
+                status_updates.append(image_cache_status_update(article_id, "cached"))
                 continue
 
             if attempted >= limit:
@@ -363,7 +388,7 @@ class ArticleService:
             executor_task = asyncio.create_task(executor.run(image_tasks))
             try:
                 await asyncio.wait_for(
-                    asyncio.shield(executor_task),
+                    executor_task,
                     timeout=executor_timeout_secs,
                 )
             except asyncio.TimeoutError:
@@ -374,8 +399,7 @@ class ArticleService:
                     timeout_secs=executor_timeout_secs,
                     attempted=attempted,
                 )
-                # 总超时只是告警阈值，不能在同步下载线程仍在运行时回写 pending。
-                await executor_task
+                # wait_for 已取消 worker 并等当前下载线程收尾，剩余队列不会再启动。
             except BaseException:
                 # 服务关闭或上层取消时，也要等待同步下载线程收口后再传播异常。
                 executor_task.cancel()
@@ -386,14 +410,14 @@ class ArticleService:
             # 队列只记录执行结果；数据库状态仍由 service 在全部任务结束后统一更新。
             if task.result and task.result.success:
                 cached += 1
-                status_updates.append({"id": task.article_id, "ga_cache_status": "cached"})
+                status_updates.append(image_cache_status_update(task.article_id, "cached"))
             elif task.result is None or task.result.cancelled:
-                # 超时取消不代表图片本身失败，保留 pending 供下一轮继续尝试。
+                # 未启动的任务不改状态，也不清除已有失败次数和冷却时间。
                 cancelled += 1
-                status_updates.append({"id": task.article_id, "ga_cache_status": "pending"})
             else:
                 failed += 1
-                status_updates.append({"id": task.article_id, "ga_cache_status": "failed"})
+                attempts = attempts_by_id[task.article_id] + 1
+                status_updates.append(image_cache_status_update(task.article_id, "failed", attempts))
 
         self._update_ga_cache_statuses(status_updates)
 
@@ -438,7 +462,9 @@ class ArticleService:
         query = text(
             """
             UPDATE articles
-            SET ga_cache_status = :ga_cache_status
+            SET ga_cache_status = :ga_cache_status,
+                ga_cache_attempts = :ga_cache_attempts,
+                ga_cache_next_retry_at = :ga_cache_next_retry_at
             WHERE id = :id
             """
         )
