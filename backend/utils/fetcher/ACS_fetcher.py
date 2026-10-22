@@ -51,7 +51,7 @@ class ACSFetcher(RSSFetcher):
         # graphical abstract
         ga_parts = tree.xpath('//div[@class="fig-graphic"]//img/@src')
         if ga_parts:
-            info['graphical_abstract'] = "https://pubs.acs.org" + ga_parts[0]
+            info['graphical_abstract'] = ga_parts[0]
 
         author_nodes = tree.xpath('//div[@class="al-author-name"]/a')
         if author_nodes:
@@ -63,8 +63,6 @@ class ACSFetcher(RSSFetcher):
                     seen.add(name)
                     authors.append(name)
             info['authors'] = authors
-
-
 
         return info
 

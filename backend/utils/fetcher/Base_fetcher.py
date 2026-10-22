@@ -10,12 +10,17 @@ from typing import List, Dict, Optional
 
 import feedparser
 import requests
+from curl_cffi.requests import RequestsError as CurlRequestsError
 from dateutil import parser, tz
 
+from app.version import APP_VERSION
+from utils.challenge_detection import detect_block_reason
 from utils.browser_manager import BrowserManager, get_browser_manager
+from utils.http_client import impersonated_get
 
 from services.article_services import ArticleService
 from utils.logging_utils import log_event
+from utils.task_executor import ArticleFetchTask, TaskExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,10 @@ TZ_INFOS = {
     "CST": tz.gettz("America/Chicago"),
     "CDT": tz.gettz("America/Chicago"),
 }
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+# 普通 HTTP/RSS 请求使用应用身份；Patchright 始终保留浏览器原生 UA，避免与
+# Sec-CH-UA、运行平台及实际 Chromium 版本冲突。
+FETCHER_USER_AGENT = os.getenv("FETCHER_USER_AGENT", "").strip()
+UA = FETCHER_USER_AGENT or f"PaperPulse/{APP_VERSION}"
 RSS_FETCH_TIMEOUT_SECS = float(os.getenv("RSS_FETCH_TIMEOUT_SECS", "20"))
 PLAYWRIGHT_GOTO_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_GOTO_TIMEOUT_MS", "60000"))
 PLAYWRIGHT_ATTEMPTS = int(os.getenv("PLAYWRIGHT_ATTEMPTS", "3"))
@@ -88,30 +96,8 @@ class BaseFetcher(ABC):
         ]
         return any(h in msg for h in hints)
 
-    def _detect_block_reason(self, content: str, current_url: str = "") -> Optional[str]:
-        text = (content or "").lower()
-        page_hints = [
-            "just a moment",
-            "verify you are human",
-            "access denied",
-            "captcha",
-            "cloudflare",
-            "security check",
-            "are you a robot",
-            "bot detection",
-            "enable javascript and cookies",
-        ]
-        for hint in page_hints:
-            if hint in text:
-                return f"content:{hint}"
-
-        lower_url = (current_url or "").lower()
-        url_hints = ["cdn-cgi", "challenge", "captcha", "bot"]
-        for hint in url_hints:
-            if hint in lower_url:
-                return f"url:{hint}"
-
-        return None
+    def _detect_block_reason(self, content: str, current_url: str = "", title: str = "") -> Optional[str]:
+        return detect_block_reason(content, current_url, title)
 
     def _article_label(self, article: Dict) -> str:
         return article.get("title") or article.get("link") or "unknown"
@@ -135,6 +121,7 @@ class BaseFetcher(ABC):
         selector: Optional[str] = None,
         timeout: int = 10000,
         wait_until: str = "domcontentloaded",
+        idle_wait_ms: Optional[int] = None,
     ) -> str:
         log_event(
             logger,
@@ -148,7 +135,7 @@ class BaseFetcher(ABC):
         content = ""
         try:
             for i in range(PLAYWRIGHT_ATTEMPTS):
-                async with self.browser_manager.add_page(user_agent=self.user_agent) as page:
+                async with self.browser_manager.add_page() as page:
                     try:
                         log_event(
                             logger,
@@ -162,9 +149,11 @@ class BaseFetcher(ABC):
                         if selector:
                             await page.wait_for_selector(selector, timeout=timeout)
                         else:
-                            await page.wait_for_timeout(PLAYWRIGHT_IDLE_WAIT_MS)
+                            await page.wait_for_timeout(
+                                PLAYWRIGHT_IDLE_WAIT_MS if idle_wait_ms is None else idle_wait_ms
+                            )
                         content = await page.content()
-                        block_reason = self._detect_block_reason(content, page.url)
+                        block_reason = self._detect_block_reason(content, page.url, title=await page.title())
                         if block_reason:
                             self._set_fetch_meta(url, "blocked", block_reason)
                         elif content.strip():
@@ -299,15 +288,11 @@ class BaseFetcher(ABC):
                 await asyncio.sleep(self.sleep_time)
 
     async def _fetch_details_concurrently(self, papers_to_fetch: List[Dict]):
-        semaphore = asyncio.Semaphore(self.max_workers)
-
-        async def run_one(idx: int):
-            async with semaphore:
-                await self.fetch_detail_at_index(papers_to_fetch, idx)
-
-        tasks = [asyncio.create_task(run_one(i)) for i in range(len(papers_to_fetch))]
-        for task in asyncio.as_completed(tasks):
-            await task
+        tasks = []
+        for idx in range(len(papers_to_fetch)):
+            tasks.append(ArticleFetchTask(self, papers_to_fetch, idx))
+        # 复用队列的取消收尾，父任务结束前所有详情 worker 都必须退出。
+        await TaskExecutor(max_workers=self.max_workers).run(tasks)
 
     async def run(self) -> None:
         """独立执行单个 fetcher，并在结束后释放其使用的浏览器资源。"""
@@ -462,15 +447,35 @@ class RSSFetcher(BaseFetcher):
 
     def fetch_list(self) -> List[Dict]:
         log_event(logger, logging.INFO, "rss_fetch_started", journal=self.journal_name, url=self.feed_url)
+        accept_headers = {
+            "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.1",
+        }
         try:
-            response = requests.get(
+            response = impersonated_get(
                 self.feed_url,
-                headers={"User-Agent": self.user_agent},
+                headers=accept_headers,
+                fallback_headers={"User-Agent": self.user_agent, **accept_headers},
                 timeout=RSS_FETCH_TIMEOUT_SECS,
             )
             response.raise_for_status()
-        except requests.RequestException as e:
+        except (requests.RequestException, CurlRequestsError) as e:
             logger.exception("event=rss_fetch_failed journal=%s url=%s detail=%s", self.journal_name, self.feed_url, e)
+            return []
+
+        response_text = getattr(response, "text", "")
+        if not response_text:
+            response_text = response.content.decode("utf-8", errors="replace")
+        block_reason = self._detect_block_reason(
+            response_text,
+            str(getattr(response, "url", self.feed_url)),
+        )
+        if block_reason:
+            logger.warning(
+                "event=rss_fetch_blocked journal=%s url=%s reason=%s",
+                self.journal_name,
+                self.feed_url,
+                block_reason,
+            )
             return []
 
         feed = feedparser.parse(response.content)

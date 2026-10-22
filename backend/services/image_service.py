@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import TypedDict
 
 import requests
-from playwright.sync_api import sync_playwright
+from patchright.sync_api import sync_playwright
 from PIL import Image, ImageOps, UnidentifiedImageError
+
+from app.version import APP_VERSION
+from utils.browser_manager import BROWSER_HEADLESS
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
+_HTTP_USER_AGENT = f"PaperPulse/{APP_VERSION}"
 
 
 class ImageCache(TypedDict):
@@ -54,7 +54,7 @@ class ImageService:
         try:
             image_bytes = self._download_image(url)
             status = "cached"
-        except requests.RequestException as exc:
+        except Exception as exc:
             try: 
                 image_bytes = self._download_image_with_playwright(url)
                 status = "cached_with_playwright"
@@ -62,9 +62,6 @@ class ImageService:
                 error = self._build_download_failure_error(exc, playwright_exc)
                 logger.warning("Failed to cache image from %s: %s", url, error)
                 return ImageCache(url=url, path=None, status="failed", error=error)
-        except Exception as exc:
-            logger.warning("Failed to cache image from %s: %s", url, exc)
-            return ImageCache(url=url, path=None, status="failed", error=str(exc))
 
         try:
             webp_bytes = self._convert_image(image_bytes)
@@ -86,10 +83,9 @@ class ImageService:
     def _download_image_with_playwright(self, url: str) -> bytes:
         try:
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
+                browser = playwright.chromium.launch(headless=BROWSER_HEADLESS)
                 try:
                     page = browser.new_page(
-                        user_agent=_DEFAULT_USER_AGENT,
                         viewport={"width": 1920, "height": 1080},
                     )
                     response = page.goto(
@@ -142,7 +138,7 @@ class ImageService:
             session = requests.Session()
             session.headers.update(
                 {
-                    "User-Agent": _DEFAULT_USER_AGENT,
+                    "User-Agent": _HTTP_USER_AGENT,
                     "Accept": "image/webp,image/*,*/*;q=0.8",
                     "Accept-Language": "en-US,en;q=0.9",
                 }

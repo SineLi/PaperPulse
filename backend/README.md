@@ -19,10 +19,10 @@
 - PostgreSQL
 - Redis
 
-部分抓取器依赖 Playwright，首次安装后可能还需要执行：
+部分抓取器通过兼容 Playwright API 的 Patchright 驱动 Chromium，首次安装后可能还需要执行：
 
 ```powershell
-playwright install chromium
+patchright install chromium
 ```
 
 ## 安装依赖
@@ -68,6 +68,9 @@ IMAGE_CACHE_EXECUTOR_WORKERS=2
 IMAGE_CACHE_EXECUTOR_TIMEOUT_SECS=600
 BROWSER_POOL_SIZE=2
 BROWSER_MAX_PAGES=4
+BROWSER_CHANNEL=
+BROWSER_HEADLESS=1
+RSC_POST_NAVIGATION_WAIT_MS=7000
 ```
 
 说明:
@@ -79,8 +82,18 @@ BROWSER_MAX_PAGES=4
   避免同步数据库线程使调度周期无限阻塞
 - 文章详情的实际并发上限取 `ARTICLE_FETCH_EXECUTOR_WORKERS` 与
   `BROWSER_POOL_SIZE * BROWSER_MAX_PAGES` 中的较小值
-- 文章执行器超时会取消尚未完成的详情任务，只入库已完成部分；图片执行器超时
-  仅记录告警，并等待同步下载线程收口后再更新缓存状态
+- 文章执行器超时会取消尚未完成的详情任务，只入库已完成部分。详情按期刊轮转，
+  每轮更换起始期刊；独立抓取器也复用同一队列来收口取消任务
+- 图片执行器超时停止领取剩余任务，等待正在下载的线程安全收尾后记录真实结果。
+  未启动任务保留原状态。失败图片持久保存重试次数，按 1、2、4 小时递增冷却，最长一天
+- 浏览器替换失败会向上层报告，并将失败槽位冷却 30 秒，避免无上限启动重试
+- RSS 和出版社 API 请求优先通过 `curl_cffi` 使用 Chrome 网络指纹；只有传输层失败时
+  才回退到普通 `requests`。Patchright 浏览器上下文不覆盖 User-Agent，以保持 UA、
+  Client Hints 和 Chromium 版本一致
+- 直接运行且没有图形显示时保留 `BROWSER_HEADLESS=1`。需要降低无头浏览器特征时，
+  应先提供 X11/Xvfb 显示，再设置 `BROWSER_HEADLESS=0`
+- 安装了 Microsoft Edge 的主机可设置 `BROWSER_CHANNEL=msedge`，让 Patchright 使用
+  真实 Edge 通道；留空时继续使用 Patchright 自带 Chromium。不要从个人 Edge 配置复制 Cookie
 
 ## 本地依赖服务
 
@@ -107,6 +120,9 @@ docker compose up -d
 ```
 注意：启动前请在 `.env` 文件中配置好环境变量。
 默认会拉取 `docker-compose.yml` 中配置的后端镜像；如需覆盖镜像版本，可设置 `BACKEND_IMAGE` 环境变量。
+项目 Dockerfile 已将 Patchright 与 Xvfb 配套：容器由 `xvfb-run` 提供虚拟显示，并以
+`BROWSER_HEADLESS=0` 启动 Chromium。这里的浏览器仍运行在没有物理屏幕的服务器中，
+但 Chromium 使用有头渲染路径。
 
 ### 2. 直接运行统一入口
 
@@ -197,7 +213,12 @@ python run.py --no-scheduler
 
 图形摘要不会在文章插入事务中同步下载。新记录先标记为 `pending`，图片回填任务在
 每小时的第 15、30、45 分钟运行；如果主调度周期仍在执行，本轮图片回填会跳过，
-等待下一轮继续处理。
+等待下一轮继续处理。主周期到达时若图片仍在执行，会等待当前批次收尾；等待期间
+不再启动新的图片批次，主周期不会因此丢失。LLM 初始化失败也不会阻止文章抓取。
+
+升级时需要运行 `alembic upgrade head`（统一入口 run.py 会自动执行），新增图片重试字段。
+Compose 启用 init，新镜像使用 tini 回收浏览器孤儿进程；需要重建镜像并重新创建容器才能
+应用启动配置。修复不会自动清理旧容器中已积累的僵尸进程，也不会修改 non_article_entries。
 
 ## 测试
 
@@ -207,6 +228,34 @@ python run.py --no-scheduler
 cd backend
 python -m unittest discover -s tests -v
 ```
+
+出版社抓取器测试位于 `tests/test_publisher_fetchers.py`。测试使用固定的 RSS、API XML
+和文章 HTML fixture，并 mock 网络请求与 Patchright，因此不会访问真实出版社、启动浏览器
+或连接数据库。只运行抓取器测试:
+
+```powershell
+cd backend
+python -m unittest tests.test_publisher_fetchers -v
+```
+
+新增出版社抓取器时，请同时在该文件中覆盖列表解析和详情解析（如果该出版社需要详情页），
+并将其加入 `utils/main_fetcher.py` 的 `PUBLISHER_FETCHER_MAP`。
+
+如果需要访问真实出版社页面，可运行显式开启的集成 smoke test。它只抓每个出版社的一条列表项
+和详情，不执行数据库过滤或入库；网络限流、验证码和页面改版都可能导致失败，因此不要在默认
+测试命令中自动开启:
+
+```powershell
+cd backend
+patchright install chromium       # 首次运行需要
+$env:RUN_LIVE_FETCHER_TESTS = "1"
+python -m unittest tests.test_publisher_fetchers_live -v
+Remove-Item Env:RUN_LIVE_FETCHER_TESTS
+```
+
+Elsevier 的详情 API 还需要先设置 `$env:Elsevier_KEY`。可用
+`$env:PLAYWRIGHT_ATTEMPTS = "1"` 和 `$env:PLAYWRIGHT_GOTO_TIMEOUT_MS = "30000"`
+缩短单次联调等待时间。
 
 ## 期刊数据说明
 

@@ -1,4 +1,5 @@
 import sys
+import threading
 import types
 import unittest
 from unittest.mock import patch
@@ -44,13 +45,47 @@ import scheduler
 
 class SchedulerCycleTests(unittest.TestCase):
     def test_skips_reentrant_cycle(self):
-        scheduler._scheduler_work_lock.acquire()
+        scheduler._cycle_run_lock.acquire()
         try:
             with patch.object(scheduler, "_run_cycle_job") as run_cycle:
                 scheduler.cycle_job()
             run_cycle.assert_not_called()
         finally:
-            scheduler._scheduler_work_lock.release()
+            scheduler._cycle_run_lock.release()
+
+    def test_cycle_waits_for_active_images_and_prevents_another_batch(self):
+        scheduler._scheduler_work_lock.acquire()
+        ran = threading.Event()
+        worker = threading.Thread(target=scheduler.cycle_job)
+        with patch.object(scheduler, "_run_cycle_job", side_effect=ran.set), patch.object(scheduler, "ArticleService") as service:
+            worker.start()
+            try:
+                self.assertTrue(scheduler._cycle_requested.wait(timeout=1))
+                self.assertFalse(ran.is_set())
+                scheduler.image_cache_backfill_job()
+                service.assert_not_called()
+            finally:
+                scheduler._scheduler_work_lock.release()
+                worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertTrue(ran.is_set())
+        self.assertFalse(scheduler._scheduler_work_lock.locked())
+        self.assertFalse(scheduler._cycle_requested.is_set())
+
+    def test_llm_initialization_failure_still_runs_fetchers(self):
+        with patch.object(scheduler, "LLMService", side_effect=RuntimeError("missing_key")), patch.object(scheduler, "run_enabled_fetchers") as fetch:
+            scheduler.cycle_job()
+        fetch.assert_called_once_with(journal_timeout_secs=600)
+        self.assertFalse(scheduler._cycle_requested.is_set())
+        self.assertFalse(scheduler._scheduler_work_lock.locked())
+
+    def test_cycle_exception_releases_priority_and_locks(self):
+        with patch.object(scheduler, "_run_cycle_job", side_effect=ValueError("cycle_error")):
+            with self.assertRaises(ValueError):
+                scheduler.cycle_job()
+        self.assertFalse(scheduler._cycle_requested.is_set())
+        self.assertFalse(scheduler._cycle_run_lock.locked())
+        self.assertFalse(scheduler._scheduler_work_lock.locked())
 
     def test_cycle_holds_shared_lock_for_full_execution(self):
         observed_states = []

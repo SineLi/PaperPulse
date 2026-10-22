@@ -14,15 +14,12 @@ import '../models/article.dart';
 /// 同时将缓存路径写回数据库。
 class ImageCacheService {
   final ArticleDatabaseIO _articleDb;
+  final String _userAgent;
   static const int _fallbackBucketSize = 10000;
 
   static const int _maxConcurrentDownloads = 3;
   static const Duration _retryBatchDelay = Duration(milliseconds: 500);
   static const Duration _backendMinInterval = Duration(milliseconds: 500);
-
-  static const _userAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      '(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0';
 
   /// 正在下载的 URL -> 等待通知的回调列表（避免重复请求，同时保留所有回调）
   final Map<int, List<void Function(String path)>> _downloading = {};
@@ -41,8 +38,11 @@ class ImageCacheService {
 
   late final Future<Directory> _cacheDirFuture = _initCacheDir();
 
-  ImageCacheService({required ArticleDatabaseIO articleDb})
-    : _articleDb = articleDb;
+  ImageCacheService({
+    required ArticleDatabaseIO articleDb,
+    String appVersion = 'unknown',
+  }) : _articleDb = articleDb,
+       _userAgent = 'PaperPulse/$appVersion (Flutter)';
 
   Future<Directory> _initCacheDir() async {
     final appDir = await getApplicationDocumentsDirectory();
@@ -315,7 +315,7 @@ class ImageCacheService {
     }
   }
 
-  static Map<String, String> _buildHeaders(String url) {
+  Map<String, String> _buildHeaders(String url) {
     final uri = Uri.tryParse(url);
     final origin = uri != null ? '${uri.scheme}://${uri.host}' : '';
     return {
@@ -324,9 +324,6 @@ class ImageCacheService {
       'Accept':
           'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Sec-Fetch-Dest': 'image',
-      'Sec-Fetch-Mode': 'no-cors',
-      'Sec-Fetch-Site': 'same-origin',
     };
   }
 

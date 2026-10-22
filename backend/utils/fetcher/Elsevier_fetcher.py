@@ -4,7 +4,7 @@ import logging
 import asyncio
 from lxml import etree
 from utils.fetcher.Base_fetcher import RSSFetcher, Dict
-import requests
+from utils.http_client import impersonated_get, impersonated_head
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class ElsevierFetcher(RSSFetcher):
                 for resv in [2,1,3]:
                     for size in ['lrg','']:
                         url = f"https://ars.els-cdn.com/content/image/1-s{resv}.0-{pii}-ga{gav}_{size}.jpg"
-                        response = requests.head(url, timeout=5)
+                        response = impersonated_head(url, timeout=5)
                         if response.status_code == 200:
                             return url
                         else:
@@ -63,7 +63,13 @@ class ElsevierFetcher(RSSFetcher):
             'Accept': 'text/xml'
         }
 
-        response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15)
+        response = await asyncio.to_thread(
+            impersonated_get,
+            url,
+            headers=headers,
+            fallback_headers=headers,
+            timeout=15,
+        )
         if response.status_code != 200:
             logger.error(f"Failed to fetch details for {link}: {response.status_code}")
             return {}

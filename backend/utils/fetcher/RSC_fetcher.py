@@ -1,8 +1,14 @@
 import html
+import os
+from urllib.parse import urljoin
+
 from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import RSSFetcher
 
 DEFAULT_FEED_URL = "http://feeds.rsc.org/rss/cs"
+RSC_POST_NAVIGATION_WAIT_MS = int(os.getenv("RSC_POST_NAVIGATION_WAIT_MS", "7000"))
+
+
 class RSCFetcher(RSSFetcher):
     def __init__(self, url=DEFAULT_FEED_URL, name="Chemical Society Reviews", journal_id=None, **kwargs):
         super().__init__(
@@ -15,14 +21,21 @@ class RSCFetcher(RSSFetcher):
     async def fetch_details(self, article):
         link = article.get('link')
         
-        content = await self._get_playwright_content(link, wait_until="domcontentloaded")
+        content = await self._get_playwright_content(
+            link,
+            wait_until="domcontentloaded",
+            idle_wait_ms=RSC_POST_NAVIGATION_WAIT_MS,
+        )
         if not content: return {}
 
         tree = lhtml.fromstring(content)
         info = {}
 
         # Abstract
-        abstract_nodes = tree.xpath('//*[@class="capsule__text"]/p')
+        abstract_nodes = tree.xpath(
+            '//*[@class="capsule__text"]/p | '
+            '//section[contains(concat(" ", normalize-space(@class), " "), " abstract ")]//p'
+        )
         if abstract_nodes:
             info['abstract'] = html.unescape(' '.join([node.text_content().strip() for node in abstract_nodes]))
 
@@ -32,9 +45,13 @@ class RSCFetcher(RSSFetcher):
             info['doi'] = doi_parts[0]
 
         # graphical abstract
-        ga_parts = tree.xpath('//div[@class="capsule__column-wrapper"]//img[1]/@src')
+        ga_parts = tree.xpath(
+            '//*[contains(concat(" ", normalize-space(@class), " "), '
+            '" graphical-abstract ")]//img[1]/@data-src | '
+            '//div[@class="capsule__column-wrapper"]//img[1]/@src'
+        )
         if ga_parts:
-            info['graphical_abstract'] = "https://pubs.rsc.org" + ga_parts[0]
+            info['graphical_abstract'] = urljoin("https://pubs.rsc.org/", ga_parts[0])
 
         return info
 

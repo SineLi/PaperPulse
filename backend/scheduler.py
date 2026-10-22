@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 STEP_WARN_AFTER_SECS = 5 * 60
 CYCLE_WARN_AFTER_SECS = 50 * 60
 _scheduler_work_lock = threading.Lock()
+_cycle_run_lock = threading.Lock()
+_cycle_requested = threading.Event()
 
 
 try:
@@ -32,29 +34,29 @@ def _log_step_duration(step_name: str, started_at: float):
 
 
 def cycle_job():
-    if not _scheduler_work_lock.acquire(blocking=False):
-        log_event(
-            logger,
-            logging.INFO,
-            "scheduler_cycle_skipped",
-            reason="scheduler_work_active",
-        )
+    if not _cycle_run_lock.acquire(blocking=False):
+        log_event(logger, logging.INFO, "scheduler_cycle_skipped", reason="cycle_already_active")
         return
 
+    # 主周期等待图片任务安全收尾，等待期间不允许新的图片批次抢锁。
+    _cycle_requested.set()
     try:
-        _run_cycle_job()
+        with _scheduler_work_lock:
+            _run_cycle_job()
     finally:
-        _scheduler_work_lock.release()
+        _cycle_requested.clear()
+        _cycle_run_lock.release()
 
 
 def _run_cycle_job():
     cycle_started_at = time.monotonic()
-    service = LLMService()
+    service = None
     log_event(logger, logging.INFO, "scheduler_cycle_started")
 
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="llm_update")
     try:
+        service = LLMService()
         service.run_update_cycle(timeout_secs=600)
     except Exception as e:
         logger.exception("event=scheduler_step_failed step=llm_update detail=%s", e)
@@ -74,7 +76,10 @@ def _run_cycle_job():
     step_started_at = time.monotonic()
     log_event(logger, logging.INFO, "scheduler_step_started", step="llm_submission")
     try:
-        service.run_submission_cycle()
+        if service is None:
+            log_event(logger, logging.WARNING, "scheduler_step_skipped", step="llm_submission", reason="llm_unavailable")
+        else:
+            service.run_submission_cycle()
     except Exception as e:
 
         logger.exception("event=scheduler_step_failed step=llm_submission detail=%s", e)
@@ -88,6 +93,9 @@ def _run_cycle_job():
 
 def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
     started_at = time.monotonic()
+    if _cycle_requested.is_set():
+        log_event(logger, logging.INFO, "scheduler_step_skipped", step="image_cache_backfill", reason="cycle_waiting")
+        return
     if not _scheduler_work_lock.acquire(blocking=False):
         log_event(
             logger,
@@ -99,6 +107,10 @@ def image_cache_backfill_job(limit: int = 100, scan_limit: int = 1000):
         return
 
     try:
+        # 主周期可能刚在首次检查后到达，拿锁后再检查一次。
+        if _cycle_requested.is_set():
+            log_event(logger, logging.INFO, "scheduler_step_skipped", step="image_cache_backfill", reason="cycle_waiting")
+            return
         service = ArticleService()
         log_event(
             logger,
