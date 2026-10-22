@@ -68,7 +68,10 @@ Future<void> main() async {
     journalDatabaseIO: journalDb,
   );
 
-  final imageCacheService = ImageCacheService(articleDb: articleDb);
+  final imageCacheService = ImageCacheService(
+    articleDb: articleDb,
+    appVersion: packageInfo.version,
+  );
 
   final feedRepo = FeedRepo(
     feedService: feedService,

@@ -4,7 +4,10 @@ class ImageCacheService {
   bool wifiOnly = false;
   String baseUrl = '';
 
-  ImageCacheService({required ArticleDatabaseIO articleDb});
+  ImageCacheService({
+    required ArticleDatabaseIO articleDb,
+    String appVersion = 'unknown',
+  });
 
   Future<String?> getExistingCachedPath({
     required int articleId,
