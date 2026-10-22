@@ -2,6 +2,7 @@ import asyncio
 import sys
 import types
 import unittest
+from unittest.mock import AsyncMock, patch
 
 
 class FakePage:
@@ -101,6 +102,12 @@ from utils.browser_manager import BROWSER_CHANNEL, BROWSER_HEADLESS, BrowserMana
 
 
 class BrowserManagerTests(unittest.TestCase):
+    def setUp(self):
+        # 即使其他测试已导入真实 Patchright，也必须在本模块明确替换启动边界。
+        starter = patch("utils.browser_manager.async_playwright", FakePlaywrightStarter)
+        starter.start()
+        self.addCleanup(starter.stop)
+
     def test_returns_process_singleton(self):
         self.assertIs(get_browser_manager(), get_browser_manager())
 
@@ -120,6 +127,29 @@ class BrowserManagerTests(unittest.TestCase):
 
 
 class BrowserManagerAsyncTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # 即使其他测试已导入真实 Patchright，也必须在本模块明确替换启动边界。
+        starter = patch("utils.browser_manager.async_playwright", FakePlaywrightStarter)
+        starter.start()
+        self.addCleanup(starter.stop)
+
+    async def test_failed_refresh_exits_once_and_cools_down(self):
+        manager = BrowserManager(max_browsers=1, max_browser_pages=1)
+        await manager.init_browser_pool()
+        browser = manager.browser_pool[0]
+        browser.browser.connected = False
+        failed_launch = AsyncMock(side_effect=RuntimeError("launch_failed"))
+        try:
+            with patch.object(manager.playwright.chromium, "launch", failed_launch):
+                with self.assertRaisesRegex(RuntimeError, "browser_refresh_failed"):
+                    await manager._acquire_browser()
+                with self.assertRaisesRegex(RuntimeError, "No available browsers"):
+                    await manager._acquire_browser()
+            self.assertEqual(failed_launch.await_count, 1)
+            self.assertEqual(browser.status, "error")
+        finally:
+            await manager.close_all_browsers()
+
     async def test_launch_uses_configured_headless_mode(self):
         manager = BrowserManager(max_browsers=1, max_browser_pages=1)
 

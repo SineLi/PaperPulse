@@ -20,6 +20,7 @@ from utils.http_client import impersonated_get
 
 from services.article_services import ArticleService
 from utils.logging_utils import log_event
+from utils.task_executor import ArticleFetchTask, TaskExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -287,15 +288,11 @@ class BaseFetcher(ABC):
                 await asyncio.sleep(self.sleep_time)
 
     async def _fetch_details_concurrently(self, papers_to_fetch: List[Dict]):
-        semaphore = asyncio.Semaphore(self.max_workers)
-
-        async def run_one(idx: int):
-            async with semaphore:
-                await self.fetch_detail_at_index(papers_to_fetch, idx)
-
-        tasks = [asyncio.create_task(run_one(i)) for i in range(len(papers_to_fetch))]
-        for task in asyncio.as_completed(tasks):
-            await task
+        tasks = []
+        for idx in range(len(papers_to_fetch)):
+            tasks.append(ArticleFetchTask(self, papers_to_fetch, idx))
+        # 复用队列的取消收尾，父任务结束前所有详情 worker 都必须退出。
+        await TaskExecutor(max_workers=self.max_workers).run(tasks)
 
     async def run(self) -> None:
         """独立执行单个 fetcher，并在结束后释放其使用的浏览器资源。"""

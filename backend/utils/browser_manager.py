@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -30,6 +31,7 @@ class Browser:
         self.id = id(self)
         self.activate_pages = 0
         self.status = "idle"
+        self.retry_after = 0.0
         self.playwright: Playwright | None = None
 
     @property
@@ -197,6 +199,7 @@ class BrowserManager:
                         for browser in self.browser_pool
                         if browser.activate_pages == 0
                         and browser.status != "refreshing"
+                        and time.monotonic() >= browser.retry_after
                         and (browser.status == "error" or not browser.is_connected)
                     ),
                     None,
@@ -300,9 +303,10 @@ class BrowserManager:
             async with lock:
                 if browser in self.browser_pool:
                     browser.status = "error"
+                    browser.retry_after = time.monotonic() + 30
             if isinstance(exc, asyncio.CancelledError):
                 raise
-            return
+            raise RuntimeError("browser_refresh_failed") from exc
 
         close_replacement = False
         async with lock:

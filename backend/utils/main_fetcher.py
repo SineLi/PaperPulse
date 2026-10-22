@@ -3,6 +3,7 @@ import os
 import time
 import asyncio
 from dataclasses import dataclass
+from collections import deque
 from typing import Any
 
 from db.database import get_db_connection
@@ -27,6 +28,8 @@ logger = logging.getLogger(__name__)
 FETCHER_WARN_AFTER_SECS = 5 * 60
 ARTICLE_FETCH_EXECUTOR_WORKERS = int(os.getenv("ARTICLE_FETCH_EXECUTOR_WORKERS", "8"))
 ARTICLE_FETCH_EXECUTOR_TIMEOUT_SECS = float(os.getenv("ARTICLE_FETCH_EXECUTOR_TIMEOUT_SECS", "1800"))
+
+_next_journal = 0
 
 # 出版商与抓取器类的映射关系
 PUBLISHER_FETCHER_MAP = {
@@ -64,6 +67,28 @@ class FetcherBatch:
         ]
 
 
+def build_fair_article_queue(batches: list[FetcherBatch]) -> list[ArticleFetchTask]:
+    """期刊轮流领取详情名额，每轮换一个起点，避免短预算总是遗漏后序期刊。"""
+    global _next_journal
+    if not batches:
+        return []
+    start = _next_journal % len(batches)
+    _next_journal = (start + 1) % len(batches)
+    ordered_batches = batches[start:] + batches[:start]
+    pending = deque()
+    for batch in ordered_batches:
+        if batch.tasks:
+            pending.append(deque(batch.tasks))
+
+    tasks = []
+    while pending:
+        batch_tasks = pending.popleft()
+        tasks.append(batch_tasks.popleft())
+        if batch_tasks:
+            pending.append(batch_tasks)
+    return tasks
+
+
 async def run_enabled_fetchers_async(
     journal_timeout_secs: float = 1800,
     executor_timeout_secs: float | None = None,
@@ -90,6 +115,7 @@ async def run_enabled_fetchers_async(
                     SELECT id, name, publisher, rss_url, official_url
                     FROM journals
                     WHERE crawler_enabled = TRUE
+                    ORDER BY id
                     """
                 )
             ).mappings().all()
@@ -100,7 +126,6 @@ async def run_enabled_fetchers_async(
             return
 
         fetcher_batches: list[FetcherBatch] = []
-        article_tasks: list[ArticleFetchTask] = []
 
         # 第一阶段依次执行轻量的 RSS/列表收集和去重，不在各 fetcher 内启动详情页并发。
         # 所有期刊的新文章汇总后再入同一个队列，使 Playwright 并发上限对本轮调度全局生效。
@@ -184,7 +209,6 @@ async def run_enabled_fetchers_async(
                         tasks=batch_tasks,
                     )
                 )
-                article_tasks.extend(batch_tasks)
 
                 log_event(
                     logger,
@@ -224,6 +248,7 @@ async def run_enabled_fetchers_async(
                     elapsed_secs=elapsed,
                 )
 
+        article_tasks = build_fair_article_queue(fetcher_batches)
         if article_tasks:
             log_event(logger, logging.INFO, "fetchers_browser_pool_init_started")
             try:
