@@ -7,6 +7,7 @@ _META_REFRESH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _SHORT_CHALLENGE_MAX_CHARS = 12_000
+_STRUCTURAL_CHALLENGE_MAX_CHARS = 100_000
 
 
 def detect_block_reason(
@@ -31,16 +32,17 @@ def detect_block_reason(
         if hint in normalized_title:
             return f"title:{hint}"
 
-    structural_hints = (
-        "challenge-platform",
-        "cf-chl",
-        "cf-please-wait",
-        "cdn-cgi/challenge",
-        "turnstile-widget",
-    )
-    for hint in structural_hints:
-        if hint in lower_text:
-            return f"content:{hint}"
+    if len(lower_text) <= _STRUCTURAL_CHALLENGE_MAX_CHARS:
+        structural_hints = (
+            "challenge-platform",
+            "cf-chl",
+            "cf-please-wait",
+            "cdn-cgi/challenge",
+            "turnstile-widget",
+        )
+        for hint in structural_hints:
+            if hint in lower_text:
+                return f"content:{hint}"
 
     lower_url = (current_url or "").lower()
     url_hints = ("cdn-cgi", "__cf_chl", "bm-verify", "captcha")

@@ -3,7 +3,6 @@ from lxml import html as lhtml
 from utils.fetcher.Base_fetcher import RSSFetcher
 
 DEFAULT_FEED_URL = "https://www.mdpi.com/rss/journal/foods"
-UA = "FreshRSS/1.24.3 (Linux; https://freshrss.org)"
 class MDPIFetcher(RSSFetcher):
     def __init__(self, url=DEFAULT_FEED_URL, name="Foods", journal_id=None, **kwargs):
         super().__init__(

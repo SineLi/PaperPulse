@@ -53,6 +53,7 @@ class FakeBrowserHandle:
 class FakeChromium:
     def __init__(self):
         self.launch_count = 0
+        self.launch_options = []
         self.handles = []
         self.refresh_started = asyncio.Event()
         self.release_refresh = asyncio.Event()
@@ -60,6 +61,7 @@ class FakeChromium:
 
     async def launch(self, **kwargs):
         self.launch_count += 1
+        self.launch_options.append(kwargs)
         handle = FakeBrowserHandle()
         self.handles.append(handle)
         if self.pause_refresh and self.launch_count > 1:
@@ -86,16 +88,16 @@ class FakePlaywrightStarter:
         return playwright
 
 
-async_api = types.ModuleType("playwright.async_api")
+async_api = types.ModuleType("patchright.async_api")
 async_api.Browser = FakeBrowserHandle
 async_api.Playwright = FakePlaywright
 async_api.async_playwright = FakePlaywrightStarter
-playwright_package = types.ModuleType("playwright")
-playwright_package.async_api = async_api
-sys.modules.setdefault("playwright", playwright_package)
-sys.modules.setdefault("playwright.async_api", async_api)
+patchright_package = types.ModuleType("patchright")
+patchright_package.async_api = async_api
+sys.modules.setdefault("patchright", patchright_package)
+sys.modules.setdefault("patchright.async_api", async_api)
 
-from utils.browser_manager import BrowserManager, get_browser_manager
+from utils.browser_manager import BROWSER_CHANNEL, BROWSER_HEADLESS, BrowserManager, get_browser_manager
 
 
 class BrowserManagerTests(unittest.TestCase):
@@ -118,14 +120,43 @@ class BrowserManagerTests(unittest.TestCase):
 
 
 class BrowserManagerAsyncTests(unittest.IsolatedAsyncioTestCase):
-    async def test_passes_user_agent_to_new_context(self):
+    async def test_launch_uses_configured_headless_mode(self):
         manager = BrowserManager(max_browsers=1, max_browser_pages=1)
 
-        async with manager.add_page(user_agent="PaperPulse/Test"):
+        await manager.init_browser_pool()
+
+        expected_options = {
+            "headless": BROWSER_HEADLESS,
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
+        if BROWSER_CHANNEL:
+            expected_options["channel"] = BROWSER_CHANNEL
+        self.assertEqual(manager.playwright.chromium.launch_options, [expected_options])
+        await manager.close_all_browsers()
+
+    async def test_launch_uses_explicit_browser_channel(self):
+        manager = BrowserManager(
+            max_browsers=1,
+            max_browser_pages=1,
+            browser_channel="msedge",
+        )
+
+        await manager.init_browser_pool()
+
+        self.assertEqual(
+            manager.playwright.chromium.launch_options[0]["channel"],
+            "msedge",
+        )
+        await manager.close_all_browsers()
+
+    async def test_uses_browser_native_user_agent(self):
+        manager = BrowserManager(max_browsers=1, max_browser_pages=1)
+
+        async with manager.add_page():
             pass
 
         browser_handle = manager.browser_pool[0].browser
-        self.assertEqual(browser_handle.context_options, [{"user_agent": "PaperPulse/Test"}])
+        self.assertEqual(browser_handle.context_options, [{}])
         await manager.close_all_browsers()
 
     async def test_refresh_cancellation_closes_new_browser_started_during_launch(self):

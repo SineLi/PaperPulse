@@ -6,7 +6,6 @@ from utils.fetcher.Base_fetcher import RSSFetcher
 logger = logging.getLogger(__name__)
 
 DEFAULT_FEED_URL = "https://www.nature.com/nature.rss"
-UA = "FreshRSS/1.24.3 (Linux; https://freshrss.org)"
 
 class NatureFetcher(RSSFetcher):
     def __init__(self, url=DEFAULT_FEED_URL, name="Nature", journal_id=None, **kwargs):

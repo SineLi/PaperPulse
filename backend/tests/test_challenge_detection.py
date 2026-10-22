@@ -30,6 +30,21 @@ class ChallengeDetectionTests(unittest.TestCase):
             "title:just a moment",
         )
 
+    def test_detects_short_cloudflare_challenge_structure(self):
+        self.assertEqual(
+            detect_block_reason("<script src='/challenge-platform/h/g/orchestrate'></script>"),
+            "content:challenge-platform",
+        )
+
+    def test_ignores_challenge_script_inside_large_article(self):
+        content = (
+            "<title>Research article</title>"
+            + "x" * 100_000
+            + "<script src='/challenge-platform/scripts/jsd/main.js'></script>"
+        )
+
+        self.assertIsNone(detect_block_reason(content))
+
 
 if __name__ == "__main__":
     unittest.main()

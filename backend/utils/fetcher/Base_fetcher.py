@@ -13,6 +13,7 @@ import requests
 from curl_cffi.requests import RequestsError as CurlRequestsError
 from dateutil import parser, tz
 
+from app.version import APP_VERSION
 from utils.challenge_detection import detect_block_reason
 from utils.browser_manager import BrowserManager, get_browser_manager
 from utils.http_client import impersonated_get
@@ -31,7 +32,10 @@ TZ_INFOS = {
     "CST": tz.gettz("America/Chicago"),
     "CDT": tz.gettz("America/Chicago"),
 }
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+# 普通 HTTP/RSS 请求使用应用身份；Patchright 始终保留浏览器原生 UA，避免与
+# Sec-CH-UA、运行平台及实际 Chromium 版本冲突。
+FETCHER_USER_AGENT = os.getenv("FETCHER_USER_AGENT", "").strip()
+UA = FETCHER_USER_AGENT or f"PaperPulse/{APP_VERSION}"
 RSS_FETCH_TIMEOUT_SECS = float(os.getenv("RSS_FETCH_TIMEOUT_SECS", "20"))
 PLAYWRIGHT_GOTO_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_GOTO_TIMEOUT_MS", "60000"))
 PLAYWRIGHT_ATTEMPTS = int(os.getenv("PLAYWRIGHT_ATTEMPTS", "3"))
@@ -116,6 +120,7 @@ class BaseFetcher(ABC):
         selector: Optional[str] = None,
         timeout: int = 10000,
         wait_until: str = "domcontentloaded",
+        idle_wait_ms: Optional[int] = None,
     ) -> str:
         log_event(
             logger,
@@ -129,7 +134,7 @@ class BaseFetcher(ABC):
         content = ""
         try:
             for i in range(PLAYWRIGHT_ATTEMPTS):
-                async with self.browser_manager.add_page(user_agent=self.user_agent) as page:
+                async with self.browser_manager.add_page() as page:
                     try:
                         log_event(
                             logger,
@@ -143,7 +148,9 @@ class BaseFetcher(ABC):
                         if selector:
                             await page.wait_for_selector(selector, timeout=timeout)
                         else:
-                            await page.wait_for_timeout(PLAYWRIGHT_IDLE_WAIT_MS)
+                            await page.wait_for_timeout(
+                                PLAYWRIGHT_IDLE_WAIT_MS if idle_wait_ms is None else idle_wait_ms
+                            )
                         content = await page.content()
                         block_reason = self._detect_block_reason(content, page.url, title=await page.title())
                         if block_reason:

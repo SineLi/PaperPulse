@@ -5,20 +5,28 @@ import threading
 from contextlib import asynccontextmanager
 from typing import Any
 
-from playwright.async_api import Browser as PlaywrightBrowser
-from playwright.async_api import Playwright, async_playwright
+from patchright.async_api import Browser as PlaywrightBrowser
+from patchright.async_api import Playwright, async_playwright
 
 logger = logging.getLogger(__name__)
 
 BROWSER_POOL_SIZE = int(os.getenv("BROWSER_POOL_SIZE", "2"))
 BROWSER_MAX_PAGES = int(os.getenv("BROWSER_MAX_PAGES", "4"))
+BROWSER_CHANNEL = os.getenv("BROWSER_CHANNEL", "").strip() or None
+BROWSER_HEADLESS = os.getenv("BROWSER_HEADLESS", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 
 
 class Browser:
     """管理一个 Playwright 浏览器实例及其当前页面计数。"""
 
-    def __init__(self):
+    def __init__(self, channel: str | None = BROWSER_CHANNEL):
         self.browser: PlaywrightBrowser | None = None
+        self.channel = channel
         self.id = id(self)
         self.activate_pages = 0
         self.status = "idle"
@@ -36,12 +44,13 @@ class Browser:
         if self.is_connected:
             return
 
-        launch_task = asyncio.create_task(
-            self.playwright.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-        )
+        launch_options: dict[str, Any] = {
+            "headless": BROWSER_HEADLESS,
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
+        if self.channel:
+            launch_options["channel"] = self.channel
+        launch_task = asyncio.create_task(self.playwright.chromium.launch(**launch_options))
         try:
             self.browser = await asyncio.shield(launch_task)
         except asyncio.CancelledError:
@@ -74,14 +83,12 @@ class Browser:
         else:
             self.browser = None
 
-    async def get_browser_context(self, user_agent: str | None = None):
+    async def get_browser_context(self):
         if not self.is_connected:
             # BrowserManager 负责替换断连实例，避免多个页面协程在这里并发启动 Chromium。
             raise RuntimeError("browser_disconnected")
         if self.browser is None:
             raise RuntimeError("browser_unavailable")
-        if user_agent:
-            return await self.browser.new_context(user_agent=user_agent)
         return await self.browser.new_context()
 
 
@@ -92,12 +99,14 @@ class BrowserManager:
         self,
         max_browsers: int = BROWSER_POOL_SIZE,
         max_browser_pages: int = BROWSER_MAX_PAGES,
+        browser_channel: str | None = BROWSER_CHANNEL,
     ):
         if max_browsers <= 0 or max_browser_pages <= 0:
             raise ValueError("browser pool limits must be positive")
 
         self.max_browsers = max_browsers
         self.max_browser_pages = max_browser_pages
+        self.browser_channel = browser_channel.strip() if browser_channel else None
         self.browser_pool: list[Browser] = []
         self.playwright: Playwright | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -130,7 +139,7 @@ class BrowserManager:
             browsers: list[Browser] = []
             try:
                 playwright = await async_playwright().start()
-                browsers = [Browser() for _ in range(self.max_browsers)]
+                browsers = [Browser(self.browser_channel) for _ in range(self.max_browsers)]
                 launch_results = await asyncio.gather(
                     *(browser.launch(playwright) for browser in browsers),
                     return_exceptions=True,
@@ -207,7 +216,7 @@ class BrowserManager:
         yield await self._acquire_browser()
 
     @asynccontextmanager
-    async def add_page(self, user_agent: str | None = None):
+    async def add_page(self):
         await self.init_browser_pool()
         semaphore = self._semaphore
         if semaphore is None:
@@ -218,7 +227,7 @@ class BrowserManager:
         async with semaphore:
             async with self._get_browser() as browser:
                 try:
-                    context = await browser.get_browser_context(user_agent=user_agent)
+                    context = await browser.get_browser_context()
                     page = await context.new_page()
                 except BaseException as exc:
                     await self._close_page_resources(page, context)
@@ -280,7 +289,7 @@ class BrowserManager:
             browser.status = "refreshing"
             playwright = self.playwright
 
-        replacement = Browser()
+        replacement = Browser(self.browser_channel)
         try:
             # 保持 refreshing 状态直到替换完成，避免第二个协程再次刷新同一池槽。
             await browser.close(preserve_status=True)

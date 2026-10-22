@@ -20,7 +20,7 @@ curl_cffi==0.16.3
 feedparser==6.0.12
 lxml==6.0.2
 python-dateutil==2.9.0.post0
-playwright==1.57.0
+patchright==1.62.3
 Pillow==12.1.0
 
 # LLM summary
