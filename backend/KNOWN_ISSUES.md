@@ -1,10 +1,13 @@
 # 暂挂事项
 
-更新日期：2026-10-22。以下事项没有修复，不计为已验证通过。
+更新日期：2026-10-25（ACS 项）。以下事项没有修复，不计为已验证通过。
 
-- ACS 的 RSS DOI fixture 与现有提取规则不一致，详情 fixture 与页面选择器不一致。
-  `tests/test_publisher_fetchers.py` 中对应两项测试明确跳过；恢复前需用有效页面核对
-  DOI、摘要和图片解析，不能仅删除断言。ACS 图片相对地址也需要一并核对。
+- ACS 详情页仍可能触发验证。RSS 优先路径已通过 5 个期刊、34 个条目的核验，
+  DOI、旧页面选择器与相对图片地址已修复，原先跳过的两项 ACS 测试已恢复。
+  当前 RSS 不能补齐已从 feed 窗口移出的全部历史文章。
+- ACS RSS 图片地址 34/34 直接下载成功；31 个 PNG 缓存成功，3 个 SVG 下载正常，
+  但当前 Pillow 转 WebP 路径不支持 SVG，仍需补齐格式转换。
+  详见 [ACS RSS 验证记录](ACS_RSS_VERIFICATION.md)。
 - RSC 专用 Edge 浏览器池、按站点隔离并持久保存会话尚未实现。
   当前 BROWSER_CHANNEL 作用于整个共享池；Docker 镜像只安装 Chromium，没有 Edge。
 - RSC 仍默认固定等待 7 秒，尚未按 OIDC 完成或正文标记等待。

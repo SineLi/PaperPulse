@@ -71,6 +71,7 @@ BROWSER_MAX_PAGES=4
 BROWSER_CHANNEL=
 BROWSER_HEADLESS=1
 RSC_POST_NAVIGATION_WAIT_MS=7000
+ACS_PREFER_RSS=1
 ```
 
 说明:
@@ -94,6 +95,10 @@ RSC_POST_NAVIGATION_WAIT_MS=7000
   应先提供 X11/Xvfb 显示，再设置 `BROWSER_HEADLESS=0`
 - 安装了 Microsoft Edge 的主机可设置 `BROWSER_CHANNEL=msedge`，让 Patchright 使用
   真实 Edge 通道；留空时继续使用 Patchright 自带 Chromium。不要从个人 Edge 配置复制 Cookie
+- ACS 默认优先读取官方 RSS 中明确标为 Abstract 的摘要和 TOC 图片地址，缺少摘要时才访问
+  详情页。`ACS_PREFER_RSS=0` 可改为浏览器优先，失败时仍保留有效的 RSS 摘要。
+  日志中的 `fetch_source=acs_rss/acs_page` 标明数据来源。图片地址需完整保留签名参数。
+  实测范围及 SVG 缓存限制见 [ACS RSS 验证记录](ACS_RSS_VERIFICATION.md)。
 
 ## 本地依赖服务
 
