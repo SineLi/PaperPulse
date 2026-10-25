@@ -10,6 +10,7 @@ ACS 详情页仍可能触发人机验证，而 [官方 RSS](https://pubs.acs.org
 - `ACS_PREFER_RSS=0`：浏览器优先；页面失败或没有摘要时仍保留有效的 RSS 摘要。
 - 未标为 Abstract 的短介绍，以及空摘要标题，不会跳过详情页。
 - DOI 优先使用 feed 元数据；兼容当前及旧版页面选择器，并解析相对图片地址。
+- ACS 合并在单个 `dc:creator` 中的作者拆为独立列表；已分开的多作者记录保持原有姓名边界。
 - TOC 图片保留完整签名查询参数；完成日志中的 `fetch_source=acs_rss/acs_page` 标明来源。
 
 ## 2026-10-25 实测
@@ -35,7 +36,7 @@ ACS 详情页仍可能触发人机验证，而 [官方 RSS](https://pubs.acs.org
 ## 验证方式与范围
 
 新增 `tests/test_acs_rss_details.py` 覆盖 RSS 优先、短介绍回退、空摘要、浏览器失败回退、
-开关、公式文本、签名参数、DOI 与图片地址；恢复原先跳过的两项 ACS 解析测试。
+开关、公式文本、签名参数、DOI、图片地址与合并作者字段；恢复原先跳过的两项 ACS 解析测试。
 
 ```sh
 cd backend

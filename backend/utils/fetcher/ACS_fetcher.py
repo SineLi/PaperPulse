@@ -66,6 +66,23 @@ class ACSFetcher(RSSFetcher):
             article['_fetch_source'] = 'acs_rss'
             break
         return article
+
+    def _extract_authors(self, entry):
+        authors = [
+            re.sub(r'\s+', ' ', author.get('name', '')).strip()
+            for author in entry.get('authors', [])
+            if author.get('name', '').strip()
+        ]
+        if not authors and entry.get('author'):
+            authors = [re.sub(r'\s+', ' ', entry['author']).strip()]
+        # ACS currently emits all dc:creator names in one string. Keep feeds
+        # with separately structured authors intact, including commas in names.
+        if len(authors) != 1:
+            return authors
+        return [
+            name.strip() for name in re.split(r',\s*(?:and\s+)?|\s+and\s+', authors[0])
+            if name.strip()
+        ]
     
     def _extract_doi(self, entry):
         for key in ('prism_doi', 'doi', 'dc_identifier', 'id', 'guid'):

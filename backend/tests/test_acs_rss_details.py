@@ -90,6 +90,46 @@ class ACSRSSDetailTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict('os.environ', {'ACS_PREFER_RSS':'0'}):
             self.assertFalse(self.make_fetcher().prefer_rss)
 
+    async def test_rss_first_preserves_individual_authors_from_combined_creator(self):
+        fetcher = self.make_fetcher()
+        fetcher._get_playwright_content = AsyncMock(side_effect=AssertionError('unexpected browser request'))
+        entry = self.entry('<h2>Abstract</h2><p>Publisher abstract.</p>')
+        expected = [
+            'Harekrushna Behera', 'Tyler J. Duncan', 'Laxmicharan Samineni',
+            'Hyeonji Oh', 'Chenhao Yao', 'Raman Dhiman', 'Siqi Wang',
+            'Luke Hatch', 'Venkat Ganesan', 'Manish Kumar',
+        ]
+        entry['authors'] = [{'name': ', '.join(expected[:-1]) + ', and ' + expected[-1]}]
+        paper = fetcher._parse_entry(entry)
+
+        await fetcher.fetch_detail_at_index([paper], 0)
+
+        self.assertEqual(paper['authors'], expected)
+        self.assertEqual(paper['_fetch_status'], 'ok')
+        fetcher._get_playwright_content.assert_not_awaited()
+
+    async def test_two_authors_separated_by_and(self):
+        fetcher = self.make_fetcher()
+        self.assertEqual(fetcher._extract_authors({
+            'authors': [{'name': 'Hang Li and Xuezhong Du'}],
+        }), ['Hang Li', 'Xuezhong Du'])
+
+    async def test_structured_authors_keep_commas_and_single_author_is_preserved(self):
+        fetcher = self.make_fetcher()
+        self.assertEqual(fetcher._extract_authors({
+            'authors': [{'name': 'Doe, Alice'}, {'name': 'Smith, Bob'}],
+        }), ['Doe, Alice', 'Smith, Bob'])
+        self.assertEqual(fetcher._extract_authors({
+            'authors': [{'name': 'Ehsan Rahimi'}],
+        }), ['Ehsan Rahimi'])
+        self.assertEqual(fetcher._extract_authors({}), [])
+
+    async def test_author_field_fallback_splits_comma_separated_creators(self):
+        fetcher = self.make_fetcher()
+        self.assertEqual(fetcher._extract_authors({
+            'author': 'Alice Example, Bob Example, Carol Example',
+        }), ['Alice Example', 'Bob Example', 'Carol Example'])
+
     async def test_doi_metadata_is_preferred_over_article_url(self):
         fetcher = self.make_fetcher()
         self.assertEqual(fetcher._extract_doi({
