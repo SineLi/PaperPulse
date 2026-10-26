@@ -282,6 +282,7 @@ class BaseFetcher(ABC):
                 detail_fields=len(details) if isinstance(details, dict) else 0,
                 has_abstract=bool(paper.get("abstract")),
                 has_graphical_abstract=bool(paper.get("graphical_abstract")),
+                fetch_source=paper.get("_fetch_source"),
             )
         finally:
             if self.sleep_time > 0:

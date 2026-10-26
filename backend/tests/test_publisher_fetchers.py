@@ -136,7 +136,6 @@ class PublisherRSSFetcherTests(unittest.TestCase):
         self.assertEqual(paper["date"], "2025-02-04")
         self.assertEqual(paper["status"], "online")
 
-    @unittest.skip("暂挂 ACS DOI/fixture 不一致，见 KNOWN_ISSUES.md")
     def test_acs_fetch_list_removes_asap_marker(self):
         fetcher = ACSFetcher(
             name="Journal of the American Chemical Society",
@@ -374,13 +373,15 @@ class PublisherDetailFetcherTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(details["abstract"], "Main abstract")
         self.assertEqual(details["graphical_abstract"], "https://www.science.org/figure&1.png")
 
-    @unittest.skip("暂挂 ACS 页面选择器/fixture 不一致，见 KNOWN_ISSUES.md")
     async def test_acs_details_extracts_abstract_and_graphical_abstract(self):
         html = """
         <div id="abstractBox"><p>First paragraph.</p><p>Second paragraph.</p></div>
         <figure id="_i123"><img src="/ga.png" /></figure>
         """
-        details = await self.fetch_details(ACSFetcher(browser_manager=object()), html)
+        details = await self.fetch_details(
+            ACSFetcher(browser_manager=object()), html,
+            link="https://pubs.acs.org/doi/10.1021/test",
+        )
 
         self.assertEqual(details["abstract"], "First paragraph. Second paragraph.")
         self.assertEqual(details["graphical_abstract"], "https://pubs.acs.org/ga.png")
